@@ -1,0 +1,44 @@
+{
+  "name": "parquet-viewer",
+  "author": {
+    "name": "AzizNadirov",
+    "email": "aziznadirov@yahoo.com"
+  },
+  "version": "0.0.2",
+  "description": "An Electron app to view Parquet files using DuckDB",
+  "homepage": "https://github.com/AzizNadirov/",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.anadirov.parquetviewer",
+    "productName": "Parquet Viewer",
+    "files": [
+      "main.js",
+      "index.html",
+      "renderer.js",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "exe",
+      "icon": "logo.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "logo.png"
+    },
+    "linux": {
+      "target": "deb",
+      "icon": "logo.png"
+    }
+  },
+  "dependencies": {
+    "duckdb": "1.0.0"
+  },
+  "devDependencies": {
+    "electron": "^14.0.0",
+    "electron-builder": "^22.14.13"
+  }
+}

@@ -1,0 +1,28 @@
+name: parquet-viewer
+version: "1.0"
+summary: Parquet Viewer
+description: |
+  An Electron app to view Parquet files using DuckDB
+
+confinement: strict
+base: core20
+
+grade: stable
+
+apps:
+  parquet-viewer:
+    command: desktop-launch $SNAP/usr/bin/electron .
+    plugs:
+      - desktop
+      - desktop-legacy
+      - home
+      - x11
+      - wayland
+      - pulseaudio
+      - network
+
+parts:
+  app:
+    source: .
+    plugin: npm
+    npm-node-version: "14"
