@@ -1,5 +1,6 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QTableWidget, QTableWidgetItem
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QTableWidget, QTableWidgetItem, QMenu, QAction
+from PyQt5.QtCore import Qt
 import duckdb
 import pandas as pd
 
@@ -43,6 +44,10 @@ class ParquetSQLApp(QWidget):
 
         self.setLayout(layout)
 
+        # Set up context menu for column headers
+        self.resultTable.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.resultTable.horizontalHeader().customContextMenuRequested.connect(self.showColumnContextMenu)
+
     def browseFile(self):
         options = QFileDialog.Options()
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Parquet File", "", "Parquet Files (*.parquet);;All Files (*)", options=options)
@@ -85,6 +90,24 @@ class ParquetSQLApp(QWidget):
 
         # Resize columns to fit content
         self.resultTable.resizeColumnsToContents()
+
+    def showColumnContextMenu(self, pos):
+        column_index = self.resultTable.horizontalHeader().logicalIndexAt(pos.x())
+
+        menu = QMenu(self)
+
+        if column_index >= 0:
+            column_name = self.resultTable.horizontalHeaderItem(column_index).text()
+
+            action_copy_column_name = QAction(f"Copy '{column_name}' to Clipboard", self)
+            action_copy_column_name.triggered.connect(lambda: self.copyColumnName(column_name))
+            menu.addAction(action_copy_column_name)
+
+        menu.exec_(self.resultTable.mapToGlobal(pos))
+
+    def copyColumnName(self, column_name):
+        clipboard = QApplication.clipboard()
+        clipboard.setText(column_name)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
