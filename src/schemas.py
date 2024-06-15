@@ -12,8 +12,8 @@ class Settings(BaseModel):
     result_pagination_rows_per_page: int
     save_file_history: bool
     max_rows: str
-    default_settings_file: Path = Path(__file__).parent / "default_settings.json"
-    settings_file: Path = Path(__file__).parent / "settings.json"
+    default_settings_file: Path = Path(__file__).parent / 'settings' /"default_settings.json"
+    settings_file: Path = Path(__file__).parent / 'settings' / "settings.json"
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
 
     def process(self):
@@ -37,7 +37,7 @@ class Settings(BaseModel):
     @classmethod
     def load_settings(cls):
         # Load settings from JSON file
-        json_file = Path(__file__).parent / "settings.json"
+        json_file = Path(__file__).parent / 'settings' / "settings.json"
         with json_file.open("r") as f:
             settings_data = f.read()
         model = cls.model_validate_json(settings_data)
