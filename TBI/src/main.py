@@ -1,13 +1,13 @@
 import sys
 from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, 
-                             QTableWidget, QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton)
+                             QTableWidget, QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMenuBar, QMessageBox, QFormLayout, QDialog)
 from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QMovie
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp, QPoint
 import duckdb
 import pandas as pd
 
-from schemas import settings
+from schemas import settings, Settings, Recents, recents
 
 
 class SQLHighlighter(QSyntaxHighlighter):
@@ -18,7 +18,7 @@ class SQLHighlighter(QSyntaxHighlighter):
         keyword_format = QTextCharFormat()
         keyword_format.setForeground(QColor("blue"))
         keyword_format.setFontWeight(QFont.Bold)
-        keywords = settings.sql_keywords
+        keywords = settings.sql_keywords + [settings.default_data_var_name]
 
         for keyword in keywords:
             pattern = QRegExp(f"\\b{keyword}\\b", Qt.CaseInsensitive)
@@ -61,21 +61,23 @@ class QueryThread(QThread):
                         """
             self.errorOccurred.emit(err_message)
 
-class ParquetSQLApp(QWidget):
+class ParquetSQLApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle('Parquet SQL Executor')
 
         self.page = 0
         self.rows_per_page = settings.result_pagination_rows_per_page
         self.active_filters = {}
+        self.df = pd.DataFrame()
 
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('Parquet SQL Executor')
-        self.showMaximized()
+        self.showMaximized()  # Start the main window in full-screen mode
 
         layout = QVBoxLayout()
+
         self.fileLabel = QLabel('Parquet File Path:')
         layout.addWidget(self.fileLabel)
 
@@ -103,7 +105,8 @@ class ParquetSQLApp(QWidget):
         layout.addWidget(self.filterButton)
 
         self.filtersMenuButton = QToolButton()
-        self.filtersMenuButton.setText('Applied Filters\t\t')
+        self.filtersMenuButton.setText('Applied Filters')
+        self.filtersMenuButton.setMinimumSize(150, 30)
         self.filtersMenuButton.setPopupMode(QToolButton.InstantPopup)
         self.filtersMenu = QMenu(self.filtersMenuButton)
         self.filtersMenuButton.setMenu(self.filtersMenu)
@@ -132,20 +135,42 @@ class ParquetSQLApp(QWidget):
         layout.addWidget(self.loadingLabel)
         self.loadingLabel.setVisible(False)
 
-        self.setLayout(layout)
+        central_widget = QWidget()
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
 
         # Set up syntax highlighting
         self.setupSqlEdit()
+
+        # Create menu bar
+        self.createMenuBar()
 
     def setupSqlEdit(self):
         # Set monospace font for consistency
         font = self.sqlEdit.font()
         font.setFamily(settings.default_sql_font)
-        font.setPointSize(settings.default_sql_font_size)
+        font.setPointSize(int(settings.default_sql_font_size))
         self.sqlEdit.setFont(font)
 
         # Apply syntax highlighting
         self.highlighter = SQLHighlighter(self.sqlEdit.document())
+        
+    def createMenuBar(self):
+        menubar = self.menuBar()
+        fileMenu = menubar.addMenu('File')
+        # export
+        exportAction = QAction('Export', self)
+        exportAction.triggered.connect(self.exportResults)
+        fileMenu.addAction(exportAction)
+        # settings
+        settingsAction = QAction('Settings', self)
+        settingsAction.triggered.connect(self.editSettings)
+        fileMenu.addAction(settingsAction)
+
+        # recents
+        recentsAction = QAction('Recents', self)
+        recentsAction.triggered.connect(self.listRecents)
+        fileMenu.addAction(recentsAction)
 
     def browseFile(self):
         options = QFileDialog.Options()
@@ -313,6 +338,98 @@ class ParquetSQLApp(QWidget):
                     filter_action.setChecked(True)
                     filter_action.triggered.connect(lambda checked, col=column, val=value: self.toggleFilter(col, val, checked))
                     self.filtersMenu.addAction(filter_action)
+
+    def exportResults(self):
+        filtered_df = self.df.copy()
+        for column, values in self.active_filters.items():
+            filtered_df = filtered_df[filtered_df.iloc[:, column].isin(values)]
+
+        if filtered_df.empty:
+            QMessageBox.warning(self, "No Data", "There is no data to export.")
+            return
+
+        options = QFileDialog.Options()
+        filePath, _ = QFileDialog.getSaveFileName(self, "Export Results", "", "CSV Files (*.csv);;Excel Files (*.xlsx);;All Files (*)", options=options)
+        if filePath:
+            if filePath.endswith('.csv'):
+                filtered_df.to_csv(filePath, index=False)
+            elif filePath.endswith('.xlsx'):
+                filtered_df.to_excel(filePath, index=False)
+            else:
+                QMessageBox.warning(self, "Invalid File Type", "Please select a valid file type (CSV or XLSX).")
+
+    def editSettings(self):
+        settings_file = settings.settings_file
+        if not settings_file.exists():
+            QMessageBox.critical(self, "Error", f"Settings file '{settings_file}' does not exist.")
+            return
+
+        class SettingsDialog(QDialog):
+            read_only_fields = ["recents_file",]
+            def __init__(self, settings: Settings):
+                super().__init__()
+                self.settings = settings
+                self.initUI()
+
+            def validateSettings(self):
+                for field, line_edit in self.fields.items():
+                    if field in self.read_only_fields:
+                        continue
+
+                    if field == 'default_data_var_name':
+                        if not line_edit.text().isidentifier():
+                            QMessageBox.critical(self, "Error", "The data variable name must be a valid Python identifier.")
+                            return False
+                        elif line_edit.text() in settings.sql_keywords:
+                            QMessageBox.critical(self, "Error", "The data variable name cannot be a SQL keyword.")
+                            return False
+                    if field == 'result_pagination_rows_per_page':
+                        if not line_edit.text().isdigit() or int(line_edit.text()) < 1:
+                            QMessageBox.critical(self, "Error", "The result pagination rows per page must be a positive integer.")
+                            return False
+                        elif not (10 <= int(line_edit.text()) <= 1000):
+                            QMessageBox.critical(self, "Error", "The result pagination rows per page must be between 10 and 1000.")
+                            return False
+                return True
+
+            def initUI(self):
+                layout = QFormLayout()
+
+                self.fields = {}
+                for field, value in self.settings.model_dump().items():
+                    if field == 'settings_file':
+                        continue
+                    line_edit = QLineEdit()
+                    # line_edit.setPlaceholderText(str(value))
+                    line_edit.setText(str(value))
+                    self.fields[field] = line_edit
+                    layout.addRow(QLabel(field), line_edit)
+
+                save_button = QPushButton("Save")
+                save_button.clicked.connect(self.saveSettings)
+                layout.addWidget(save_button)
+
+                self.setLayout(layout)
+                self.setWindowTitle("Edit Settings")
+                self.resize(400, 300)
+
+            def saveSettings(self):
+                if not self.validateSettings():
+                    QMessageBox.critical(self, "Error", "Please fix the errors before saving.")
+                    return 
+                for field, line_edit in self.fields.items():
+                    if line_edit.text():
+                        setattr(self.settings, field, line_edit.text())
+
+                self.settings.save_settings()
+                self.accept()
+
+        dialog = SettingsDialog(settings)
+        dialog.exec_()
+
+    def listRecents(self):
+        raise NotImplementedError()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
