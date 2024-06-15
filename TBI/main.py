@@ -19,7 +19,7 @@ class SQLHighlighter(QSyntaxHighlighter):
             "JOIN", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "ON", 
             "AS", "DISTINCT", "AND", "OR", "NOT", "IN", 
             "LIKE", "NULL", "IS", "BETWEEN", "HAVING", "CASE", 
-            "WHEN", "THEN", "ELSE", "END", "LIMIT"
+            "WHEN", "THEN", "ELSE", "END", "LIMIT", "DATA"
         ]
 
         for keyword in keywords:
@@ -84,7 +84,7 @@ class ParquetSQLApp(QWidget):
         layout.addWidget(self.sqlLabel)
 
         self.sqlEdit = QTextEdit()
-        self.sqlEdit.setPlainText("SELECT * FROM DATA")
+        self.sqlEdit.setPlainText("SELECT * FROM DATA LIMIT 100")
         layout.addWidget(self.sqlEdit)
 
         self.executeButton = QPushButton('Execute')
