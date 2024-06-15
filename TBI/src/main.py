@@ -18,7 +18,7 @@ class SQLHighlighter(QSyntaxHighlighter):
         keyword_format = QTextCharFormat()
         keyword_format.setForeground(QColor("blue"))
         keyword_format.setFontWeight(QFont.Bold)
-        keywords = settings.sql_keywords + [settings.default_data_var_name]
+        keywords = settings.sql_keywords + [settings.render_vars(settings.default_data_var_name)]
 
         for keyword in keywords:
             pattern = QRegExp(f"\\b{keyword}\\b", Qt.CaseInsensitive)
@@ -47,7 +47,7 @@ class QueryThread(QThread):
     def run(self):
         try:
             con = duckdb.connect(database=':memory:')
-            creator_query = f"CREATE TABLE {settings.default_data_var_name} AS SELECT * FROM '{self.file_path}'"
+            creator_query = f"CREATE TABLE {settings.render_vars(settings.default_data_var_name)} AS SELECT * FROM '{self.file_path}'"
             con.execute(creator_query)
             paginated_query = self.query
             if "LIMIT" not in paginated_query.upper():
@@ -67,7 +67,7 @@ class ParquetSQLApp(QMainWindow):
         self.setWindowTitle('Parquet SQL Executor')
 
         self.page = 0
-        self.rows_per_page = settings.result_pagination_rows_per_page
+        self.rows_per_page = settings.render_vars(settings.result_pagination_rows_per_page)
         self.active_filters = {}
         self.df = pd.DataFrame()
 
@@ -88,7 +88,7 @@ class ParquetSQLApp(QMainWindow):
         self.browseButton.clicked.connect(self.browseFile)
         layout.addWidget(self.browseButton)
 
-        self.sqlLabel = QLabel(f'SQL Query(as `{settings.default_data_var_name}`):')
+        self.sqlLabel = QLabel(f'SQL Query(as `{settings.render_vars(settings.default_data_var_name)}`):')
         self.sqlLabel.setFont(QFont("Courier", 9))
         layout.addWidget(self.sqlLabel)
 
@@ -276,7 +276,7 @@ class ParquetSQLApp(QMainWindow):
 
             contextMenu.addMenu(copy_menu)
 
-            filter_action = QAction("Filter for unique", self)
+            filter_action = QAction("Filter for", self)
             filter_action.triggered.connect(lambda: self.showFilterMenu(column))
             contextMenu.addAction(filter_action)
 
@@ -390,15 +390,18 @@ class ParquetSQLApp(QMainWindow):
 
     def editSettings(self):
         settings_file = settings.settings_file
+        default_settings_file = settings.default_settings_file
         if not settings_file.exists():
             QMessageBox.critical(self, "Error", f"Settings file '{settings_file}' does not exist.")
             return
 
         class SettingsDialog(QDialog):
-            read_only_fields = ["recents_file", 'settings_file', ]
-            def __init__(self, settings: Settings):
+            read_only_fields = ["recents_file", 'settings_file', 'default_settings_file',]
+            help_text = "Did you know:\nYou can use field names inside string as `$(field_name)` for render it."
+            def __init__(self, settings: Settings, default_settings_file: Path):
                 super().__init__()
                 self.settings = settings
+                self.default_settings_file = default_settings_file
                 self.initUI()
 
             def validateSettings(self):
@@ -407,10 +410,7 @@ class ParquetSQLApp(QMainWindow):
                         continue
 
                     if field == 'default_data_var_name':
-                        if not line_edit.text().isidentifier():
-                            QMessageBox.critical(self, "Error", "The data variable name must be a valid Python identifier.")
-                            return False
-                        elif line_edit.text().upper() in settings.sql_keywords:
+                        if line_edit.text().upper() in settings.sql_keywords:
                             QMessageBox.critical(self, "Error", "The data variable name cannot be a SQL keyword.")
                             return False
                     if field == 'result_pagination_rows_per_page':
@@ -437,9 +437,21 @@ class ParquetSQLApp(QMainWindow):
                     self.fields[field] = line_edit
                     layout.addRow(QLabel(field), line_edit)
 
+                help_text = QLabel(self.help_text)
+                help_text.setFont(QFont("Courier", 9, weight=QFont.Bold))
+                layout.addRow(help_text)
+
+                button_layout = QHBoxLayout()
+
                 save_button = QPushButton("Save")
                 save_button.clicked.connect(self.saveSettings)
-                layout.addWidget(save_button)
+                button_layout.addWidget(save_button)
+
+                reset_button = QPushButton("Reset to Default")
+                reset_button.clicked.connect(self.resetSettings)
+                button_layout.addWidget(reset_button)
+
+                layout.addRow(button_layout)
 
                 self.setLayout(layout)
                 self.setWindowTitle("Edit Settings")
@@ -462,7 +474,16 @@ class ParquetSQLApp(QMainWindow):
                 self.settings.save_settings()
                 self.accept()
 
-        dialog = SettingsDialog(settings)
+            def resetSettings(self):
+                with self.default_settings_file.open("r") as f:
+                    default_settings_data = f.read()
+                with settings_file.open("w") as f:
+                    f.write(default_settings_data)
+                self.settings = Settings.load_settings()
+                QMessageBox.information(self, "Settings Reset", "Settings have been reset to default values. Please restart the application for changes to take effect.")
+                self.accept()
+
+        dialog = SettingsDialog(settings, default_settings_file)
         dialog.exec_()
 
     def updateRecentsMenu(self):

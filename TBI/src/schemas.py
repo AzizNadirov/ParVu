@@ -12,6 +12,7 @@ class Settings(BaseModel):
     result_pagination_rows_per_page: int
     save_file_history: bool
     max_rows: str
+    default_settings_file: Path = Path(__file__).parent / "default_settings.json"
     settings_file: Path = Path(__file__).parent / "settings.json"
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
 
@@ -22,6 +23,9 @@ class Settings(BaseModel):
 
     def render_vars(self, query: str) -> str:
         """ render inside the query the vars of the settings """
+        if not isinstance(query, str):
+            return query
+        
         query = query.replace("$(default_data_var_name)", str(self.default_data_var_name))
         query = query.replace("$(default_limit)", str(self.default_limit))
         query = query.replace("$(default_sql_font_size)", str(self.default_sql_font_size))
