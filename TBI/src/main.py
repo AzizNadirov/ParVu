@@ -93,7 +93,6 @@ class ParquetSQLApp(QMainWindow):
         layout.addWidget(self.sqlLabel)
 
         self.sqlEdit = QTextEdit()
-        # render $() vars. 
         self.sqlEdit.setPlainText(settings.render_vars(settings.default_sql_query))
         layout.addWidget(self.sqlEdit)
 
@@ -255,11 +254,27 @@ class ParquetSQLApp(QMainWindow):
 
         header = self.resultTable.horizontalHeader()
         column = header.logicalIndexAt(pos.x())
+        row = self.resultTable.indexAt(pos).row()
+
         if column >= 0:
             column_name = self.resultTable.horizontalHeaderItem(column).text()
-            copy_action = QAction("Copy Column Name", self)
-            copy_action.triggered.connect(lambda: self.copyColumnName(column_name))
-            contextMenu.addAction(copy_action)
+
+            # Create Copy Submenu
+            copy_menu = QMenu("Copy", self)
+            copy_column_action = QAction("Copy Column Name", self)
+            copy_column_action.triggered.connect(lambda: self.copyColumnName(column_name))
+            copy_menu.addAction(copy_column_action)
+
+            copy_column_values_action = QAction("Copy Whole Column", self)
+            copy_column_values_action.triggered.connect(lambda: self.copyColumnValues(column))
+            copy_menu.addAction(copy_column_values_action)
+
+            if row >= 0:
+                copy_row_values_action = QAction("Copy Whole Row", self)
+                copy_row_values_action.triggered.connect(lambda: self.copyRowValues(row))
+                copy_menu.addAction(copy_row_values_action)
+
+            contextMenu.addMenu(copy_menu)
 
             filter_action = QAction("Filter for", self)
             filter_action.triggered.connect(lambda: self.showFilterMenu(column))
@@ -270,6 +285,16 @@ class ParquetSQLApp(QMainWindow):
     def copyColumnName(self, column_name):
         clipboard = QApplication.clipboard()
         clipboard.setText(column_name)
+
+    def copyColumnValues(self, column):
+        values = self.df.iloc[:, column].tolist()
+        clipboard = QApplication.clipboard()
+        clipboard.setText(str(values))
+
+    def copyRowValues(self, row):
+        values = self.df.iloc[row, :].tolist()
+        clipboard = QApplication.clipboard()
+        clipboard.setText(str(values))
 
     def toggleFilterState(self):
         if self.filterButton.text() == 'Filter':
