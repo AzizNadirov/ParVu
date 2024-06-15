@@ -11,6 +11,7 @@ class Settings(BaseModel):
     sql_keywords: list[str]
     result_pagination_rows_per_page: int
     save_file_history: bool
+    max_rows: str
     settings_file: Path = Path(__file__).parent / "settings.json"
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
 

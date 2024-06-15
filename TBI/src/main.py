@@ -276,7 +276,7 @@ class ParquetSQLApp(QMainWindow):
 
             contextMenu.addMenu(copy_menu)
 
-            filter_action = QAction("Filter for", self)
+            filter_action = QAction("Filter for unique", self)
             filter_action.triggered.connect(lambda: self.showFilterMenu(column))
             contextMenu.addAction(filter_action)
 
