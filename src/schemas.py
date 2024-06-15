@@ -1,6 +1,6 @@
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Optional, Union
+from typing import Union
 
 class Settings(BaseModel):
     default_data_var_name: str

@@ -10,6 +10,6 @@
     "result_pagination_rows_per_page":"500",
     "save_file_history":"true",
     "max_rows": "1000", 
-    "settings_file":"d:\\code\\parquet-viewer\\TBI\\src\\settings.json",
-    "recents_file":"d:\\code\\parquet-viewer\\TBI\\src\\history\\recents.json"
+    "settings_file":"src\\settings.json",
+    "recents_file":"src\\history\\recents.json"
 }

@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "TBI"
+name = "ParVu"
 version = "0.0.1"
-description = "Table data viewer"
+description = "Simple app for viewing Parquet files"
 authors = ["Aziz Nadirov <aziznadirov@yahoo.com>"]
 
 [tool.poetry.dependencies]
