@@ -518,6 +518,27 @@ class ParquetSQLApp(QMainWindow):
             recent_action = QAction(recent, self)
             recent_action.triggered.connect(lambda checked, path=recent: self.openRecentFile(path))
             self.recentsMenu.addAction(recent_action)
+        
+        # Add Clear List action at the end
+        if recents.recents:
+            clear_action = QAction('Clear List', self)
+            clear_action.setFont(QFont("Courier", 9, weight=QFont.Bold))
+            clear_action.triggered.connect(self.clearRecents)
+            self.recentsMenu.addAction(clear_action)
+
+    def clearRecents(self):
+        recents.recents = []
+        recents.save_recents()
+        self.updateRecentsMenu()
+
+
+
+
+
+
+
+
+
 
     def openRecentFile(self, file_path):
         if not Path(file_path).exists():
