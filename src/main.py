@@ -109,7 +109,7 @@ class ParquetSQLApp(QMainWindow):
         self.browseButton.clicked.connect(self.browseFile)
         layout.addWidget(self.browseButton)
 
-        self.sqlLabel = QLabel(f'Data QUery - AS {settings.render_vars(settings.default_data_var_name)}:')
+        self.sqlLabel = QLabel(f'Data Query - AS {settings.render_vars(settings.default_data_var_name)}:')
         self.sqlLabel.setFont(QFont("Courier", 8))
         layout.addWidget(self.sqlLabel)
 
@@ -347,6 +347,7 @@ class ParquetSQLApp(QMainWindow):
         for value in unique_values:
             filter_action = QAction(str(value), self)
             filter_action.setCheckable(True)
+            filter_action.setChecked(column in self.active_filters and value in self.active_filters[column])
             filter_action.triggered.connect(lambda checked, val=value: self.toggleFilter(column, val, checked))
             filter_menu.addAction(filter_action)
 
