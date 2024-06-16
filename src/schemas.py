@@ -1,16 +1,39 @@
 from pathlib import Path
-from pydantic import BaseModel
+from dataclasses import dataclass
 from typing import Union
 
+from pydantic import BaseModel
+
+
+@dataclass
+class BadQueryException:
+    """ if result is query means that query is fixed and just give warning """
+    name: str
+    message: str
+    result: str = None
+
+
 class Settings(BaseModel):
+    """
+    Params:
+        default_data_var_name: str - name for read dataframe in query
+        default_limit: Union[int, str] - default limit for sql query
+        default_sql_font_size: Union[int, str]
+        default_sql_query: str
+        default_sql_font: str
+        sql_keywords: list[str]
+        result_pagination_rows_per_page: str
+        save_file_history: str
+        max_rows: str - max rows for limit in sql query
+    """
     default_data_var_name: str
     default_limit: Union[int, str]
     default_sql_font_size: Union[int, str]
     default_sql_query: str
     default_sql_font: str
     sql_keywords: list[str]
-    result_pagination_rows_per_page: int
-    save_file_history: bool
+    result_pagination_rows_per_page: str
+    save_file_history: str
     max_rows: str
     default_settings_file: Path = Path(__file__).parent / 'settings' /"default_settings.json"
     settings_file: Path = Path(__file__).parent / 'settings' / "settings.json"
@@ -54,6 +77,7 @@ settings = Settings.load_settings()
 
 
 class Recents(BaseModel):
+    """ Recent opened files history """
     recents: list[str]
 
     @classmethod
@@ -66,6 +90,7 @@ class Recents(BaseModel):
         return model
     
     def add_recent(self, path):
+        # add browsed file to recents
         self.recents.insert(0, path)
         self.recents = list(set(self.recents))
         self.save_recents()

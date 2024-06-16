@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+from typing import Union
+
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMessageBox, QFormLayout, QDialog)
 from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QMovie
@@ -7,7 +9,8 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp, QPoint
 import duckdb
 import pandas as pd
 
-from schemas import settings, Settings, Recents, recents
+from schemas import settings, Settings, recents
+from query_revisor import Revisor, BadQueryException
 
 
 class SQLHighlighter(QSyntaxHighlighter):
@@ -37,13 +40,23 @@ class QueryThread(QThread):
     resultReady = pyqtSignal(pd.DataFrame)
     errorOccurred = pyqtSignal(str)
 
-    def __init__(self, file_path, query, offset, limit):
+    def __init__(self, file_path, query, offset, limit, app: 'ParquetSQLApp'):
         super().__init__()
         self.file_path = file_path
         self.query = query
         self.offset = offset
         self.limit = limit
+        self.app = app
 
+    def queryRevisor(self, query: str) -> Union[str, None]:
+        """ do checking and changes in query before it goes to run """
+        rev_res = Revisor(query).run()
+        if rev_res is True:
+            return query
+        
+        elif isinstance(rev_res, BadQueryException):
+            return rev_res
+        
     def run(self):
         try:
             con = duckdb.connect(database=':memory:')
@@ -52,14 +65,22 @@ class QueryThread(QThread):
             paginated_query = self.query
             if "LIMIT" not in paginated_query.upper():
                 paginated_query = f"{paginated_query} LIMIT {self.limit} OFFSET {self.offset}"
+            paginated_query = self.queryRevisor(paginated_query)
+
+            if isinstance(paginated_query, BadQueryException):
+                # if revisor fails our query then throw the exception
+                raise Exception(paginated_query.name + ": " + paginated_query.message)
+            
             df = con.execute(paginated_query).fetchdf()
             self.resultReady.emit(df)
+            
         except Exception as e:
             err_message = f"""
                             An error occurred while executing the query: '{creator_query}'\n
                             Error: '{str(e)}'
                         """
             self.errorOccurred.emit(err_message)
+
 
 class ParquetSQLApp(QMainWindow):
     def __init__(self):
@@ -73,9 +94,9 @@ class ParquetSQLApp(QMainWindow):
 
         self.initUI()
 
+
     def initUI(self):
         self.showMaximized()  # Start the main window in full-screen mode
-
         layout = QVBoxLayout()
 
         self.fileLabel = QLabel('Parquet File Path:')
@@ -88,8 +109,8 @@ class ParquetSQLApp(QMainWindow):
         self.browseButton.clicked.connect(self.browseFile)
         layout.addWidget(self.browseButton)
 
-        self.sqlLabel = QLabel(f'SQL Query(as `{settings.render_vars(settings.default_data_var_name)}`):')
-        self.sqlLabel.setFont(QFont("Courier", 9))
+        self.sqlLabel = QLabel(f'Data QUery - AS {settings.render_vars(settings.default_data_var_name)}:')
+        self.sqlLabel.setFont(QFont("Courier", 8))
         layout.addWidget(self.sqlLabel)
 
         self.sqlEdit = QTextEdit()
@@ -179,7 +200,10 @@ class ParquetSQLApp(QMainWindow):
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Parquet File", "", "Parquet Files (*.parquet);;All Files (*)", options=options)
         if fileName:
             self.filePathEdit.setText(fileName)
-            recents.add_recent(fileName)
+            # if tracking history is enabled
+            if settings.save_file_history in ("True", "true", "1", True, 1):
+                recents.add_recent(fileName)
+
             self.updateRecentsMenu()
 
     def executeQuery(self):
@@ -194,7 +218,7 @@ class ParquetSQLApp(QMainWindow):
 
         if file_path and query:
             self.showLoadingAnimation()
-            self.thread = QueryThread(file_path, query, self.page * self.rows_per_page, self.rows_per_page)
+            self.thread = QueryThread(file_path, query, self.page * self.rows_per_page, self.rows_per_page, self)
             self.thread.resultReady.connect(self.handleResults)
             self.thread.errorOccurred.connect(self.handleError)
             self.thread.start()
@@ -353,6 +377,7 @@ class ParquetSQLApp(QMainWindow):
                 filtered_df = filtered_df[filtered_df.iloc[:, column].isin(values)]
 
         self.displayResults(filtered_df)
+
 
     def updateFiltersMenu(self):
         self.filtersMenu.clear()
