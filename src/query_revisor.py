@@ -41,7 +41,7 @@ class Revisor:
         """ no join'ly queries are allowed """
         if {'left', 'right', 'full', 'inner', 'join'}.intersection(set(self.query.split())):
             return BadQueryException(name="Joins",
-                                    message="Joins are not allowed in the query.")
+                                    message="Joins are not allowed in the query - app is multi-tabled yet...")
 
     def run(self) -> Union[True, BadQueryException]:
         """ Run all rules """
