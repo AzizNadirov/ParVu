@@ -542,7 +542,8 @@ class ParquetSQLApp(QMainWindow):
                 self.accept()
 
             def resetSettings(self):
-                with self.default_settings_file.open("r") as f:
+                default_settings_file = Path(__file__).parent / "settings" / "default_settings.json"
+                with open(default_settings_file.as_posix(), "r") as f:
                     default_settings_data = f.read()
                 with settings_file.open("w") as f:
                     f.write(default_settings_data)
