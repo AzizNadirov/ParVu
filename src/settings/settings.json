@@ -1,17 +1,1 @@
-{
-    "default_data_var_name":"data",
-    "default_limit":"500",
-    "default_sql_font_size":"10",
-    "default_sql_query":"SELECT * \nFROM $(default_data_var_name) \nLIMIT $(default_limit)",
-    "default_sql_font":"Courier",
-    "sql_keywords":["FROM","BETWEEN","DISTINCT","ORDER BY","AS","NULL","CASE","GROUP BY","ON","WHERE",
-                    "WHEN","NOT","OFFSET","INNER JOIN","SELECT","TABLE","JOIN","LIMIT","OR","THEN","RIGHT JOIN",
-                    "END","LEFT JOIN","ELSE","AND","HAVING","IS","IN","CREATE","LIKE"],
-    "result_pagination_rows_per_page":"500",
-    "save_file_history":"true",
-    "max_rows": "1000",
-    "colour_browseButton": "#8AFBF6",
-    "colour_sqlEdit": "#D6EBAF",
-    "colour_executeButton": "yellow",
-    "colour_resultTable": "#9FF2F9"
-}
+{"default_data_var_name":"df","default_limit":"500","default_sql_font_size":"10","default_sql_query":"SELECT * \nFROM $(default_data_var_name) \nLIMIT $(default_limit)","default_sql_font":"Courier","sql_keywords":["BETWEEN","IN","DISTINCT","ELSE","TABLE","RIGHT JOIN","HAVING","SELECT","ORDER BY","ON","WHERE","CASE","FROM","IS","WHEN","LIKE","NULL","JOIN","AS","THEN","END","CREATE","LEFT JOIN","OFFSET","INNER JOIN","OR","GROUP BY","AND","NOT","LIMIT"],"result_pagination_rows_per_page":"500","save_file_history":"true","max_rows":"1000","colour_browseButton":"#8AFBF6","colour_sqlEdit":"#D6EBAF","colour_executeButton":"yellow","colour_resultTable":"#9FF2F9","recents_file":"/home/anadirov/Documents/Code/ParVu/src/history/recents.json","settings_file":"/home/anadirov/Documents/Code/ParVu/src/settings/settings.json","default_settings_file":"/home/anadirov/Documents/Code/ParVu/src/settings/default_settings.json","static_dir":"/home/anadirov/Documents/Code/ParVu/src/static"}

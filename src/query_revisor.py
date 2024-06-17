@@ -43,7 +43,7 @@ class Revisor:
             return BadQueryException(name="Joins",
                                     message="Joins are not allowed in the query - app is multi-tabled yet...")
 
-    def run(self) -> Union[True, BadQueryException]:
+    def run(self) -> Union[bool, BadQueryException]:
         """ Run all rules """
         rules = [self._rule_limit_range, self._rule_no_joins, ]
         for rule in rules:
