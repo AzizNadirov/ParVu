@@ -6,7 +6,7 @@
 
 ## Overview
 
-This application allows you to execute SQL queries on Parquet files.
+This application allows you to execute SQL queries on Parquet files. Uses [DuckDB](https://duckdb.org/) Python implementation
 
 ## Features
 
