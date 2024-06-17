@@ -454,7 +454,7 @@ class ParquetSQLApp(QMainWindow):
                 QMessageBox.warning(self, "Invalid File Type", "Please select a valid file type (CSV or XLSX).")
 
     def editSettings(self):
-        settings_file = settings.settings_file
+        settings_file = settings.usr_settings_file
         default_settings_file = settings.default_settings_file
         if not Path(settings_file).exists():
             QMessageBox.critical(self, "Error", f"Settings file '{settings_file}' does not exist.")

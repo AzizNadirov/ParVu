@@ -27,6 +27,7 @@ class Settings(BaseModel):
         save_file_history: str
         max_rows: str - max rows for limit in sql query
     """
+    # data
     default_data_var_name: str
     default_limit: Union[int, str]
     default_sql_font_size: Union[int, str]
@@ -36,15 +37,20 @@ class Settings(BaseModel):
     result_pagination_rows_per_page: str
     save_file_history: str
     max_rows: str
+    # colors
     colour_browseButton: str
     colour_sqlEdit: str
     colour_executeButton: str
     colour_resultTable: str
+    # dirs
+    user_app_settings_dir: Path = Path.home() / ".ParVu"
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
     settings_file: Path = Path(__file__).parent / "settings" / "settings.json"
+    usr_recents_file: Path = user_app_settings_dir / "history" / "recents.json"
+    usr_settings_file: Path = user_app_settings_dir / "settings" / "settings.json"
     default_settings_file: Path = Path(__file__).parent / "settings" / "default_settings.json"
     static_dir: Path = Path(__file__).parent / "static"
-    user_app_settings_dir: Path = Path.home() / ".ParVu"
+    
 
 
     def process(self):
@@ -53,6 +59,7 @@ class Settings(BaseModel):
         self.settings_file = Path(self.settings_file).resolve()
         self.default_settings_file = Path(self.default_settings_file).resolve()
         self.static_dir = Path(self.static_dir).resolve()
+
     
 
     def render_vars(self, query: str) -> str:
@@ -73,7 +80,7 @@ class Settings(BaseModel):
         user_app_settings_dir: Path = Path.home() / ".ParVu"
         # app settings dir doesnt exist - mb first start
         if not user_app_settings_dir.exists():
-            # create empty files and dir in user dir
+            # copy defaults from executable folder to user dir
             shutil.copytree(Path(__file__).parent / "settings", 
                             user_app_settings_dir / "settings",
                             dirs_exist_ok=True)
@@ -101,8 +108,8 @@ class Settings(BaseModel):
     def save_settings(self):
         # Save current settings to JSON file
         settings_json = self.model_dump_json()
-        settings_file = (Path(self.user_app_settings_dir) / "settings" / "settings.json").as_posix()
-        with open(settings_file, "w") as f:
+        # settings_file = self.usr_settings_file.as_posix()
+        with open(self.usr_settings_file, "w") as f:
             f.writelines(settings_json.splitlines())
 
 settings = Settings.load_settings()
@@ -115,7 +122,7 @@ class Recents(BaseModel):
     @classmethod
     def load_recents(cls):
         # Load recents from JSON file
-        with open(settings.recents_file, "r") as f:
+        with open(settings.usr_recents_file, "r") as f:
             recents_data = f.read()
 
         model = cls.model_validate_json(recents_data)
@@ -130,7 +137,7 @@ class Recents(BaseModel):
     def save_recents(self):
         # Save current recents to JSON file
         recents_json = self.model_dump_json()
-        with open(settings.recents_file, "w") as f:
+        with open(settings.usr_recents_file, "w") as f:
             f.writelines(recents_json.splitlines())
 
 recents = Recents.load_recents()
