@@ -417,14 +417,15 @@ class ParquetSQLApp(QMainWindow):
     def editSettings(self):
         settings_file = settings.settings_file
         default_settings_file = settings.default_settings_file
-        if not settings_file.exists():
+        if not Path(settings_file).exists():
             QMessageBox.critical(self, "Error", f"Settings file '{settings_file}' does not exist.")
             return
 
         class SettingsDialog(QDialog):
             read_only_fields = ["recents_file", 'settings_file', 'default_settings_file',]
             help_text = "Did you know:\nYou can use field names inside string as `$(field_name)` for render it."
-            def __init__(self, settings: Settings, default_settings_file: Path):
+            def __init__(self, settings: Settings, 
+                         default_settings_file: Path):
                 super().__init__()
                 self.settings = settings
                 self.default_settings_file = default_settings_file
@@ -448,6 +449,7 @@ class ParquetSQLApp(QMainWindow):
                             return False
 
                 return True
+
 
             def initUI(self):
                 layout = QFormLayout()
@@ -512,6 +514,7 @@ class ParquetSQLApp(QMainWindow):
         dialog = SettingsDialog(settings, default_settings_file)
         dialog.exec_()
 
+
     def updateRecentsMenu(self):
         self.recentsMenu.clear()
         for recent in recents.recents:
@@ -531,15 +534,6 @@ class ParquetSQLApp(QMainWindow):
         recents.save_recents()
         self.updateRecentsMenu()
 
-
-
-
-
-
-
-
-
-
     def openRecentFile(self, file_path):
         if not Path(file_path).exists():
             reply = QMessageBox.question(self, 'File Not Found',
@@ -553,6 +547,7 @@ class ParquetSQLApp(QMainWindow):
 
         self.filePathEdit.setText(file_path)
         self.executeQuery()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

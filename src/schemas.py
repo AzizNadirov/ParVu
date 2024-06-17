@@ -35,13 +35,16 @@ class Settings(BaseModel):
     result_pagination_rows_per_page: str
     save_file_history: str
     max_rows: str
-    default_settings_file: Path = Path(__file__).parent / 'settings' /"default_settings.json"
-    settings_file: Path = Path(__file__).parent / 'settings' / "settings.json"
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
+    settings_file: Path = Path(__file__).parent / "settings" / "settings.json"
+    default_settings_file: Path = Path(__file__).parent / "settings" / "default_settings.json"
+
 
     def process(self):
         self.sql_keywords = list(set([i.upper().strip() for i in self.sql_keywords]))
-        # Substitute $(default_limit) in default_sql_query
+        self.recents_file = Path(self.recents_file).resolve()
+        self.settings_file = Path(self.settings_file).resolve()
+        self.default_settings_file = Path(self.default_settings_file).resolve()
     
 
     def render_vars(self, query: str) -> str:
@@ -60,8 +63,8 @@ class Settings(BaseModel):
     @classmethod
     def load_settings(cls):
         # Load settings from JSON file
-        json_file = Path(__file__).parent / 'settings' / "settings.json"
-        with json_file.open("r") as f:
+        json_file = (Path(__file__).parent / "settings" / "settings.json").as_posix()
+        with open(json_file, 'r') as f:
             settings_data = f.read()
         model = cls.model_validate_json(settings_data)
         model.process()
@@ -70,7 +73,7 @@ class Settings(BaseModel):
     def save_settings(self):
         # Save current settings to JSON file
         settings_json = self.model_dump_json()
-        with self.settings_file.open("w") as f:
+        with open(self.settings_file, "w") as f:
             f.writelines(settings_json.splitlines())
 
 settings = Settings.load_settings()
@@ -83,7 +86,7 @@ class Recents(BaseModel):
     @classmethod
     def load_recents(cls):
         # Load recents from JSON file
-        with settings.recents_file.open("r") as f:
+        with open(settings.recents_file, "r") as f:
             recents_data = f.read()
 
         model = cls.model_validate_json(recents_data)
@@ -98,7 +101,13 @@ class Recents(BaseModel):
     def save_recents(self):
         # Save current recents to JSON file
         recents_json = self.model_dump_json()
-        with settings.recents_file.open("w") as f:
+        with open(settings.recents_file, "w") as f:
             f.writelines(recents_json.splitlines())
 
 recents = Recents.load_recents()
+
+
+
+
+
+

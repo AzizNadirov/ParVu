@@ -9,7 +9,5 @@
                     "END","LEFT JOIN","ELSE","AND","HAVING","IS","IN","CREATE","LIKE"],
     "result_pagination_rows_per_page":"500",
     "save_file_history":"true",
-    "max_rows": "1000", 
-    "settings_file":"src\\settings\\settings.json",
-    "recents_file":"src\\history\\recents.json"
+    "max_rows": "1000"
 }
