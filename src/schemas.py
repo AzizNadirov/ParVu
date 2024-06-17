@@ -1,6 +1,7 @@
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Union
+import shutil
 
 from pydantic import BaseModel
 
@@ -43,6 +44,7 @@ class Settings(BaseModel):
     settings_file: Path = Path(__file__).parent / "settings" / "settings.json"
     default_settings_file: Path = Path(__file__).parent / "settings" / "default_settings.json"
     static_dir: Path = Path(__file__).parent / "static"
+    user_app_settings_dir: Path = Path.home() / ".ParVu"
 
 
     def process(self):
@@ -68,10 +70,30 @@ class Settings(BaseModel):
 
     @classmethod
     def load_settings(cls):
-        # Load settings from JSON file
-        json_file = (Path(__file__).parent / "settings" / "settings.json").as_posix()
-        with open(json_file, 'r') as f:
+        user_app_settings_dir: Path = Path.home() / ".ParVu"
+        # app settings dir doesnt exist - mb first start
+        if not user_app_settings_dir.exists():
+            # create empty files and dir in user dir
+            shutil.copytree(Path(__file__).parent / "settings", 
+                            user_app_settings_dir / "settings",
+                            dirs_exist_ok=True)
+            
+            shutil.copytree(Path(__file__).parent / "history",
+                            user_app_settings_dir / "history",
+                            dirs_exist_ok=True)
+            
+            # fill with default settings
+            with (Path(__file__).parent / "settings" / "default_settings.json").open('r') as f:
+                with open(Path(__file__).parent / "history" / "recents.json") as r:
+                    (user_app_settings_dir / 'settings' / 'settings.json').write_text(f.read())
+                    (user_app_settings_dir / 'history' / 'recents.json').write_text(r.read())
+                
+
+        # read from user dir
+        settings = (user_app_settings_dir / "settings" / "settings.json")
+        with settings.open('r') as f:
             settings_data = f.read()
+
         model = cls.model_validate_json(settings_data)
         model.process()
         return model
@@ -79,7 +101,8 @@ class Settings(BaseModel):
     def save_settings(self):
         # Save current settings to JSON file
         settings_json = self.model_dump_json()
-        with open(self.settings_file, "w") as f:
+        settings_file = (Path(self.user_app_settings_dir) / "settings" / "settings.json").as_posix()
+        with open(settings_file, "w") as f:
             f.writelines(settings_json.splitlines())
 
 settings = Settings.load_settings()
