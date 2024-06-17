@@ -83,7 +83,7 @@ class QueryThread(QThread):
 
 
 class ParquetSQLApp(QMainWindow):
-    def __init__(self):
+    def __init__(self, file_path=None):
         super().__init__()
         self.setWindowTitle('Parquet SQL Executor')
 
@@ -94,6 +94,9 @@ class ParquetSQLApp(QMainWindow):
 
         self.initUI()
 
+        if file_path:
+            self.filePathEdit.setText(file_path)
+            self.executeQuery()
 
     def initUI(self):
         self.showMaximized()  # Start the main window in full-screen mode
@@ -551,6 +554,7 @@ class ParquetSQLApp(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = ParquetSQLApp()
+    file_path = sys.argv[1] if len(sys.argv) > 1 else None
+    ex = ParquetSQLApp(file_path)
     ex.show()
     sys.exit(app.exec_())
