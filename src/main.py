@@ -4,8 +4,9 @@ from typing import Union
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog,
                              QTableWidget, QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMessageBox, QFormLayout, QDialog)
-from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QMovie
+from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QMovie, QIcon
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp, QPoint
+
 import duckdb
 import pandas as pd
 
@@ -86,6 +87,7 @@ class ParquetSQLApp(QMainWindow):
     def __init__(self, file_path=None):
         super().__init__()
         self.setWindowTitle('Parquet SQL Executor')
+        self.setWindowIcon(QIcon('./static/logo.jpg'))
 
         self.page = 0
         self.rows_per_page = settings.render_vars(settings.result_pagination_rows_per_page)
@@ -118,6 +120,7 @@ class ParquetSQLApp(QMainWindow):
 
         self.sqlEdit = QTextEdit()
         self.sqlEdit.setPlainText(settings.render_vars(settings.default_sql_query))
+        # self.sqlEdit.setMinimumSize(300, 30)
         layout.addWidget(self.sqlEdit)
 
         self.executeButton = QPushButton('Execute')
