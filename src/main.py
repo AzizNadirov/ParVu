@@ -78,9 +78,10 @@ class QueryThread(QThread):
             
         except Exception as e:
             err_message = f"""
-                            An error occurred while executing the query: '{creator_query}'\n
+                            An error occurred while executing the query: '{paginated_query}'\n
                             Error: '{str(e)}'
                         """
+            print("offset: ", self.offset)
             self.errorOccurred.emit(err_message)
 
 
@@ -257,7 +258,7 @@ class ParquetSQLApp(QMainWindow):
 
         if file_path and query:
             self.showLoadingAnimation()
-            self.thread = QueryThread(file_path, query, self.page * self.rows_per_page, self.rows_per_page, self)
+            self.thread = QueryThread(file_path, query, self.page * int(self.rows_per_page), int(self.rows_per_page), self)
             self.thread.resultReady.connect(self.handleResults)
             self.thread.errorOccurred.connect(self.handleError)
             self.thread.start()
