@@ -35,6 +35,10 @@ class Settings(BaseModel):
     result_pagination_rows_per_page: str
     save_file_history: str
     max_rows: str
+    colour_browseButton: str
+    colour_sqlEdit: str
+    colour_executeButton: str
+    colour_resultTable: str
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
     settings_file: Path = Path(__file__).parent / "settings" / "settings.json"
     default_settings_file: Path = Path(__file__).parent / "settings" / "default_settings.json"

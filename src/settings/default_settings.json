@@ -9,5 +9,9 @@
                     "END","LEFT JOIN","ELSE","AND","HAVING","IS","IN","CREATE","LIKE"],
     "result_pagination_rows_per_page":"500",
     "save_file_history":"true",
-    "max_rows": "1000"
+    "max_rows": "1000",
+    "colour_browseButton": "#8AFBF6",
+    "colour_sqlEdit": "#D6EBAF",
+    "colour_executeButton": "yellow",
+    "colour_resultTable": "#9FF2F9"
 }

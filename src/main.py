@@ -101,7 +101,6 @@ class ParquetSQLApp(QMainWindow):
             self.executeQuery()
 
     def initUI(self):
-        self.showMaximized()  # Start the main window in full-screen mode
         layout = QVBoxLayout()
 
         self.fileLabel = QLabel('Parquet File Path:')
@@ -111,6 +110,7 @@ class ParquetSQLApp(QMainWindow):
         layout.addWidget(self.filePathEdit)
 
         self.browseButton = QPushButton('Browse')
+        self.browseButton.setStyleSheet(f"background-color: {settings.colour_browseButton}")
         self.browseButton.clicked.connect(self.browseFile)
         layout.addWidget(self.browseButton)
 
@@ -120,11 +120,13 @@ class ParquetSQLApp(QMainWindow):
 
         self.sqlEdit = QTextEdit()
         self.sqlEdit.setPlainText(settings.render_vars(settings.default_sql_query))
-        # self.sqlEdit.setMinimumSize(300, 30)
+        self.sqlEdit.setMaximumHeight(80)
+        self.sqlEdit.setStyleSheet(f"background-color: {settings.colour_sqlEdit}")
         layout.addWidget(self.sqlEdit)
 
         self.executeButton = QPushButton('Execute')
         self.executeButton.clicked.connect(self.executeQuery)
+        self.executeButton.setStyleSheet(f"background-color: {settings.colour_executeButton}")
         layout.addWidget(self.executeButton)
 
         self.filterButton = QPushButton('Filter')
@@ -145,6 +147,7 @@ class ParquetSQLApp(QMainWindow):
         self.resultTable = QTableWidget()
         self.resultTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.resultTable.customContextMenuRequested.connect(self.showContextMenu)
+        self.resultTable.setStyleSheet(f"background-color: f{settings.colour_resultTable}")
         layout.addWidget(self.resultTable)
 
         self.paginationLayout = QHBoxLayout()
@@ -171,6 +174,7 @@ class ParquetSQLApp(QMainWindow):
 
         # Create menu bar
         self.createMenuBar()
+        self.showMaximized()
 
     def setupSqlEdit(self):
         # Set monospace font for consistency
