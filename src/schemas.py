@@ -42,6 +42,7 @@ class Settings(BaseModel):
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
     settings_file: Path = Path(__file__).parent / "settings" / "settings.json"
     default_settings_file: Path = Path(__file__).parent / "settings" / "default_settings.json"
+    static_dir: Path = Path(__file__).parent / "static"
 
 
     def process(self):
@@ -49,6 +50,7 @@ class Settings(BaseModel):
         self.recents_file = Path(self.recents_file).resolve()
         self.settings_file = Path(self.settings_file).resolve()
         self.default_settings_file = Path(self.default_settings_file).resolve()
+        self.static_dir = Path(self.static_dir).resolve()
     
 
     def render_vars(self, query: str) -> str:

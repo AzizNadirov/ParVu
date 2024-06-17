@@ -10,6 +10,7 @@ a = Analysis(
         ('src/query_revisor.py', '.'),
         ('src/static/loading-thinking.gif', './static/'),
         ('src/static/logo.jpg', './static/'),
+        ('src/static/help.md', './static/'),
         ('src/settings/settings.json', './settings/'),
         ('src/settings/default_settings.json', './settings/'),
         ('src/history/recents.json', './history/'),

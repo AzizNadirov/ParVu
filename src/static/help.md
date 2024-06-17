@@ -1,11 +1,13 @@
 
-# ParVu - **Par**quet **Vie**wer
+# ParVu Help
 
-## Overview
+## `v: 0.0.1`
+
+### Overview
 
 This application allows you to execute SQL queries on Parquet files.
 
-## Features
+### Features
 
 - Load Parquet files
 - Execute SQL queries on the file
@@ -14,7 +16,7 @@ This application allows you to execute SQL queries on Parquet files.
 - Syntax highlighting for SQL
 - Minimalistic design
 
-## How to Use
+### How to Use
 
 1. Click 'Browse' to select a Parquet file.
 2. Write your SQL query in the provided text area.
@@ -23,18 +25,18 @@ This application allows you to execute SQL queries on Parquet files.
 5. Export results using the 'Export' option in the 'File' menu.
 6. Adjust the SQL editor size by dragging the splitter.
 
-## FAQ:
+### FAQ:
 
 1. Which SQL Queries are supported?
-   - Basically it supports data transformation, non join queries. Look [here](https://duckdb.org/docs/sql/query_syntax/select)
+   - Basically it supports data transformation, non join queries. Take a look https://duckdb.org/docs/sql/query_syntax/select
 
-## Contact
+### Contact
 
-### Project:
+#### Project:
 
-- [GitHub](https://github.com/AzizNadirov/ParVu);
-- [Telegram](https://t.me/aziz_nadirov);
+- GitHub: https://github.com/AzizNadirov/ParVu;
+- Telegram: https://t.me/aziz_nadirov;
   
-## It has bugs
+### It has bugs
 
 Yes, it has. Please [open an issue](https://github.com/AzizNadirov/ParVu/issues) and lets solve this

@@ -2,8 +2,9 @@ import sys
 from pathlib import Path
 from typing import Union
 
-from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog,
-                             QTableWidget, QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMessageBox, QFormLayout, QDialog)
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QTableWidget, 
+                             QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMessageBox, QFormLayout, 
+                             QDialog, QTextBrowser)
 from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QMovie, QIcon
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp, QPoint
 
@@ -204,6 +205,34 @@ class ParquetSQLApp(QMainWindow):
         recentsMenu = fileMenu.addMenu('Recents')
         self.recentsMenu = recentsMenu
         self.updateRecentsMenu()
+
+        # help
+        helpMenu = menubar.addMenu('Help')
+        helpAction = QAction('Help/Info', self)
+        helpAction.triggered.connect(self.showHelpDialog)
+        helpMenu.addAction(helpAction)
+
+    def showHelpDialog(self):
+        with open(settings.static_dir / "help.md", "r") as f:
+            help_text = f.read()
+
+        dialog = QDialog(self, Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
+        dialog.setWindowTitle("Help/Info")
+
+        text_browser = QTextBrowser(dialog)
+        text_browser.setMarkdown(help_text)
+        text_browser.setReadOnly(True)
+
+        layout = QVBoxLayout()
+        layout.addWidget(text_browser)
+        dialog.setLayout(layout)
+
+        dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        dialog.setMinimumSize(800, 600)
+        dialog.setGeometry(300, 300, 400, 300)
+        dialog.exec_()
+
+
 
     def browseFile(self):
         options = QFileDialog.Options()
@@ -432,7 +461,7 @@ class ParquetSQLApp(QMainWindow):
             return
 
         class SettingsDialog(QDialog):
-            read_only_fields = ["recents_file", 'settings_file', 'default_settings_file',]
+            read_only_fields = ["recents_file", 'settings_file', 'default_settings_file', "static_dir", ]
             help_text = "Did you know:\nYou can use field names inside string as `$(field_name)` for render it."
             def __init__(self, settings: Settings, 
                          default_settings_file: Path):
