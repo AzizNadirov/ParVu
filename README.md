@@ -3,7 +3,7 @@
 
 ## Overview
 
-![parquet logo](https://www.google.com/url?sa=i&url=https%3A%2F%2Fdatos.gob.es%2Fen%2Fblog%2Fwhy-should-you-use-parquet-files-if-you-process-lot-data&psig=AOvVaw09dl0K7IIf9N5Syy9UqydY&ust=1718699473171000&source=images&cd=vfe&opi=89978449&ved=0CBEQjRxqFwoTCPiw0s6c4oYDFQAAAAAdAAAAABAI)
+![parquet logo](https://datos.gob.es/sites/default/files/styles/blog_image/public/blog/image/logo_formato_parquet.jpg?itok=CT-UucXj)
 This application allows you to execute SQL queries on Parquet files.
 
 ## Features
