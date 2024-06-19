@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from typing import Union
+from io import StringIO
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QTableWidget, 
                              QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMessageBox, QFormLayout, 
@@ -13,6 +14,7 @@ import pandas as pd
 
 from schemas import settings, Settings, recents
 from query_revisor import Revisor, BadQueryException
+from gui_tools import render_df_info
 
 
 class SQLHighlighter(QSyntaxHighlighter):
@@ -65,7 +67,9 @@ class QueryThread(QThread):
             creator_query = f"CREATE TABLE {settings.render_vars(settings.default_data_var_name)} AS SELECT * FROM '{self.file_path}'"
             con.execute(creator_query)
             paginated_query = self.query
-            if "LIMIT" not in paginated_query.upper():
+            if "LIMIT" not in paginated_query.upper() and \
+                "DESCRIBE" not in paginated_query.upper() and \
+                "SHOW" not in paginated_query.upper():
                 paginated_query = f"{paginated_query} LIMIT {self.limit} OFFSET {self.offset}"
             paginated_query = self.queryRevisor(paginated_query)
 
@@ -95,6 +99,8 @@ class ParquetSQLApp(QMainWindow):
         self.rows_per_page = settings.render_vars(settings.result_pagination_rows_per_page)
         self.active_filters = {}
         self.df = pd.DataFrame()
+        # use this variable to store opened files path
+        self.file_path = Path(file_path) if file_path else None
 
         self.initUI()
 
@@ -127,13 +133,19 @@ class ParquetSQLApp(QMainWindow):
         layout.addWidget(self.sqlEdit)
 
         self.executeButton = QPushButton('Execute')
-        self.executeButton.clicked.connect(self.executeQuery)
         self.executeButton.setStyleSheet(f"background-color: {settings.colour_executeButton}")
+        self.executeButton.clicked.connect(self.executeQuery)
         layout.addWidget(self.executeButton)
 
         self.filterButton = QPushButton('Filter')
         self.filterButton.clicked.connect(self.toggleFilterState)
         layout.addWidget(self.filterButton)
+
+        # meta info
+        self.tableInfoButton = QPushButton('Table Info')
+        self.tableInfoButton.setStyleSheet(f"background-color: f{settings.colour_tableInfoButton}")
+        self.tableInfoButton.clicked.connect(self.toggleTableInfo)
+        layout.addWidget(self.tableInfoButton)
 
         self.filtersMenuButton = QToolButton()
         self.filtersMenuButton.setText('Applied Filters')
@@ -147,9 +159,9 @@ class ParquetSQLApp(QMainWindow):
         layout.addWidget(self.resultLabel)
 
         self.resultTable = QTableWidget()
+        self.resultTable.setStyleSheet(f"background-color: f{settings.colour_resultTable}")
         self.resultTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.resultTable.customContextMenuRequested.connect(self.showContextMenu)
-        self.resultTable.setStyleSheet(f"background-color: f{settings.colour_resultTable}")
         layout.addWidget(self.resultTable)
 
         self.paginationLayout = QHBoxLayout()
@@ -238,6 +250,7 @@ class ParquetSQLApp(QMainWindow):
     def browseFile(self):
         options = QFileDialog.Options()
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Parquet File", "", "Parquet Files (*.parquet);;All Files (*)", options=options)
+        self.file_path = Path(fileName)
         if fileName:
             self.filePathEdit.setText(fileName)
             # if tracking history is enabled
@@ -409,6 +422,7 @@ class ParquetSQLApp(QMainWindow):
         self.applyFilters()
         self.updateFiltersMenu()
 
+
     def applyFilters(self):
         if not self.active_filters:
             filtered_df = self.df
@@ -453,6 +467,29 @@ class ParquetSQLApp(QMainWindow):
                 filtered_df.to_excel(filePath, index=False)
             else:
                 QMessageBox.warning(self, "Invalid File Type", "Please select a valid file type (CSV or XLSX).")
+
+
+    def toggleTableInfo(self):
+        if self.file_path and self.file_path.exists():
+            table_info = render_df_info(self.file_path)
+            dialog = QDialog(self, Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
+            dialog.setWindowTitle("Table Info")
+
+            text_browser = QTextBrowser(dialog)
+            text_browser.setMarkdown(table_info)
+            text_browser.setReadOnly(True)
+
+            layout = QVBoxLayout()
+            layout.addWidget(text_browser)
+            dialog.setLayout(layout)
+
+            dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+            dialog.setMinimumSize(800, 600)
+            dialog.setGeometry(300, 300, 400, 300)
+            dialog.exec_()
+        else:
+            print(f"You try to open '{self.file_path}' exists:")
+        
 
     def editSettings(self):
         settings_file = settings.usr_settings_file
@@ -587,6 +624,7 @@ class ParquetSQLApp(QMainWindow):
             return
 
         self.filePathEdit.setText(file_path)
+        self.file_path = Path(file_path)
         self.executeQuery()
 
 

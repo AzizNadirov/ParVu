@@ -6,12 +6,14 @@
     "default_sql_font":"Courier",
     "sql_keywords":["FROM","BETWEEN","DISTINCT","ORDER BY","AS","NULL","CASE","GROUP BY","ON","WHERE",
                     "WHEN","NOT","OFFSET","INNER JOIN","SELECT","TABLE","JOIN","LIMIT","OR","THEN","RIGHT JOIN",
-                    "END","LEFT JOIN","ELSE","AND","HAVING","IS","IN","CREATE","LIKE"],
+                    "END","LEFT JOIN","ELSE","AND","HAVING","IS","IN","CREATE","LIKE", "DESCRIBE", "SHOW", "EXPLAIN"
+                ],
     "result_pagination_rows_per_page":"500",
     "save_file_history":"true",
     "max_rows": "1000",
     "colour_browseButton": "#8AFBF6",
     "colour_sqlEdit": "#D6EBAF",
     "colour_executeButton": "yellow",
-    "colour_resultTable": "#9FF2F9"
+    "colour_resultTable": "#9FF2F9",
+    "colour_tableInfoButton": "#95baf5"
 }

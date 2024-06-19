@@ -42,6 +42,7 @@ class Settings(BaseModel):
     colour_sqlEdit: str
     colour_executeButton: str
     colour_resultTable: str
+    colour_tableInfoButton: str
     # dirs
     user_app_settings_dir: Path = Path.home() / ".ParVu"
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
