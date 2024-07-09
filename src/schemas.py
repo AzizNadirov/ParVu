@@ -31,6 +31,7 @@ class Settings(BaseModel):
     default_data_var_name: str
     default_limit: Union[int, str]
     default_sql_font_size: Union[int, str]
+    default_result_font_size: Union[int, str]
     default_sql_query: str
     default_sql_font: str
     sql_keywords: list[str]

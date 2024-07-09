@@ -2,6 +2,7 @@
     "default_data_var_name":"data",
     "default_limit":"500",
     "default_sql_font_size":"10",
+    "default_result_font_size":"11",
     "default_sql_query":"SELECT * \nFROM $(default_data_var_name) \nLIMIT $(default_limit)",
     "default_sql_font":"Courier",
     "sql_keywords":["FROM","BETWEEN","DISTINCT","ORDER BY","AS","NULL","CASE","GROUP BY","ON","WHERE",

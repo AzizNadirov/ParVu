@@ -79,6 +79,7 @@ class QueryThread(QThread):
             
             df = con.execute(paginated_query).fetchdf()
             self.resultReady.emit(df)
+            # df = con.execute(paginated_query).fetchall
             
         except Exception as e:
             err_message = f"""
@@ -92,7 +93,7 @@ class QueryThread(QThread):
 class ParquetSQLApp(QMainWindow):
     def __init__(self, file_path=None):
         super().__init__()
-        self.setWindowTitle('Parquet SQL Executor')
+        self.setWindowTitle('ParVu')
         self.setWindowIcon(QIcon('./static/logo.jpg'))
 
         self.page = 0
@@ -162,6 +163,7 @@ class ParquetSQLApp(QMainWindow):
         self.resultTable.setStyleSheet(f"background-color: f{settings.colour_resultTable}")
         self.resultTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.resultTable.customContextMenuRequested.connect(self.showContextMenu)
+        self.resultTable.setFont(QFont("Courier", 8))
         layout.addWidget(self.resultTable)
 
         self.paginationLayout = QHBoxLayout()
