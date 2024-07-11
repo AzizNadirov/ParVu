@@ -6,6 +6,8 @@ import shutil
 from pydantic import BaseModel
 
 
+
+
 @dataclass
 class BadQueryException:
     """ if result is query means that query is fixed and just give warning """

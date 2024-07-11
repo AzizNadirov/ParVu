@@ -15,6 +15,7 @@ import pandas as pd
 from schemas import settings, Settings, recents
 from query_revisor import Revisor, BadQueryException
 from gui_tools import render_df_info
+from core import Data
 
 
 class SQLHighlighter(QSyntaxHighlighter):
@@ -44,12 +45,16 @@ class QueryThread(QThread):
     resultReady = pyqtSignal(pd.DataFrame)
     errorOccurred = pyqtSignal(str)
 
-    def __init__(self, file_path, query, offset, limit, app: 'ParquetSQLApp'):
+    def __init__(self, 
+                 DATA: Data, 
+                 query: str, 
+                 nth_batch: int, 
+                 app: 'ParquetSQLApp'):
         super().__init__()
         self.file_path = file_path
         self.query = query
-        self.offset = offset
-        self.limit = limit
+        self.nth_batch = nth_batch
+        self.DATA = DATA
         self.app = app
 
     def queryRevisor(self, query: str) -> Union[str, None]:
@@ -63,30 +68,23 @@ class QueryThread(QThread):
         
     def run(self):
         try:
-            con = duckdb.connect(database=':memory:')
-            creator_query = f"CREATE TABLE {settings.render_vars(settings.default_data_var_name)} AS SELECT * FROM '{self.file_path}'"
-            con.execute(creator_query)
-            paginated_query = self.query
-            if "LIMIT" not in paginated_query.upper() and \
-                "DESCRIBE" not in paginated_query.upper() and \
-                "SHOW" not in paginated_query.upper():
-                paginated_query = f"{paginated_query} LIMIT {self.limit} OFFSET {self.offset}"
-            paginated_query = self.queryRevisor(paginated_query)
+            query = self.queryRevisor(self.query)
 
-            if isinstance(paginated_query, BadQueryException):
-                # if revisor fails our query then throw the exception
-                raise Exception(paginated_query.name + ": " + paginated_query.message)
+            if isinstance(query, BadQueryException):
+                raise Exception(query.name + ": " + query.message)
             
-            df = con.execute(paginated_query).fetchdf()
+            df = self.DATA.get_nth_batch(n=self.nth_batch, 
+                                         chunksize=int(settings.result_pagination_rows_per_page), 
+                                         as_df=True)
             self.resultReady.emit(df)
             # df = con.execute(paginated_query).fetchall
             
         except Exception as e:
             err_message = f"""
-                            An error occurred while executing the query: '{paginated_query}'\n
+                            An error occurred while executing the query: '{self.query}'\n
                             Error: '{str(e)}'
                         """
-            print("offset: ", self.offset)
+            raise e
             self.errorOccurred.emit(err_message)
 
 
@@ -96,7 +94,7 @@ class ParquetSQLApp(QMainWindow):
         self.setWindowTitle('ParVu')
         self.setWindowIcon(QIcon('./static/logo.jpg'))
 
-        self.page = 0
+        self.page = 1
         self.rows_per_page = settings.render_vars(settings.result_pagination_rows_per_page)
         self.active_filters = {}
         self.df = pd.DataFrame()
@@ -105,7 +103,10 @@ class ParquetSQLApp(QMainWindow):
 
         self.initUI()
 
-        if file_path:
+        if self.file_path:
+            self.DATA = Data(path = self.file_path, 
+                             virtual_table_name = settings.render_vars(settings.default_data_var_name))
+            
             self.filePathEdit.setText(file_path)
             self.executeQuery()
 
@@ -167,11 +168,11 @@ class ParquetSQLApp(QMainWindow):
         layout.addWidget(self.resultTable)
 
         self.paginationLayout = QHBoxLayout()
-        self.prevButton = QPushButton('Previous')
+        self.prevButton = QPushButton(f'<<')
         self.prevButton.clicked.connect(self.prevPage)
         self.paginationLayout.addWidget(self.prevButton)
 
-        self.nextButton = QPushButton('Next')
+        self.nextButton = QPushButton(f'>>')
         self.nextButton.clicked.connect(self.nextPage)
         self.paginationLayout.addWidget(self.nextButton)
 
@@ -272,8 +273,17 @@ class ParquetSQLApp(QMainWindow):
         query = self.sqlEdit.toPlainText()
 
         if file_path and query:
+            if not hasattr(self, 'DATA'):
+                self.DATA = Data(path = file_path, 
+                                 virtual_table_name = settings.render_vars(settings.default_data_var_name))
+                
             self.showLoadingAnimation()
-            self.thread = QueryThread(file_path, query, self.page * int(self.rows_per_page), int(self.rows_per_page), self)
+            self.thread = QueryThread(
+                                        DATA  = self.DATA,
+                                        query = query, 
+                                        nth_batch = self.page, 
+                                        app = self)
+            
             self.thread.resultReady.connect(self.handleResults)
             self.thread.errorOccurred.connect(self.handleError)
             self.thread.start()
@@ -319,14 +329,23 @@ class ParquetSQLApp(QMainWindow):
         # Resize columns to fit content
         self.resultTable.resizeColumnsToContents()
 
+
+    def set_page_text(self):
+        """ set next / prev button text """
+        self.prevButton.setText(f"<< [{self.page-1 if self.page > 1 else ''}]")
+        self.nextButton.setText(f">> [{self.page+1}]")
+
+
     def prevPage(self):
-        if self.page > 0:
+        if self.page > 1:
             self.page -= 1
             self.loadPage()
+            self.set_page_text()
 
     def nextPage(self):
         self.page += 1
         self.loadPage()
+        self.set_page_text()
 
     def showContextMenu(self, pos):
         contextMenu = QMenu(self)

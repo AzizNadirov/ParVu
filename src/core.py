@@ -28,12 +28,13 @@ class Reader:
         self.columns = self._agg_get_columns()
 
     def __read_into_duckdf(self) -> duckdb.DuckDBPyRelation:
+        path_str = str(self.path)
         if self.path.suffix.lower() == '.parquet':
-            return duckdb.read_parquet(self.path)
+            return duckdb.read_parquet(path_str)
         elif self.path.suffix.lower() == '.csv':
-            return duckdb.read_csv(self.path)
+            return duckdb.read_csv(path_str)
         elif self.path.suffix.lower() == '.json':
-            return duckdb.read_json(self.path)
+            return duckdb.read_json(path_str)
         else:
             raise ValueError(f"File extension {self.path.suffix} is not supported")
         
@@ -48,7 +49,7 @@ class Reader:
 
     def get_generator(self, chunksize: int): ...
 
-    def get_nth_batch(self, n: int, as_df: bool=True): ...
+    def get_nth_batch(self, n: int, chunksize: int, as_df: bool=True): ...
 
     def search(self, 
                query: str, 
@@ -122,9 +123,9 @@ class ParquetReader(Reader):
         return self.arrow.iter_batches(batch_size=chunksize)
     
     
-    def get_nth_batch(self, n: int, as_df: bool=True) -> Union[pd.DataFrame, pa.RecordBatch]:
+    def get_nth_batch(self, n: int, chunksize: int, as_df: bool=True) -> Union[pd.DataFrame, pa.RecordBatch]:
         """ returns nth pyarrow batch """
-        batch = nth_from_generator(self.get_generator(), n)
+        batch = nth_from_generator(self.get_generator(chunksize), n)
         return batch.to_pandas() if as_df else batch
     
     
@@ -150,14 +151,62 @@ class PDTextReader(Reader):
         return read_table(self.path, chunksize=chunksize)
 
 
-    def get_nth_batch(self, n: int) -> pd.DataFrame:
-        return nth_from_generator(self.get_generator(), n)
+    def get_nth_batch(self, n: int, chunksize: int) -> pd.DataFrame:
+        return nth_from_generator(self.get_generator(chunksize=chunksize), n)
     
 
 
+class Data:
+    def __init__(self, 
+                 path: Path,
+                 virtual_table_name: str):
+        """  """
+        self.path = Path(path)
+        self.virtual_table_name = virtual_table_name
+        self.reader = self._get_reader()
+        self.ftype = 'pq' if self.path.suffix == '.parquet' else 'txt'
 
+
+    def _get_reader(self) -> Reader:
+        """ returns reader according to the file extension """
+        if self.path.suffix == ".parquet":
+            return ParquetReader(self.path, self.virtual_table_name)
+        elif self.path.suffix in (".csv", ".json"):
+            return PDTextReader(self.path, self.virtual_table_name)
+        else:
+            raise ValueError(f"File extension {self.path.suffix} is not supported")
         
 
+    def get_nth_batch(self, n: int, chunksize: int, as_df: bool=True) -> Union[pd.DataFrame, pa.RecordBatch]:
+        return self.reader.get_nth_batch(n, chunksize, as_df) if self.ftype == 'pq' \
+            else self.reader.get_nth_batch(n, chunksize)
+
+
+    def get_generator(self, chunksize: int) -> Union[pa.RecordBatch, 'pd.io.parsers.readers.TextFileReader']:
+        return self.reader.get_generator(chunksize) if self.ftype == 'pq' \
+            else self.reader.get_generator(chunksize)
+
+
+    def get_columns(self) -> List[str]:
+        return self.reader.columns.copy()
+    
+
+    def get_uniques(self, column_name: str) -> List[str]:
+        return self.reader.agg_get_uniques(column_name)
+    
+
+    def query(self, query: str, as_df: bool=True) -> Union[duckdb.DuckDBPyRelation, pd.DataFrame]:
+        return self.reader.query(query, as_df)
+    
+
+    def search(self, query: str, column: str, as_df: bool=True) -> Union[duckdb.DuckDBPyRelation, pd.DataFrame]:
+        return self.reader.search(query, column, as_df)
+    
+    def _calc_n_batches(self, chunksize: int) -> int:
+        n_batches = 0
+        for _ in self.get_generator(chunksize):
+            n_batches += 1
+        return n_batches
 
 
 

@@ -205,9 +205,6 @@ class Ui_MainWindow(object):
         self.actionClear.setText(QCoreApplication.translate("MainWindow", u"Clear", None))
         self.query_editor.setPlaceholderText("")
         self.popup_info.setDocumentTitle("")
-        self.popup_info.setMarkdown(QCoreApplication.translate("MainWindow", u"# some txt\n"
-"\n"
-"", None))
         self.browse_file.setText(QCoreApplication.translate("MainWindow", u"Browse", None))
         self.result_meta.setText(QCoreApplication.translate("MainWindow", u"Execute", None))
         self.result_meta_2.setText(QCoreApplication.translate("MainWindow", u"Info", None))
@@ -216,5 +213,14 @@ class Ui_MainWindow(object):
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
         self.menuRecents.setTitle(QCoreApplication.translate("MainWindow", u"Recents", None))
         self.menuTools.setTitle(QCoreApplication.translate("MainWindow", u"Tools", None))
-    # retranslateUi
+
+
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    MainWindow = QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(MainWindow)
+    MainWindow.show()
+    sys.exit(app.exec())
 
