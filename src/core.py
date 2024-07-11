@@ -6,7 +6,7 @@ import duckdb
 import pyarrow.parquet as pq
 import pyarrow as pa
 
-from utils import read_table, nth_from_generator
+from utils import read_table, nth_from_generator, copy_count_gen_items
 
 
 
@@ -165,6 +165,8 @@ class Data:
         self.virtual_table_name = virtual_table_name
         self.reader = self._get_reader()
         self.ftype = 'pq' if self.path.suffix == '.parquet' else 'txt'
+        # for big data bunch counting can be slow, so do if manually called by `calc_n_batches`
+        self.total_batches = "???"
 
 
     def _get_reader(self) -> Reader:
@@ -202,11 +204,10 @@ class Data:
     def search(self, query: str, column: str, as_df: bool=True) -> Union[duckdb.DuckDBPyRelation, pd.DataFrame]:
         return self.reader.search(query, column, as_df)
     
-    def _calc_n_batches(self, chunksize: int) -> int:
-        n_batches = 0
-        for _ in self.get_generator(chunksize):
-            n_batches += 1
-        return n_batches
+    def calc_n_batches(self, chunksize: int) -> int:
+        """ calculates the number of batches in data. Use carefuly, bc it can take a time for big data """
+        gen, n = copy_count_gen_items(self.get_generator(chunksize))
+        return n
 
 
 

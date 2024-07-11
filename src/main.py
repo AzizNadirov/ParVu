@@ -95,6 +95,7 @@ class ParquetSQLApp(QMainWindow):
         self.setWindowIcon(QIcon('./static/logo.jpg'))
 
         self.page = 1
+        self.total_pages = None
         self.rows_per_page = settings.render_vars(settings.result_pagination_rows_per_page)
         self.active_filters = {}
         self.df = pd.DataFrame()
@@ -167,10 +168,15 @@ class ParquetSQLApp(QMainWindow):
         self.resultTable.setFont(QFont("Courier", 8))
         layout.addWidget(self.resultTable)
 
+        # pagination
         self.paginationLayout = QHBoxLayout()
         self.prevButton = QPushButton(f'<<')
         self.prevButton.clicked.connect(self.prevPage)
         self.paginationLayout.addWidget(self.prevButton)
+
+        self.currentPageButton = QPushButton(f"{self.page}/ ??? ")
+        self.currentPageButton.clicked.connect(self.calcTotalPages)
+        self.paginationLayout.addWidget(self.currentPageButton)
 
         self.nextButton = QPushButton(f'>>')
         self.nextButton.clicked.connect(self.nextPage)
@@ -263,7 +269,7 @@ class ParquetSQLApp(QMainWindow):
             self.updateRecentsMenu()
 
     def executeQuery(self):
-        self.page = 0
+        self.page = 1
         self.active_filters = {}
         self.updateFiltersMenu()
         self.loadPage()
@@ -330,9 +336,10 @@ class ParquetSQLApp(QMainWindow):
         self.resultTable.resizeColumnsToContents()
 
 
-    def set_page_text(self):
+    def update_page_text(self):
         """ set next / prev button text """
-        self.prevButton.setText(f"<< [{self.page-1 if self.page > 1 else ''}]")
+        self.prevButton.setText(f"[{self.page-1 if self.page > 1 else ''}] << ")
+        self.currentPageButton.setText(f"[{self.page}] / {self.total_pages} ")
         self.nextButton.setText(f">> [{self.page+1}]")
 
 
@@ -340,12 +347,19 @@ class ParquetSQLApp(QMainWindow):
         if self.page > 1:
             self.page -= 1
             self.loadPage()
-            self.set_page_text()
+            self.update_page_text()
 
     def nextPage(self):
         self.page += 1
         self.loadPage()
-        self.set_page_text()
+        self.update_page_text()
+
+    def calcTotalPages(self, force: bool = False):
+        """ calculate how many pages data will have, if `force` is False then won't recalculate it """
+        if hasattr(self, 'DATA'):   # for prevent attempt of calc in init state
+            if force or self.total_pages is None:
+                self.total_pages = self.DATA.calc_n_batches(int(settings.result_pagination_rows_per_page))
+                self.update_page_text()
 
     def showContextMenu(self, pos):
         contextMenu = QMenu(self)

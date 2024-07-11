@@ -1,7 +1,7 @@
 """ module contains general purpose tools """
 from pathlib import Path
-from itertools import islice
-from typing import Generator
+from itertools import islice, tee
+from typing import Generator, Tuple
 
 import pandas as pd
 
@@ -28,3 +28,10 @@ def read_table(file_path: Path, **kwargs) -> pd.DataFrame:
 def nth_from_generator(generator: Generator, n: int):
     """ Get directly nth item from generator """
     return next(islice(generator, n, n+1), None)
+
+
+def copy_count_gen_items(generator) -> Tuple[Generator, int]:
+    """ returns a copy of the generator and items count in it """
+    gen_copy, gen_count = tee(generator)
+    count = sum(1 for _ in gen_count)
+    return gen_copy, count
