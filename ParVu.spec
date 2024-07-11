@@ -8,6 +8,8 @@ a = Analysis(
     datas=[
         ('src/schemas.py', '.'),
         ('src/query_revisor.py', '.'),
+        ('src/utils.py', '.'),
+        ('src/core.py', '.'),
         ('src/gui_tools.py', '.'),
         ('src/static/loading-thinking.gif', './static/'),
         ('src/static/logo.jpg', './static/'),
