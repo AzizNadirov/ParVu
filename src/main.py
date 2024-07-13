@@ -5,9 +5,9 @@ from io import StringIO
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QTableWidget, 
                              QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMessageBox, QFormLayout, 
-                             QDialog, QTextBrowser)
+                             QDialog, QTextBrowser, QGridLayout)
 from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QMovie, QIcon
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp, QPoint
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp
 
 import duckdb
 import pandas as pd
@@ -76,8 +76,7 @@ class QueryThread(QThread):
                 
                 self.DATA.execute_query(query, as_df=False)
                 
-            df = self.DATA.get_nth_batch(n=self.nth_batch, as_df=True)
-            
+            df = self.DATA.get_nth_batch(n=self.nth_batch, as_df=True)           
             self.resultReady.emit(df)
             
         except Exception as e:
@@ -98,7 +97,6 @@ class ParquetSQLApp(QMainWindow):
         self.page = 1
         self.total_pages = None
         self.rows_per_page = settings.render_vars(settings.result_pagination_rows_per_page)
-        self.active_filters = {}
         self.df = pd.DataFrame()
         # use this variable to store opened files path
         self.file_path = Path(file_path) if file_path else None
@@ -147,23 +145,11 @@ class ParquetSQLApp(QMainWindow):
         self.executeButton.clicked.connect(self.executeQuery)
         layout.addWidget(self.executeButton)
 
-        self.filterButton = QPushButton('Filter')
-        self.filterButton.clicked.connect(self.toggleFilterState)
-        layout.addWidget(self.filterButton)
-
         # meta info
         self.tableInfoButton = QPushButton('Table Info')
         self.tableInfoButton.setStyleSheet(f"background-color: f{settings.colour_tableInfoButton}")
         self.tableInfoButton.clicked.connect(self.toggleTableInfo)
         layout.addWidget(self.tableInfoButton)
-
-        self.filtersMenuButton = QToolButton()
-        self.filtersMenuButton.setText('Applied Filters')
-        self.filtersMenuButton.setMinimumSize(150, 30)
-        self.filtersMenuButton.setPopupMode(QToolButton.InstantPopup)
-        self.filtersMenu = QMenu(self.filtersMenuButton)
-        self.filtersMenuButton.setMenu(self.filtersMenu)
-        layout.addWidget(self.filtersMenuButton)
 
         self.resultLabel = QLabel('Results:')
         layout.addWidget(self.resultLabel)
@@ -284,15 +270,11 @@ class ParquetSQLApp(QMainWindow):
 
     def execute(self):
         self.page = 1
-        self.active_filters = {}
-        self.updateFiltersMenu()
         self.loadPage()
 
 
     def executeQuery(self):
         self.page = 1
-        self.active_filters = {}
-        self.updateFiltersMenu()
         self.loadPage(query=self.sqlEdit.toPlainText())
         self.update_page_text()
 
@@ -324,7 +306,7 @@ class ParquetSQLApp(QMainWindow):
         self.thread.wait()
         self.hideLoadingAnimation()
         self.df = df
-        self.applyFilters()
+        self.displayResults(df)
 
     def handleError(self, error):
         self.thread.quit()
@@ -416,10 +398,6 @@ class ParquetSQLApp(QMainWindow):
 
             contextMenu.addMenu(copy_menu)
 
-            filter_action = QAction("Filter for value", self)
-            filter_action.triggered.connect(lambda: self.showFilterMenu(column))
-            contextMenu.addAction(filter_action)
-
         contextMenu.exec_(self.resultTable.mapToGlobal(pos))
 
     def copyColumnName(self, column_name):
@@ -436,91 +414,8 @@ class ParquetSQLApp(QMainWindow):
         clipboard = QApplication.clipboard()
         clipboard.setText(str(values))
 
-    def toggleFilterState(self):
-        if self.filterButton.text() == 'Filter':
-            self.activateFiltering()
-        else:
-            self.resetFilters()
-
-    def activateFiltering(self):
-        self.filterButton.setText('Clear Filters')
-        self.active_filters = {}
-        self.updateFiltersMenu()
-        self.loadPage()
-
-    def resetFilters(self):
-        self.filterButton.setText('Filter')
-        self.active_filters = {}
-        self.updateFiltersMenu()
-        self.applyFilters()
-
-    def showFilterMenu(self, column):
-        if self.df is None or self.df.empty:
-            return
-
-        unique_values = self.df.iloc[:, column].unique()
-        filter_menu = QMenu(self)
-        for value in unique_values:
-            filter_action = QAction(str(value), self)
-            filter_action.setCheckable(True)
-            filter_action.setChecked(column in self.active_filters and value in self.active_filters[column])
-            filter_action.triggered.connect(lambda checked, val=value: self.toggleFilter(column, val, checked))
-            filter_menu.addAction(filter_action)
-
-        header_pos = self.resultTable.horizontalHeader().sectionPosition(column)
-        header_pos_global = self.resultTable.horizontalHeader().mapToGlobal(QPoint(header_pos, 0))
-        filter_menu.exec_(header_pos_global)
-
-    def toggleFilter(self, column, value, checked):
-        if checked:
-            if column not in self.active_filters:
-                self.active_filters[column] = set()
-            self.active_filters[column].add(value)
-        else:
-            if column in self.active_filters and value in self.active_filters[column]:
-                self.active_filters[column].remove(value)
-                if not self.active_filters[column]:
-                    del self.active_filters[column]
-
-        self.applyFilters()
-        self.updateFiltersMenu()
-
-
-    def applyFilters(self):
-        if not self.active_filters:
-            filtered_df = self.df
-        else:
-            filtered_df = self.df.copy()
-            for column, values in self.active_filters.items():
-                filtered_df = filtered_df[filtered_df.iloc[:, column].isin(values)]
-
-        self.displayResults(filtered_df)
-
-
-    def updateFiltersMenu(self):
-        self.filtersMenu.clear()
-        if not self.active_filters:
-            no_filters_action = QAction('No Filters Applied', self)
-            no_filters_action.setEnabled(False)
-            self.filtersMenu.addAction(no_filters_action)
-        else:
-            for column, values in self.active_filters.items():
-                for value in values:
-                    filter_action = QAction(f"{self.resultTable.horizontalHeaderItem(column).text()}: {value}", self)
-                    filter_action.setCheckable(True)
-                    filter_action.setChecked(True)
-                    filter_action.triggered.connect(lambda checked, col=column, val=value: self.toggleFilter(col, val, checked))
-                    self.filtersMenu.addAction(filter_action)
 
     def exportResults(self):
-        # filtered_df = self.df.copy()
-        # for column, values in self.active_filters.items():
-        #     filtered_df = filtered_df[filtered_df.iloc[:, column].isin(values)]
-
-        # if filtered_df.empty:
-        #     QMessageBox.warning(self, "No Data", "There is no data to export.")
-        #     return
-
         options = QFileDialog.Options()
         filePath, _ = QFileDialog.getSaveFileName(self, "Export Results", "", "CSV Files (*.csv);;Parquet Files (*.parquet);;All Files (*)", options=options)
         if filePath:

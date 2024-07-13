@@ -154,7 +154,9 @@ class Data:
 
     def get_nth_batch(self, n: int, as_df: bool = True) -> Union[pd.DataFrame, pa.RecordBatch]:
         logger.debug(f"Getting {n}th batch with chunksize: {self.reader.batchsize} as_df: {as_df}")
-        return self.reader.get_nth_batch(n, as_df)
+        batch = self.reader.get_nth_batch(n, as_df)
+        logger.debug(f"Items in batch: {len(batch)}")
+        return batch
 
     def get_generator(self, chunksize: int) -> List[pa.RecordBatch]:
         logger.debug(f"Getting generator with chunksize: {chunksize}")
