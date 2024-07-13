@@ -17,6 +17,7 @@ from query_revisor import Revisor, BadQueryException
 from gui_tools import render_df_info
 from core import Data
 
+# bug in pagination in query
 
 class SQLHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
@@ -47,9 +48,9 @@ class QueryThread(QThread):
 
     def __init__(self, 
                  DATA: Data, 
-                 query: str, 
                  nth_batch: int, 
-                 app: 'ParquetSQLApp'):
+                 app: 'ParquetSQLApp',
+                 query: str = None):
         super().__init__()
         self.file_path = file_path
         self.query = query
@@ -68,16 +69,21 @@ class QueryThread(QThread):
         
     def run(self):
         try:
-            query = self.queryRevisor(self.query)
-
-            if isinstance(query, BadQueryException):
-                raise Exception(query.name + ": " + query.message)
-            
+            if self.query and isinstance(self.query, str) and self.query.strip():
+                query = self.queryRevisor(self.query)
+                if isinstance(query, BadQueryException):
+                    raise Exception(query.name + ": " + query.message)
+                
+                self.DATA.execute_query(
+                            query, 
+                            as_df=False, 
+                            max_chunksize=int(settings.result_pagination_rows_per_page))
+                
             df = self.DATA.get_nth_batch(n=self.nth_batch, 
-                                         chunksize=int(settings.result_pagination_rows_per_page), 
-                                         as_df=True)
+                                        chunksize=int(settings.result_pagination_rows_per_page), 
+                                        as_df=True)
+            
             self.resultReady.emit(df)
-            # df = con.execute(paginated_query).fetchall
             
         except Exception as e:
             err_message = f"""
@@ -109,7 +115,7 @@ class ParquetSQLApp(QMainWindow):
                              virtual_table_name = settings.render_vars(settings.default_data_var_name))
             
             self.filePathEdit.setText(file_path)
-            self.executeQuery()
+            self.execute()
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -268,17 +274,23 @@ class ParquetSQLApp(QMainWindow):
 
             self.updateRecentsMenu()
 
-    def executeQuery(self):
+    def execute(self):
         self.page = 1
         self.active_filters = {}
         self.updateFiltersMenu()
         self.loadPage()
 
-    def loadPage(self):
-        file_path = self.filePathEdit.text()
-        query = self.sqlEdit.toPlainText()
 
-        if file_path and query:
+    def executeQuery(self):
+        self.page = 1
+        self.active_filters = {}
+        self.updateFiltersMenu()
+        self.loadPage(query=self.sqlEdit.toPlainText())
+
+    def loadPage(self, query: str=None):
+        file_path = self.filePathEdit.text()
+
+        if file_path:
             if not hasattr(self, 'DATA'):
                 self.DATA = Data(path = file_path, 
                                  virtual_table_name = settings.render_vars(settings.default_data_var_name))
@@ -294,7 +306,7 @@ class ParquetSQLApp(QMainWindow):
             self.thread.errorOccurred.connect(self.handleError)
             self.thread.start()
         else:
-            self.resultLabel.setText("Please provide both file path and SQL query.")
+            self.resultLabel.setText("Browse file first...")
 
     def handleResults(self, df):
         self.thread.quit()
@@ -360,6 +372,7 @@ class ParquetSQLApp(QMainWindow):
             if force or self.total_pages is None:
                 self.total_pages = self.DATA.calc_n_batches(int(settings.result_pagination_rows_per_page))
                 self.update_page_text()
+                
 
     def showContextMenu(self, pos):
         contextMenu = QMenu(self)
@@ -657,10 +670,10 @@ class ParquetSQLApp(QMainWindow):
                 recents.save_recents()
                 self.updateRecentsMenu()
             return
-
+        print(file_path)
         self.filePathEdit.setText(file_path)
         self.file_path = Path(file_path)
-        self.executeQuery()
+        self.execute()
 
 
 if __name__ == '__main__':

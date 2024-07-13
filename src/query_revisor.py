@@ -45,7 +45,8 @@ class Revisor:
 
     def run(self) -> Union[bool, BadQueryException]:
         """ Run all rules """
-        rules = [self._rule_limit_range, self._rule_no_joins, ]
+        # rules = [self._rule_limit_range, self._rule_no_joins, ]
+        rules = [self._rule_no_joins, ]
         for rule in rules:
             rule_res = rule()
             if isinstance(rule_res, BadQueryException):
