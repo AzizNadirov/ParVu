@@ -6,8 +6,6 @@ from typing import Generator, Tuple
 import pandas as pd
 from loguru import logger
 
-logger(level="DEBUG")
-
 
 def read_table(file_path: Path, **kwargs) -> pd.DataFrame:
     """ read table from passed file. Supported formats: parquet, csv, json, excel """

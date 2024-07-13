@@ -74,14 +74,9 @@ class QueryThread(QThread):
                 if isinstance(query, BadQueryException):
                     raise Exception(query.name + ": " + query.message)
                 
-                self.DATA.execute_query(
-                            query, 
-                            as_df=False, 
-                            max_chunksize=int(settings.result_pagination_rows_per_page))
+                self.DATA.execute_query(query, as_df=False)
                 
-            df = self.DATA.get_nth_batch(n=self.nth_batch, 
-                                        chunksize=int(settings.result_pagination_rows_per_page), 
-                                        as_df=True)
+            df = self.DATA.get_nth_batch(n=self.nth_batch, as_df=True)
             
             self.resultReady.emit(df)
             
@@ -112,7 +107,8 @@ class ParquetSQLApp(QMainWindow):
 
         if self.file_path:
             self.DATA = Data(path = self.file_path, 
-                             virtual_table_name = settings.render_vars(settings.default_data_var_name))
+                             virtual_table_name = settings.render_vars(settings.default_data_var_name),
+                             batchsize = int(settings.result_pagination_rows_per_page))
             
             self.filePathEdit.setText(file_path)
             self.execute()
@@ -125,12 +121,17 @@ class ParquetSQLApp(QMainWindow):
 
         self.filePathEdit = QLineEdit()
         layout.addWidget(self.filePathEdit)
-
+        # Browse
         self.browseButton = QPushButton('Browse')
         self.browseButton.setStyleSheet(f"background-color: {settings.colour_browseButton}")
         self.browseButton.clicked.connect(self.browseFile)
         layout.addWidget(self.browseButton)
-
+        # View
+        self.ViewFileButton = QPushButton('View')
+        self.ViewFileButton.setStyleSheet(f"background-color: {settings.colour_browseButton}")
+        self.ViewFileButton.clicked.connect(self.ViewFile)
+        layout.addWidget(self.ViewFileButton)
+        # SQL Edit
         self.sqlLabel = QLabel(f'Data Query - AS {settings.render_vars(settings.default_data_var_name)}:')
         self.sqlLabel.setFont(QFont("Courier", 8))
         layout.addWidget(self.sqlLabel)
@@ -274,6 +275,13 @@ class ParquetSQLApp(QMainWindow):
 
             self.updateRecentsMenu()
 
+
+    def ViewFile(self):
+        if self.file_path:
+            self.loadPage()
+            self.DATA.reset_duckdb()
+
+
     def execute(self):
         self.page = 1
         self.active_filters = {}
@@ -286,6 +294,7 @@ class ParquetSQLApp(QMainWindow):
         self.active_filters = {}
         self.updateFiltersMenu()
         self.loadPage(query=self.sqlEdit.toPlainText())
+        self.update_page_text()
 
     def loadPage(self, query: str=None):
         file_path = self.filePathEdit.text()
@@ -293,7 +302,8 @@ class ParquetSQLApp(QMainWindow):
         if file_path:
             if not hasattr(self, 'DATA'):
                 self.DATA = Data(path = file_path, 
-                                 virtual_table_name = settings.render_vars(settings.default_data_var_name))
+                                 virtual_table_name = settings.render_vars(settings.default_data_var_name),
+                                 batchsize = int(settings.result_pagination_rows_per_page))
                 
             self.showLoadingAnimation()
             self.thread = QueryThread(
@@ -305,6 +315,7 @@ class ParquetSQLApp(QMainWindow):
             self.thread.resultReady.connect(self.handleResults)
             self.thread.errorOccurred.connect(self.handleError)
             self.thread.start()
+            self.thread.finished.connect(self.update_page_text)
         else:
             self.resultLabel.setText("Browse file first...")
 
@@ -362,6 +373,10 @@ class ParquetSQLApp(QMainWindow):
             self.update_page_text()
 
     def nextPage(self):
+        # if is the last page, do nothing
+        print(f"total batches: {self.DATA.total_batches}; Page: {self.page}")
+        if isinstance(self.DATA.total_batches, int) and self.page >= self.DATA.total_batches:
+            return
         self.page += 1
         self.loadPage()
         self.update_page_text()
@@ -370,7 +385,7 @@ class ParquetSQLApp(QMainWindow):
         """ calculate how many pages data will have, if `force` is False then won't recalculate it """
         if hasattr(self, 'DATA'):   # for prevent attempt of calc in init state
             if force or self.total_pages is None:
-                self.total_pages = self.DATA.calc_n_batches(int(settings.result_pagination_rows_per_page))
+                self.total_pages = self.DATA.calc_n_batches()
                 self.update_page_text()
                 
 
@@ -498,21 +513,25 @@ class ParquetSQLApp(QMainWindow):
                     self.filtersMenu.addAction(filter_action)
 
     def exportResults(self):
-        filtered_df = self.df.copy()
-        for column, values in self.active_filters.items():
-            filtered_df = filtered_df[filtered_df.iloc[:, column].isin(values)]
+        # filtered_df = self.df.copy()
+        # for column, values in self.active_filters.items():
+        #     filtered_df = filtered_df[filtered_df.iloc[:, column].isin(values)]
 
-        if filtered_df.empty:
-            QMessageBox.warning(self, "No Data", "There is no data to export.")
-            return
+        # if filtered_df.empty:
+        #     QMessageBox.warning(self, "No Data", "There is no data to export.")
+        #     return
 
         options = QFileDialog.Options()
-        filePath, _ = QFileDialog.getSaveFileName(self, "Export Results", "", "CSV Files (*.csv);;Excel Files (*.xlsx);;All Files (*)", options=options)
+        filePath, _ = QFileDialog.getSaveFileName(self, "Export Results", "", "CSV Files (*.csv);;Parquet Files (*.parquet);;All Files (*)", options=options)
         if filePath:
             if filePath.endswith('.csv'):
-                filtered_df.to_csv(filePath, index=False)
-            elif filePath.endswith('.xlsx'):
-                filtered_df.to_excel(filePath, index=False)
+                self.DATA.reader.duckdf_query.to_csv(filePath)
+            # elif filePath.endswith('.xlsx'):  
+            # # todo: add support for xlsx(https://duckdb.org/docs/guides/file_formats/excel_export.html)
+            #     self.DATA.reader.duckdf_query.to(filePath, index=False)
+
+            elif filePath.endswith('.parquet'):
+                self.DATA.reader.duckdf_query.to_parquet(filePath)
             else:
                 QMessageBox.warning(self, "Invalid File Type", "Please select a valid file type (CSV or XLSX).")
 
