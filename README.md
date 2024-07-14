@@ -32,11 +32,10 @@ This application allows you to execute SQL queries on Parquet files. Uses [DuckD
    - Basically it supports data transformation, non join queries. Look [here](https://duckdb.org/docs/sql/query_syntax/select)
 
 ## Contact
-
-### Project:
-
-- [GitHub](https://github.com/AzizNadirov/ParVu);
 - [Telegram](https://t.me/aziz_nadirov);
+- 
+### Project:
+- [GitHub](https://github.com/AzizNadirov/ParVu);
   
 ## It has bugs
 
