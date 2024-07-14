@@ -1,35 +1,42 @@
+from typing import Tuple
 from io import StringIO
-import pandas as pd
-from pathlib import Path
+import sys
+
+import duckdb
 
 
-
-def render_df_info(table_path: Path) -> str:
+def render_df_info(duckdf: duckdb.DuckDBPyRelation) -> str:
     """ returns md like formatted df.info """
-    buff = StringIO()
-    df = pd.read_parquet(table_path)
-    df.info(buf=buff)
-    info_str = buff.getvalue()
-    lines = info_str.split("\n")
-    shape = f"###  Rows{df.shape[0]}, Columns: {df.shape[1]}"
-    column_lines = lines[5:27]
-    markdown_table = "| # | Column | Non-Null Count | Dtype |\n"
-    markdown_table += "|---|--------|----------------|-------|\n"
+    shape = duckdf.shape
 
-    # Iterate over the column lines and extract the details
-    for line in column_lines:
-        parts = line.split()
-        index = parts[0]
-        column = " ".join(parts[1:-3])
-        non_null_count = parts[-3]
-        dtype = parts[-1]
-        
-        # Add the row to the markdown table
-        markdown_table += f"| {index} | {column} | {non_null_count} | {dtype} |\n"
+    output_buffer = StringIO()
+    sys.stdout = output_buffer
+    duckdf.describe().show(max_width=10**19)
+    sys.stdout = sys.__stdout__
+    descr = output_buffer.getvalue()
 
-    info = f"{shape}\n{markdown_table}" + \
-    """\n\n**tip: you can run SQL query `SHOW <table_name>` or `DESCRIBE <table_name>` to get more info.
-        However, running running table this way more expensive in terms of memory.**\n\n\t`Esc` to exit...
-    """
+    h = f"### Rows: {shape[0]}, Columns: {shape[1]}\n{'-'*50}\n"
+    try:
+        lines = descr.strip().split("\n")
+        headers = lines[1].strip("│").split("│")
+        headers = [header.strip() for header in headers]
+        types = lines[2].strip("│").split("│")
+        types = [t.strip() for t in types]
+        data_lines = lines[4:-1]
+        data = []
+        for line in data_lines:
+            row = line.strip("│").split("│")
+            row = [item.strip() for item in row]
+            data.append(row)
 
-    return info
+        # Build the markdown table
+        markdown_table = "| " + " | ".join(headers) + " |\n"
+        markdown_table += "|-" + "-|-".join(["-" * len(header) for header in headers]) + "-|\n"
+        markdown_table += "| " + " | ".join(types) + " |\n"
+        for row in data:
+            markdown_table += "| " + " | ".join(row) + " |\n"
+
+        return h + markdown_table
+    
+    except Exception as e:
+        return h + '\n' + descr

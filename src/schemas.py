@@ -4,6 +4,7 @@ from typing import Union
 import shutil
 
 from pydantic import BaseModel
+from loguru import logger
 
 
 @dataclass
@@ -52,8 +53,8 @@ class Settings(BaseModel):
     usr_settings_file: Path = user_app_settings_dir / "settings" / "settings.json"
     default_settings_file: Path = Path(__file__).parent / "settings" / "default_settings.json"
     static_dir: Path = Path(__file__).parent / "static"
+    user_logs_dir: Path = user_app_settings_dir / "logs"
     
-
 
     def process(self):
         self.sql_keywords = list(set([i.upper().strip() for i in self.sql_keywords]))
@@ -61,7 +62,6 @@ class Settings(BaseModel):
         self.settings_file = Path(self.settings_file).resolve()
         self.default_settings_file = Path(self.default_settings_file).resolve()
         self.static_dir = Path(self.static_dir).resolve()
-
     
 
     def render_vars(self, query: str) -> str:
@@ -75,6 +75,34 @@ class Settings(BaseModel):
         query = query.replace("$(default_sql_query)", str(self.default_sql_query))
         query = query.replace("$(default_sql_font)", str(self.default_sql_font))
         return query
+    
+    
+    @classmethod
+    def reset_user_settings(cls):
+        """  """
+        user_app_settings_dir: Path = Path.home() / ".ParVu"
+        shutil.copytree(Path(__file__).parent / "settings", 
+                            user_app_settings_dir / "settings",
+                            dirs_exist_ok=True)
+            
+        shutil.copytree(Path(__file__).parent / "history",
+                        user_app_settings_dir / "history",
+                        dirs_exist_ok=True)
+        
+        # fill with default settings
+        with (Path(__file__).parent / "settings" / "default_settings.json").open('r') as f:
+            with open(Path(__file__).parent / "history" / "recents.json") as r:
+                (user_app_settings_dir / 'settings' / 'settings.json').write_text(f.read())
+                (user_app_settings_dir / 'history' / 'recents.json').write_text(r.read())
+
+    @classmethod
+    def get_user_settings(cls):
+        user_app_settings_dir: Path = Path.home() / ".ParVu"
+        settings = (user_app_settings_dir / "settings" / "settings.json")
+        with settings.open('r') as f:
+            settings_data = f.read()
+
+            return cls.model_validate_json(settings_data)
 
 
     @classmethod
@@ -82,29 +110,20 @@ class Settings(BaseModel):
         user_app_settings_dir: Path = Path.home() / ".ParVu"
         # app settings dir doesnt exist - mb first start
         if not user_app_settings_dir.exists():
-            # copy defaults from executable folder to user dir
-            shutil.copytree(Path(__file__).parent / "settings", 
-                            user_app_settings_dir / "settings",
-                            dirs_exist_ok=True)
-            
-            shutil.copytree(Path(__file__).parent / "history",
-                            user_app_settings_dir / "history",
-                            dirs_exist_ok=True)
-            
-            # fill with default settings
-            with (Path(__file__).parent / "settings" / "default_settings.json").open('r') as f:
-                with open(Path(__file__).parent / "history" / "recents.json") as r:
-                    (user_app_settings_dir / 'settings' / 'settings.json').write_text(f.read())
-                    (user_app_settings_dir / 'history' / 'recents.json').write_text(r.read())
-                
+            cls.reset_user_settings()
+        try:
+            # read from user dir
+            model = cls.get_user_settings()
+            model.process()
 
-        # read from user dir
-        settings = (user_app_settings_dir / "settings" / "settings.json")
-        with settings.open('r') as f:
-            settings_data = f.read()
+        except Exception as e:
+            # reset and load 
+            logger.error(e)
+            logger.critical(f"Resetting user settings")
+            cls.reset_user_settings()
+            model = cls.get_user_settings()
+            model.process()
 
-        model = cls.model_validate_json(settings_data)
-        model.process()
         return model
 
     def save_settings(self):

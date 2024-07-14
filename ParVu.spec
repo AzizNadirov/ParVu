@@ -8,6 +8,8 @@ a = Analysis(
     datas=[
         ('src/schemas.py', '.'),
         ('src/query_revisor.py', '.'),
+        ('src/utils.py', '.'),
+        ('src/core.py', '.'),
         ('src/gui_tools.py', '.'),
         ('src/static/loading-thinking.gif', './static/'),
         ('src/static/logo.jpg', './static/'),
@@ -17,7 +19,7 @@ a = Analysis(
         ('src/history/recents.json', './history/'),
     ],
     hiddenimports=[
-        'pydantic',  # Add pydantic to hidden imports
+        'pydantic', 'loguru'
     ],
     hookspath=[],
     hooksconfig={},
@@ -48,4 +50,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     contents_directory='src',
+    version='0.0.3',
 )
