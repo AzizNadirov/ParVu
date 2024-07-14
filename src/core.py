@@ -8,9 +8,10 @@ import pyarrow as pa
 from loguru import logger
 
 from utils import read_table, nth_from_generator, copy_count_gen_items
+from schemas import settings
 
 
-logger.add("logs/file_{time}.log")
+logger.add(settings.user_logs_dir / "file_{time}.log")
 
 
 class Reader:
@@ -193,11 +194,13 @@ class Data:
         # gen, n = copy_count_gen_items(self.reader.batches)
         logger.debug(f"Number of batches: {len(self.reader.batches)}")
         return len(self.reader.batches)
+    
 
     def reset_duckdb(self):
         """ reset query result table to file table """
         logger.debug("Resetting duckdf_query to original duckdf")
         self.reader.duckdf_query = self.reader.duckdf
+        self.reader.update_batches()
 
     def __str__(self):
         return f"<ParVuDataInstance:{self.path.as_posix()}[{self.reader.columns}]>"

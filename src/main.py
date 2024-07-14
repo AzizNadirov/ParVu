@@ -102,7 +102,7 @@ class QueryThread(QThread):
                             An error occurred while executing the query: '{self.query}'\n
                             Error: '{str(e)}'
                         """
-            raise e
+            # raise e
             self.errorOccurred.emit(err_message)
 
 
@@ -282,8 +282,15 @@ class ParquetSQLApp(QMainWindow):
 
     def ViewFile(self):
         if self.file_path:
-            self.loadPage()
-            self.DATA.reset_duckdb()
+            if not hasattr(self, 'DATA'):
+                self.DATA = Data(path = file_path, 
+                                 virtual_table_name = settings.render_vars(settings.default_data_var_name),
+                                 batchsize = int(settings.result_pagination_rows_per_page))
+                
+            else:
+                self.DATA.reset_duckdb()
+
+            self.execute()
 
 
     def execute(self):

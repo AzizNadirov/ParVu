@@ -19,7 +19,7 @@ a = Analysis(
         ('src/history/recents.json', './history/'),
     ],
     hiddenimports=[
-        'pydantic',  # Add pydantic to hidden imports
+        'pydantic', 'loguru'
     ],
     hookspath=[],
     hooksconfig={},
@@ -50,4 +50,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     contents_directory='src',
+    version='0.0.3',
 )

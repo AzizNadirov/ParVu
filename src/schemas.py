@@ -53,8 +53,8 @@ class Settings(BaseModel):
     usr_settings_file: Path = user_app_settings_dir / "settings" / "settings.json"
     default_settings_file: Path = Path(__file__).parent / "settings" / "default_settings.json"
     static_dir: Path = Path(__file__).parent / "static"
+    user_logs_dir: Path = user_app_settings_dir / "logs"
     
-
 
     def process(self):
         self.sql_keywords = list(set([i.upper().strip() for i in self.sql_keywords]))
@@ -62,7 +62,6 @@ class Settings(BaseModel):
         self.settings_file = Path(self.settings_file).resolve()
         self.default_settings_file = Path(self.default_settings_file).resolve()
         self.static_dir = Path(self.static_dir).resolve()
-
     
 
     def render_vars(self, query: str) -> str:
