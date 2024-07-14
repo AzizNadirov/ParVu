@@ -5,7 +5,7 @@ from io import StringIO
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QTableWidget, 
                              QTableWidgetItem, QHBoxLayout, QMenu, QAction, QToolButton, QMainWindow, QMessageBox, QFormLayout, 
-                             QDialog, QTextBrowser, QGridLayout)
+                             QDialog, QTextBrowser)
 from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont, QMovie, QIcon
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRegExp
 
@@ -17,7 +17,26 @@ from query_revisor import Revisor, BadQueryException
 from gui_tools import render_df_info
 from core import Data
 
-# bug in pagination in query
+
+class AnimationWidget(QWidget):
+    def __init__(self, parent=None):
+        super(AnimationWidget, self).__init__(parent)
+        self.setFixedSize(100, 100)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.movie = QMovie("src/static/loading-thinking.gif")
+        self.label = QLabel(self)
+        self.label.setMovie(self.movie)
+        self.start()
+    
+    def start(self):
+        print('start anime')
+        self.movie.start()
+    
+    def stop(self):
+        self.movie.stop()
+        self.close()
+        print('stop anime')
+
 
 class SQLHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
@@ -68,6 +87,7 @@ class QueryThread(QThread):
             return rev_res
         
     def run(self):
+        
         try:
             if self.query and isinstance(self.query, str) and self.query.strip():
                 query = self.queryRevisor(self.query)
@@ -76,7 +96,7 @@ class QueryThread(QThread):
                 
                 self.DATA.execute_query(query, as_df=False)
                 
-            df = self.DATA.get_nth_batch(n=self.nth_batch, as_df=True)           
+            df = self.DATA.get_nth_batch(n=self.nth_batch, as_df=True)  
             self.resultReady.emit(df)
             
         except Exception as e:
@@ -271,6 +291,7 @@ class ParquetSQLApp(QMainWindow):
     def execute(self):
         self.page = 1
         self.loadPage()
+        self.update_page_text()
 
 
     def executeQuery(self):
@@ -279,6 +300,7 @@ class ParquetSQLApp(QMainWindow):
         self.update_page_text()
 
     def loadPage(self, query: str=None):
+        self.loading = AnimationWidget(self)
         file_path = self.filePathEdit.text()
 
         if file_path:
@@ -287,7 +309,6 @@ class ParquetSQLApp(QMainWindow):
                                  virtual_table_name = settings.render_vars(settings.default_data_var_name),
                                  batchsize = int(settings.result_pagination_rows_per_page))
                 
-            self.showLoadingAnimation()
             self.thread = QueryThread(
                                         DATA  = self.DATA,
                                         query = query, 
@@ -304,25 +325,16 @@ class ParquetSQLApp(QMainWindow):
     def handleResults(self, df):
         self.thread.quit()
         self.thread.wait()
-        self.hideLoadingAnimation()
         self.df = df
         self.displayResults(df)
+        self.loading.stop()
 
     def handleError(self, error):
         self.thread.quit()
         self.thread.wait()
-        self.hideLoadingAnimation()
         self.resultLabel.setText(f"Error: {error}")
+        self.loading.stop()
 
-    def showLoadingAnimation(self):
-        self.loadingLabel.setVisible(True)
-        self.movie = QMovie("./static/loading-thinking.gif")
-        self.loadingLabel.setMovie(self.movie)
-        self.movie.start()
-
-    def hideLoadingAnimation(self):
-        self.movie.stop()
-        self.loadingLabel.setVisible(False)
 
     def displayResults(self, df):
         # Set the table dimensions
@@ -433,13 +445,17 @@ class ParquetSQLApp(QMainWindow):
 
     def toggleTableInfo(self):
         if self.file_path and self.file_path.exists():
-            table_info = render_df_info(self.file_path)
+            if not hasattr(self, 'DATA'):
+                return
+            
+            table_info = render_df_info(self.DATA.reader.duckdf_query)
             dialog = QDialog(self, Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
             dialog.setWindowTitle("Table Info")
 
             text_browser = QTextBrowser(dialog)
             text_browser.setMarkdown(table_info)
             text_browser.setReadOnly(True)
+            text_browser.setOpenExternalLinks(True)
 
             layout = QVBoxLayout()
             layout.addWidget(text_browser)

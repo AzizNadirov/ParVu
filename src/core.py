@@ -10,7 +10,7 @@ from loguru import logger
 from utils import read_table, nth_from_generator, copy_count_gen_items
 
 
-logger.add("logs/file_{time}.log", level="DEBUG")
+logger.add("logs/file_{time}.log")
 
 
 class Reader:
@@ -35,7 +35,7 @@ class Reader:
         
         self.validate()
         # origin file
-        self.duckdf = self.__read_into_duckdf().sort("__index_level_0__")
+        self.duckdf = self.__read_into_duckdf()#.sort("__index_level_0__")
         # for querying
         self.duckdf_query = self.duckdf
         self.batches: List[pa.RecordBatch] = self.duckdf_query.to_arrow_table().to_batches(self.batchsize)
