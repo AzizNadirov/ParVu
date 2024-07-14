@@ -29,13 +29,11 @@ class AnimationWidget(QWidget):
         self.start()
     
     def start(self):
-        print('start anime')
         self.movie.start()
     
     def stop(self):
         self.movie.stop()
         self.close()
-        print('stop anime')
 
 
 class SQLHighlighter(QSyntaxHighlighter):
@@ -140,12 +138,12 @@ class ParquetSQLApp(QMainWindow):
         self.filePathEdit = QLineEdit()
         layout.addWidget(self.filePathEdit)
         # Browse
-        self.browseButton = QPushButton('Browse')
+        self.browseButton = QPushButton('[1]Browse')
         self.browseButton.setStyleSheet(f"background-color: {settings.colour_browseButton}")
         self.browseButton.clicked.connect(self.browseFile)
         layout.addWidget(self.browseButton)
         # View
-        self.ViewFileButton = QPushButton('View')
+        self.ViewFileButton = QPushButton('[2]View')
         self.ViewFileButton.setStyleSheet(f"background-color: {settings.colour_browseButton}")
         self.ViewFileButton.clicked.connect(self.ViewFile)
         layout.addWidget(self.ViewFileButton)
@@ -477,7 +475,10 @@ class ParquetSQLApp(QMainWindow):
             return
 
         class SettingsDialog(QDialog):
-            read_only_fields = ["recents_file", 'settings_file', 'default_settings_file', "static_dir", ]
+            # these settings won't be editable
+            read_only_fields = ["recents_file", 'settings_file', 'default_settings_file', "static_dir", 'usr_recents_file',
+                                'usr_settings_file', 'user_app_settings_dir', ]
+            
             help_text = "Did you know:\nYou can use field names inside string as `$(field_name)` for render it."
             def __init__(self, settings: Settings, 
                          default_settings_file: Path):
