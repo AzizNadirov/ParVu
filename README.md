@@ -33,7 +33,6 @@ This application allows you to execute SQL queries on Parquet files. Uses [DuckD
 
 ## Contact
 - [Telegram](https://t.me/aziz_nadirov);
-- 
 ### Project:
 - [GitHub](https://github.com/AzizNadirov/ParVu);
   
