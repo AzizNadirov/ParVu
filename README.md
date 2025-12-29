@@ -1,7 +1,7 @@
 
 # ParVu - **Par**quet **Vie**wer
 
-![parquet logo](https://datos.gob.es/sites/default/files/styles/blog_image/public/blog/image/logo_formato_parquet.jpg?itok=CT-UucXj)
+![ParVu Logo](docs/images/parvu-logo.png)
 
 
 ## Overview

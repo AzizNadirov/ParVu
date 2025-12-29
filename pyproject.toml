@@ -19,4 +19,5 @@ dependencies = [
 [project.optional-dependencies]
 build = [
     "pyinstaller>=6.11.1",
+    "pillow>=10.0.0",
 ]

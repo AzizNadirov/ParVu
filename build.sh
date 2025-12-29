@@ -108,7 +108,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='assets/parvu.png' if sys.platform.startswith('linux') else 'assets/parvu.ico',
 )
 
 coll = COLLECT(
@@ -147,9 +147,56 @@ mkdir -p ${DEB_DIR}/usr/local/bin
 mkdir -p ${DEB_DIR}/usr/share/applications
 mkdir -p ${DEB_DIR}/usr/share/parvu
 mkdir -p ${DEB_DIR}/usr/share/doc/parvu
+mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/256x256/apps
+mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/128x128/apps
+mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/64x64/apps
+mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/48x48/apps
 
 # Copy binary
 cp -r dist/parvu/* ${DEB_DIR}/usr/share/parvu/
+
+# Generate and copy application icons in different sizes
+echo -e "${BLUE}Generating application icons...${NC}"
+
+# Check if ImageMagick is available, otherwise try Python with PIL
+if command -v convert &> /dev/null; then
+    # Use ImageMagick to resize icons
+    convert assets/parvu.png -resize 256x256 ${DEB_DIR}/usr/share/icons/hicolor/256x256/apps/parvu.png
+    convert assets/parvu.png -resize 128x128 ${DEB_DIR}/usr/share/icons/hicolor/128x128/apps/parvu.png
+    convert assets/parvu.png -resize 64x64 ${DEB_DIR}/usr/share/icons/hicolor/64x64/apps/parvu.png
+    convert assets/parvu.png -resize 48x48 ${DEB_DIR}/usr/share/icons/hicolor/48x48/apps/parvu.png
+    echo -e "${GREEN}✓ Icons generated with ImageMagick${NC}"
+elif uv run python3 -c "import PIL" 2>/dev/null; then
+    # Use Python with PIL
+    uv run python3 << PYEOF
+from PIL import Image
+
+icon_path = 'assets/parvu.png'
+img = Image.open(icon_path)
+
+sizes = {
+    '256x256': 256,
+    '128x128': 128,
+    '64x64': 64,
+    '48x48': 48
+}
+
+for size_name, size in sizes.items():
+    icon_resized = img.resize((size, size), Image.Resampling.LANCZOS)
+    output_path = f'${DEB_DIR}/usr/share/icons/hicolor/{size_name}/apps/parvu.png'
+    icon_resized.save(output_path, 'PNG')
+    print(f'Created {size_name} icon')
+PYEOF
+    echo -e "${GREEN}✓ Icons generated with Python/PIL${NC}"
+else
+    # Fallback: just copy the original icon to all sizes
+    echo -e "${BLUE}ImageMagick and PIL not available, using original icon for all sizes${NC}"
+    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/256x256/apps/parvu.png
+    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/128x128/apps/parvu.png
+    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/64x64/apps/parvu.png
+    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/48x48/apps/parvu.png
+    echo -e "${GREEN}✓ Icons copied${NC}"
+fi
 
 # Create launcher script
 cat > ${DEB_DIR}/usr/local/bin/parvu << 'EOF'
