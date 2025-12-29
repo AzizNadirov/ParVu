@@ -31,6 +31,8 @@ A powerful desktop application for viewing and querying large Parquet, CSV, and 
 - **Copy operations** - Copy column names or values as Python tuple
 - **Large file warnings** - Warns when calculating unique values on files >1M rows
 
+![alt text](src/static/image.png)
+
 ### Export Options
 - Export query results to:
   - CSV format
