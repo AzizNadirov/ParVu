@@ -39,12 +39,22 @@ class Settings(BaseModel):
     result_pagination_rows_per_page: str
     save_file_history: str
     max_rows: str
-    # colors
-    colour_browseButton: str
-    colour_sqlEdit: str
-    colour_executeButton: str
-    colour_resultTable: str
-    colour_tableInfoButton: str
+    # theme
+    current_theme: str = "ParVu Light"
+    # language
+    current_language: str = "en"  # ISO 639-1 code (en, ru, az)
+    # large dataset warning settings
+    enable_large_dataset_warning: bool = True
+    warning_criteria: str = "rows"  # "rows", "cells", or "filesize"
+    warning_threshold_rows: int = 1000000
+    warning_threshold_cells: int = 10000000
+    warning_threshold_filesize_mb: int = 100
+    # colors (legacy, kept for backward compatibility)
+    colour_browseButton: str = "#E8F5E9"
+    colour_sqlEdit: str = "#FFF9C4"
+    colour_executeButton: str = "#E1F5FE"
+    colour_resultTable: str = "#FFFFFF"
+    colour_tableInfoButton: str = "#F3E5F5"
     # dirs
     user_app_settings_dir: Path = Path.home() / ".ParVu"
     recents_file: Path = Path(__file__).parent / "history" / "recents.json"
