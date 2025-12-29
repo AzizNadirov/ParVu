@@ -48,6 +48,19 @@ A powerful desktop application for viewing and querying large Parquet, CSV, and 
 
 ## Installation
 
+### For End Users
+
+**Download pre-built packages:**
+- **Linux (Ubuntu/Debian)**: Download `.deb` package
+  ```bash
+  sudo dpkg -i ParVu-0.2.0-amd64.deb
+  parvu
+  ```
+- **Windows**: Download installer or portable `.zip`
+- See [RELEASES.md](RELEASES.md) for installation guide
+
+### For Developers
+
 ```bash
 # Clone the repository
 git clone https://github.com/AzizNadirov/ParVu.git
@@ -56,9 +69,20 @@ cd ParVu
 # Install dependencies using uv (recommended)
 uv sync
 
-# Or using pip
-pip install -r pyproject.toml
+# Run from source
+uv run python src/app.py
 ```
+
+**Build distributable packages:**
+```bash
+# Linux
+./build.sh
+
+# Windows
+.\build.ps1
+```
+
+See [BUILDING.md](BUILDING.md) for complete build guide.
 
 ## How to Use
 

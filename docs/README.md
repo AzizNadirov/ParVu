@@ -22,6 +22,13 @@ Welcome to the ParVu documentation! This directory contains comprehensive guides
 
 ### Developer Guides
 
+- **[../BUILDING.md](../BUILDING.md)** - Complete build guide
+  - Prerequisites and setup
+  - Building for Linux and Windows
+  - Distribution packages
+  - File associations
+  - Troubleshooting
+
 - **[I18N_INTEGRATION_EXAMPLE.md](I18N_INTEGRATION_EXAMPLE.md)** - i18n integration examples
   - Real code examples from ParVu
   - Before/after comparisons
@@ -75,6 +82,7 @@ See [I18N.md](I18N.md) for complete documentation.
 - [Theme troubleshooting](THEMES.md#troubleshooting)
 
 ### For Developers
+- [Building ParVu](../BUILDING.md)
 - [Adding i18n to UI code](I18N_INTEGRATION_EXAMPLE.md)
 - [Creating new language translations](I18N.md#adding-a-new-language)
 - [i18n implementation status](I18N_SUMMARY.md#integration-progress)
@@ -97,6 +105,7 @@ See [I18N.md](I18N.md) for complete documentation.
 ### Development
 | Document | Description |
 |----------|-------------|
+| [../BUILDING.md](../BUILDING.md) | Complete build guide |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | Project architecture |
 | [MIGRATION.md](MIGRATION.md) | Version migration guide |
 
