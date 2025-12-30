@@ -1,7 +1,9 @@
 
 # ParVu - **Par**quet **Vie**wer
 
-![ParVu Logo](docs/images/parvu-logo.png)
+<div align="center">
+  <img src="docs/images/parvu-logo.png" alt="ParVu Logo" width="200"/>
+</div>
 
 
 ## Overview

@@ -93,7 +93,7 @@ def main():
     app.setOrganizationName("ParVu")
 
     # Set application icon if available
-    icon_path = settings.static_dir / "logo.jpg"
+    icon_path = settings.static_dir / "logo.png"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 

@@ -14,7 +14,6 @@ from loguru import logger
 from schemas import settings
 from i18n import t
 
-
 class CrashReportDialog(QDialog):
     """Dialog for displaying crash information and reporting instructions"""
 
