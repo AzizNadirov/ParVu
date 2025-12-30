@@ -49,6 +49,9 @@ class Settings(BaseModel):
     warning_threshold_rows: int = 1000000
     warning_threshold_cells: int = 10000000
     warning_threshold_filesize_mb: int = 100
+    # crash reporting
+    bug_report_email: str = "eziznadirov@gmail.com"
+    enable_crash_reporting: bool = True
     # colors (legacy, kept for backward compatibility)
     colour_browseButton: str = "#E8F5E9"
     colour_sqlEdit: str = "#FFF9C4"
@@ -129,7 +132,7 @@ class Settings(BaseModel):
         except Exception as e:
             # reset and load 
             logger.error(e)
-            logger.critical(f"Resetting user settings")
+            logger.critical("Resetting user settings")
             cls.reset_user_settings()
             model = cls.get_user_settings()
             model.process()

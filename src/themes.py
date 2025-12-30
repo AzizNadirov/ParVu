@@ -130,7 +130,7 @@ class Theme(BaseModel):
     def generate_stylesheet(self) -> str:
         """Generate Qt stylesheet from theme"""
         c = self.colors
-        l = self.layout
+        l = self.layout  # noqa: E741
 
         return f"""
         /* Main Window */
@@ -374,7 +374,7 @@ class ThemeManager:
         )
 
         # ParVu Black theme
-        vscode_theme = Theme(
+        parvu_black_theme = Theme(
             name="ParVu Black",
             description="Visual Studio Code Dark theme",
             colors=ColorScheme(
@@ -466,7 +466,7 @@ class ThemeManager:
         self.builtin_themes = {
             "ParVu Light": default_theme,
             "Excel": excel_theme,
-            "ParVu Black": vscode_theme,
+            "ParVu Black": parvu_black_theme,
         }
 
         # Save built-in themes to disk for reference

@@ -318,7 +318,7 @@ All colors use hex format (#RRGGBB):
 
 **Built-in Themes:**
 - Stored in: `~/.ParVu/themes/`
-- Files: `parvu_light.json`, `excel.json`, `vs_code_black.json`
+- Files: `parvu_light.json`, `excel.json`, `parvu_black.json`
 - Auto-generated on first run
 
 **Custom Themes:**

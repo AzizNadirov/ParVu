@@ -38,8 +38,6 @@ All documentation has been reorganized and expanded:
 
 ### 🎨 Theme Updates
 
-- **Renamed**: "VS Code Black" → "ParVu Black" for better branding
-- All references updated in code and documentation
 - Theme file now saved as `parvu_black.json`
 
 ### 📁 Project Structure
@@ -60,7 +58,6 @@ All documentation has been reorganized and expanded:
    - Restart ParVu for changes to take effect
 
 2. **Theme Update:**
-   - If you were using "VS Code Black", it's now "ParVu Black"
    - Your selection will be preserved automatically
 
 ### For Developers

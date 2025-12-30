@@ -27,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Organized all documentation into `docs/` directory
 
 ### Changed - Themes
-- Renamed "VS Code Black" theme to "ParVu Black"
 - Updated all references in code and documentation
 - Theme JSON file now saved as `parvu_black.json`
 
