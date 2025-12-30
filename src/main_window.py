@@ -53,10 +53,11 @@ class QueryWorker(QThread):
 class MainWindow(QMainWindow):
     """Main application window"""
 
-    def __init__(self, file_path: str = None):
+    def __init__(self, file_path: str = None, window_manager=None):
         super().__init__()
         self.engine = None
         self.current_page = 1
+        self.window_manager = window_manager
 
         # Load theme
         self.load_theme()
@@ -224,6 +225,14 @@ class MainWindow(QMainWindow):
         # File menu
         file_menu = menubar.addMenu(t("menu.file"))
 
+        # New Window action
+        new_window_action = QAction(t("menu.file.new_window"), self)
+        new_window_action.setShortcut("Ctrl+N")
+        new_window_action.triggered.connect(self.create_new_window)
+        file_menu.addAction(new_window_action)
+
+        file_menu.addSeparator()
+
         # Open file action
         open_action = QAction(t("menu.file.open"), self)
         open_action.setShortcut("Ctrl+O")
@@ -261,6 +270,15 @@ class MainWindow(QMainWindow):
         help_action.triggered.connect(self.show_help)
         help_menu.addAction(help_action)
 
+    def create_new_window(self):
+        """Create a new window"""
+        if self.window_manager:
+            self.window_manager.create_window()
+        else:
+            # Fallback if no window manager (shouldn't happen)
+            new_window = MainWindow()
+            new_window.show()
+
     def browse_file(self):
         """Open file browser dialog"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -271,8 +289,13 @@ class MainWindow(QMainWindow):
         )
 
         if file_path:
-            self.file_path_edit.setText(file_path)
-            self.load_file(file_path)
+            # Open file in new window if window manager is available
+            if self.window_manager:
+                self.window_manager.create_window(file_path)
+            else:
+                # Fallback: load in current window
+                self.file_path_edit.setText(file_path)
+                self.load_file(file_path)
 
     def load_file_from_input(self):
         """Load file from path in input field"""
@@ -599,7 +622,12 @@ class MainWindow(QMainWindow):
     def load_recent(self, file_path: str):
         """Load a recent file"""
         if Path(file_path).exists():
-            self.load_file(file_path)
+            # Open recent file in new window if window manager is available
+            if self.window_manager:
+                self.window_manager.create_window(file_path)
+            else:
+                # Fallback: load in current window
+                self.load_file(file_path)
         else:
             reply = QMessageBox.question(
                 self,
@@ -777,4 +805,9 @@ For complete SQL documentation, visit:
         """Handle window close"""
         if self.engine:
             self.engine.close()
+
+        # Notify window manager
+        if self.window_manager:
+            self.window_manager.remove_window(self)
+
         event.accept()

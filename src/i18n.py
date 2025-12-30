@@ -91,6 +91,7 @@ TRANSLATIONS_EN = {
 
     # Menu Bar
     "menu.file": "File",
+    "menu.file.new_window": "New Window",
     "menu.file.open": "Open File...",
     "menu.file.export": "Export Results...",
     "menu.file.settings": "Settings...",
@@ -289,6 +290,7 @@ TRANSLATIONS_RU = {
 
     # Menu Bar
     "menu.file": "Файл",
+    "menu.file.new_window": "Новое окно",
     "menu.file.open": "Открыть файл...",
     "menu.file.export": "Экспортировать результаты...",
     "menu.file.settings": "Настройки...",
@@ -487,6 +489,7 @@ TRANSLATIONS_AZ = {
 
     # Menu Bar
     "menu.file": "Fayl",
+    "menu.file.new_window": "Yeni pəncərə",
     "menu.file.open": "Fayl aç...",
     "menu.file.export": "Nəticələri ixrac et...",
     "menu.file.settings": "Parametrlər...",
