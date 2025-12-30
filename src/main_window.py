@@ -649,41 +649,37 @@ class MainWindow(QMainWindow):
 
     def show_help(self):
         """Show help/about dialog"""
-        help_text = """
-# ParVu - Parquet Viewer
+        # Build help text from translations
+        help_text = f"""
+# {t("about.title")}
 
-A powerful desktop application for viewing and querying large Parquet, CSV, and JSON files.
-Built with [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) and [DuckDB](https://duckdb.org/).
+{t("about.description")}
 
-## Features
+## {t("about.features")}
 
-- **Lazy loading** - Handle huge files (8GB+) without memory issues
-- **SQL queries** - Full DuckDB SQL support with syntax highlighting
-- **Auto-completion** - Smart suggestions for SQL keywords and column names
-- **Paginated view** - Browse large datasets efficiently
-- **Cell editing** - Double-click to edit (view only, not saved to file)
-- **Column operations** - Sort, filter by unique values, copy operations
-- **Export results** - Save to CSV, Parquet, or JSON
-- **Themes** - 3 built-in themes + import/export custom themes
+- {t("about.feature.lazy")}
+- {t("about.feature.sql")}
+- {t("about.feature.autocomplete")}
+- {t("about.feature.pagination")}
+- {t("about.feature.editing")}
+- {t("about.feature.operations")}
+- {t("about.feature.export")}
+- {t("about.feature.themes")}
 
-## Quick Start Guide
+## {t("about.quick_start")}
 
-1. **Load File** - Click 'Browse' to select a Parquet, CSV, or JSON file
-2. **View Data** - Table displays paginated results automatically
-3. **Run Queries** - Write SQL in editor and click 'Execute Query'
-   - Auto-completion appears after typing 2+ characters
-   - Press Tab or Enter to accept suggestions
-4. **Navigate** - Use Previous/Next buttons to browse pages
-5. **Column Operations** - Right-click column headers for:
-   - Sort ascending/descending
-   - Show unique values with multiselect filter
-   - Copy column name or values as tuple
-6. **Export** - File → Export Results to save query results
-7. **Settings** - File → Settings to customize themes, warnings, and more
+{t("about.step1")}
+{t("about.step2")}
+{t("about.step3")}
+{t("about.step3_sub")}
+{t("about.step4")}
+{t("about.step5")}
+{t("about.step6")}
+{t("about.step7")}
 
-## SQL Query Reference
+## {t("about.sql_reference")}
 
-ParVu supports full DuckDB SQL syntax. Examples:
+{t("about.sql_description")}
 
 ```sql
 -- View all data
@@ -703,13 +699,13 @@ SELECT * FROM data WHERE status IN ('active', 'pending')
 For complete SQL documentation, visit:
 **[DuckDB SQL Query Syntax](https://duckdb.org/docs/stable/sql/query_syntax/select)**
 
-## Keyboard Shortcuts
+## {t("about.shortcuts")}
 
-- **Tab/Enter** - Accept auto-completion suggestion
-- **Double-click cell** - Edit cell value (view only)
-- **Right-click header** - Open column operations menu
+- {t("about.shortcuts.tab")}
+- {t("about.shortcuts.double")}
+- {t("about.shortcuts.right")}
 
-## Resources
+## {t("about.resources")}
 
 - **GitHub Repository**: [https://github.com/AzizNadirov/ParVu](https://github.com/AzizNadirov/ParVu)
 - **DuckDB Documentation**: [https://duckdb.org/docs/stable/sql/query_syntax/select](https://duckdb.org/docs/stable/sql/query_syntax/select)
@@ -717,9 +713,9 @@ For complete SQL documentation, visit:
 
 ---
 
-**Version**: 2.0 (Complete Rewrite)
-**Built with**: PyQt6 and DuckDB
-**License**: Open Source
+**{t("about.version")}**: {t("about.version_number")}
+**{t("about.built_with")}**: {t("about.built_with_text")}
+**{t("about.license")}**: {t("about.license_text")}
 """
 
         dialog = QDialog(self)
