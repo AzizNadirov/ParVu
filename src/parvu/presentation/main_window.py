@@ -765,7 +765,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
     def _apply_transform(self, tab: TableTab, query: str) -> None:
         """Apply a SQL transformation to the given tab's engine."""
-        success, error = tab.engine.execute_query(query)
+        success, error = tab.engine.apply_transform(query)
         if success:
             self._current_page = 1
             self._load_page()

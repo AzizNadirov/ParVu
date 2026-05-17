@@ -89,12 +89,29 @@ class QueryEngine(IQueryEngine):
     def _substitute_table_name(self, query: str) -> str:
         """
         Replace table variable name with actual file reader query.
-        Allows users to write 'SELECT * FROM data'.
+        Skips matches inside single-quoted string literals to avoid
+        corrupting file paths that happen to contain the table name.
         """
         pattern = re.compile(
             rf"\b{re.escape(self._table_name)}\b", re.IGNORECASE
         )
-        return pattern.sub(f"({self._file_reader_query})", query)
+        result: list[str] = []
+        i = 0
+        while i < len(query):
+            q = query.find("'", i)
+            if q == -1:
+                result.append(pattern.sub(f"({self._file_reader_query})", query[i:]))
+                break
+            # Substitute only in the non-string part
+            result.append(pattern.sub(f"({self._file_reader_query})", query[i:q]))
+            # Find closing quote
+            q2 = query.find("'", q + 1)
+            if q2 == -1:
+                result.append(query[q:])
+                break
+            result.append(query[q:q2 + 1])
+            i = q2 + 1
+        return "".join(result)
 
     def _wrap_query(self, query: str) -> str:
         """Wrap query in a subquery to avoid LIMIT conflicts."""
@@ -208,21 +225,28 @@ class QueryEngine(IQueryEngine):
             logger.error(f"Error getting unique values for {column}: {e}")
             return []
 
-    def sort_by_column(self, column: str, ascending: bool = True) -> tuple[bool, str]:
-        """Sort current results by column."""
+    def apply_transform(self, query: str) -> tuple[bool, str]:
+        """Apply a transformation query that wraps the current query."""
         try:
-            order = "ASC" if ascending else "DESC"
-            new_query = f"SELECT * FROM ({self._current_query}) ORDER BY {column} {order}"
-            wrapped = self._wrap_query(new_query)
+            wrapped = self._wrap_query(query)
             self._conn.execute(f"{wrapped} LIMIT 0")
-
-            self._current_query = new_query
+            self._current_query = query
             self._paginator = self._create_paginator()
+            logger.info(
+                f"Transform applied: {self._paginator.total_rows} rows, "
+                f"{self._paginator.total_pages} pages"
+            )
             return True, ""
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"Error sorting by {column}: {error_msg}")
+            logger.error(f"Transform failed: {error_msg}")
             return False, error_msg
+
+    def sort_by_column(self, column: str, ascending: bool = True) -> tuple[bool, str]:
+        """Sort current results by column."""
+        order = "ASC" if ascending else "DESC"
+        new_query = f"SELECT * FROM ({self._current_query}) ORDER BY {column} {order}"
+        return self.apply_transform(new_query)
 
     def export_results(self, output_path: Path) -> bool:
         """Export current query results to file."""
