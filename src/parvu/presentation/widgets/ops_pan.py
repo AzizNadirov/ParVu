@@ -11,11 +11,13 @@ from PyQt6.QtCore import pyqtSignal
 
 
 class OPSPan(QWidget):
-    """Toolbar-style panel with data transformation buttons."""
+    """Toolbar-style panel with row-level and multi-column operations.
+
+    Column-scoped operations (Change Type, Remove, Rename, Duplicate)
+    have moved to the column header context menu.
+    """
 
     add_column_requested = pyqtSignal()
-    remove_column_requested = pyqtSignal()
-    change_type_requested = pyqtSignal()
     math_op_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -31,16 +33,6 @@ class OPSPan(QWidget):
         self._add_col_btn.setToolTip("Add a new column with a SQL expression")
         self._add_col_btn.clicked.connect(self.add_column_requested.emit)
         layout.addWidget(self._add_col_btn)
-
-        self._rem_col_btn = QPushButton("➖ Remove Column")
-        self._rem_col_btn.setToolTip("Remove an existing column")
-        self._rem_col_btn.clicked.connect(self.remove_column_requested.emit)
-        layout.addWidget(self._rem_col_btn)
-
-        self._type_btn = QPushButton("🔤 Change Type")
-        self._type_btn.setToolTip("Cast a column to a different data type")
-        self._type_btn.clicked.connect(self.change_type_requested.emit)
-        layout.addWidget(self._type_btn)
 
         self._math_btn = QPushButton("🧮 Math Operation")
         self._math_btn.setToolTip("Create a new column from a math expression")

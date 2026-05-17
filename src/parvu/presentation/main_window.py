@@ -112,8 +112,6 @@ class MainWindow(QMainWindow, ThemeableMixin):
         # OPSPan — operations panel
         self._ops_pan = OPSPan()
         self._ops_pan.add_column_requested.connect(self._on_op_add_column)
-        self._ops_pan.remove_column_requested.connect(self._on_op_remove_column)
-        self._ops_pan.change_type_requested.connect(self._on_op_change_type)
         self._ops_pan.math_op_requested.connect(self._on_op_math)
         layout.addWidget(self._ops_pan)
 
@@ -123,6 +121,10 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._data_table.sort_requested.connect(self._on_sort)
         self._data_table.unique_values_requested.connect(self._on_unique_values)
         self._data_table.cell_edited.connect(self._on_cell_edited)
+        self._data_table.column_renamed.connect(self._on_column_renamed)
+        self._data_table.column_removed.connect(self._on_column_removed)
+        self._data_table.column_type_changed.connect(self._on_column_type_changed)
+        self._data_table.column_duplicated.connect(self._on_column_duplicated)
         layout.addWidget(self._data_table)
 
         # Pagination
@@ -697,44 +699,53 @@ class MainWindow(QMainWindow, ThemeableMixin):
             return
         self._apply_transform(tab, f'SELECT *, {expr} AS "{name}" FROM ({tab.engine.current_query})')
 
-    def _on_op_remove_column(self) -> None:
+    def _on_column_renamed(self, old_name: str, new_name: str) -> None:
         tab = self._active_tab()
         if not tab:
             return
         cols = tab.engine.get_columns()
-        if not cols:
+        select_parts = []
+        for c in cols:
+            if c == old_name:
+                select_parts.append(f'"{c}" AS "{new_name}"')
+            else:
+                select_parts.append(f'"{c}"')
+        select_list = ", ".join(select_parts)
+        self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
+
+    def _on_column_removed(self, column_name: str) -> None:
+        tab = self._active_tab()
+        if not tab:
             return
-        col, ok = QInputDialog.getItem(self, "Remove Column", "Select column:", cols, editable=False)
-        if not ok:
-            return
-        remaining = [c for c in cols if c != col]
+        cols = tab.engine.get_columns()
+        remaining = [c for c in cols if c != column_name]
         if not remaining:
             QMessageBox.warning(self, "Remove Column", "Cannot remove the only column.")
             return
         select_list = ", ".join(f'"{c}"' for c in remaining)
         self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
 
-    def _on_op_change_type(self) -> None:
+    def _on_column_type_changed(self, column_name: str, new_type: str) -> None:
         tab = self._active_tab()
         if not tab:
             return
         cols = tab.engine.get_columns()
-        if not cols:
-            return
-        col, ok1 = QInputDialog.getItem(self, "Change Type", "Column:", cols, editable=False)
-        if not ok1:
-            return
-        types = ["INTEGER", "BIGINT", "DOUBLE", "VARCHAR", "BOOLEAN", "DATE", "TIMESTAMP"]
-        new_type, ok2 = QInputDialog.getItem(self, "Change Type", "New type:", types, editable=False)
-        if not ok2:
-            return
         select_parts = []
         for c in cols:
-            if c == col:
+            if c == column_name:
                 select_parts.append(f'CAST("{c}" AS {new_type}) AS "{c}"')
             else:
                 select_parts.append(f'"{c}"')
         select_list = ", ".join(select_parts)
+        self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
+
+    def _on_column_duplicated(self, column_name: str) -> None:
+        tab = self._active_tab()
+        if not tab:
+            return
+        cols = tab.engine.get_columns()
+        select_list = ", ".join(f'"{c}"' for c in cols)
+        select_list += f', "{column_name}" AS "{column_name}_copy"'
         self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
 
     def _on_op_math(self) -> None:

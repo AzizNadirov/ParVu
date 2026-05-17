@@ -37,6 +37,12 @@ class DataTableView(QTableWidget):
     filter_requested = pyqtSignal(str, list)  # column_name, values
     cell_edited = pyqtSignal(int, str, object, object)  # absolute_row, column, old_value, new_value
 
+    # Column transform signals (context menu → MainWindow)
+    column_renamed = pyqtSignal(str, str)      # old_name, new_name
+    column_removed = pyqtSignal(str)           # column_name
+    column_type_changed = pyqtSignal(str, str) # column_name, new_type
+    column_duplicated = pyqtSignal(str)        # column_name
+
     def __init__(self, parent=None, theme: Theme | None = None):
         super().__init__(parent)
         self._current_data = pd.DataFrame()
@@ -156,6 +162,26 @@ class DataTableView(QTableWidget):
         menu.addAction(copy_name)
         menu.addSeparator()
 
+        # Change Type submenu
+        type_menu = menu.addMenu("Change Type")
+        for t in ["INTEGER", "BIGINT", "DOUBLE", "VARCHAR", "BOOLEAN", "DATE", "TIMESTAMP"]:
+            act = QAction(t, self)
+            act.triggered.connect(lambda _c, typ=t, col=column_name: self.column_type_changed.emit(col, typ))
+            type_menu.addAction(act)
+
+        rename = QAction("Rename Column...", self)
+        rename.triggered.connect(lambda: self._rename_column(column_name))
+        menu.addAction(rename)
+
+        duplicate = QAction("Duplicate Column", self)
+        duplicate.triggered.connect(lambda: self.column_duplicated.emit(column_name))
+        menu.addAction(duplicate)
+
+        remove = QAction("Remove Column", self)
+        remove.triggered.connect(lambda: self.column_removed.emit(column_name))
+        menu.addAction(remove)
+        menu.addSeparator()
+
         sort_asc = QAction("Sort Ascending", self)
         sort_asc.triggered.connect(lambda: self.sort_requested.emit(column_name, True))
         menu.addAction(sort_asc)
@@ -174,6 +200,12 @@ class DataTableView(QTableWidget):
         menu.addAction(unique)
 
         menu.exec(self.mapToGlobal(pos))
+
+    def _rename_column(self, column_name: str) -> None:
+        from PyQt6.QtWidgets import QInputDialog
+        new_name, ok = QInputDialog.getText(self, "Rename Column", "New name:", text=column_name)
+        if ok and new_name and new_name != column_name:
+            self.column_renamed.emit(column_name, new_name)
 
     def _on_header_clicked(self, logical_index: int) -> None:
         column_name = self.horizontalHeaderItem(logical_index).text()
