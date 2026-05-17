@@ -124,6 +124,11 @@ class QueryEngine(IQueryEngine):
     def current_query(self) -> str:
         return self._current_query
 
+    @property
+    def is_base_query(self) -> bool:
+        """Return True if viewing the original file without custom queries."""
+        return self._current_query == self._file_reader_query
+
     # ------------------------------------------------------------------
     # IQueryEngine implementation
     # ------------------------------------------------------------------

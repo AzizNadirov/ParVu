@@ -14,6 +14,8 @@ TRANSLATIONS_AZ = {
     "menu.file.new_window": "Yeni pəncərə",
     "menu.file.open": "Fayl aç...",
     "menu.file.export": "Nəticələri ixrac et...",
+    "menu.file.save": "Saxla",
+    "menu.file.save_as": "Fərqli saxla...",
     "menu.file.settings": "Parametrlər...",
     "menu.file.change_theme": "Mövzunu dəyişdir...",
     "menu.file.recent_files": "Son fayllar",
@@ -57,12 +59,14 @@ TRANSLATIONS_AZ = {
     "status.sorted": "{column} üzrə çeşidləndi ({direction})",
     "status.loaded": "Yükləndi: {filename} ({rows:,} sətir)",
     "status.calculating": "Unikal dəyərlər hesablanır...",
+    "status.saving": "Saxlanılır...",
 
     # Dialog Titles
     "dialog.open_file": "Fayl aç",
     "dialog.table_info": "Cədvəl məlumatı",
     "dialog.about": "ParVu haqqında",
     "dialog.export_results": "Nəticələri ixrac et",
+    "dialog.save_as": "Fərqli saxla",
     "dialog.settings": "Parametrlər",
     "dialog.theme_selector": "Mövzu seçici",
     "dialog.unique_values": "Unikal dəyərlər - {column_name}",
@@ -90,6 +94,8 @@ TRANSLATIONS_AZ = {
     "error.no_selection_msg": "Zəhmət olmasa filtr üçün ən azı bir dəyər seçin.",
     "error.export_error": "İxrac xətası",
     "error.export_error_msg": "Xəta: {error}",
+    "error.save_failed": "Saxlama xətası",
+    "error.save_failed_msg": "Faylı saxlamaq mümkün olmadı:\n{error}",
 
     # Warning Messages
     "warning.no_data": "Məlumat yoxdur",
@@ -99,10 +105,14 @@ TRANSLATIONS_AZ = {
     "warning.large_dataset_cells": "Bu məlumat dəstində {cells:,} xana var ({rows:,} sətir × {columns} sütun, hədd: {threshold:,}).\nUnikal dəyərlərin hesablanması vaxt ala bilər.\n\nDavam edək?",
     "warning.large_dataset_size": "Bu faylın ölçüsü {size:.1f} MB-dır (hədd: {threshold} MB).\nUnikal dəyərlərin hesablanması vaxt ala bilər.\n\nDavam edək?",
     "warning.file_not_found_recent": "Fayl tapılmadı:\n{path}\n\nSon fayllardan silinsin?",
+    "warning.unsaved_changes": "Yadda saxlanılmamış dəyişikliklər",
+    "warning.unsaved_changes_msg": "{count} yadda saxlanılmamış redaktə(lər)iniz var.\n\nBağlamazdan əvvəl saxlayın?",
 
     # Success Messages
     "success.export_complete": "İxrac tamamlandı",
     "success.export_complete_msg": "Nəticələr ixrac edildi:\n{path}",
+    "success.save_complete": "Saxlama tamamlandı",
+    "success.save_complete_msg": "Fayl saxlandı:\n{path}",
     "success.export_failed": "İxrac uğursuz oldu",
     "success.export_failed_msg": "Nəticələri ixrac etmək mümkün olmadı.",
     "success.import_theme": "İdxal uğurlu oldu",

@@ -14,6 +14,8 @@ TRANSLATIONS_EN = {
     "menu.file.new_window": "New Window",
     "menu.file.open": "Open File...",
     "menu.file.export": "Export Results...",
+    "menu.file.save": "Save",
+    "menu.file.save_as": "Save As...",
     "menu.file.settings": "Settings...",
     "menu.file.change_theme": "Change Theme...",
     "menu.file.recent_files": "Recent Files",
@@ -57,12 +59,14 @@ TRANSLATIONS_EN = {
     "status.sorted": "Sorted by {column} ({direction})",
     "status.loaded": "Loaded: {filename} ({rows:,} rows)",
     "status.calculating": "Calculating unique values...",
+    "status.saving": "Saving...",
 
     # Dialog Titles
     "dialog.open_file": "Open File",
     "dialog.table_info": "Table Information",
     "dialog.about": "About ParVu",
     "dialog.export_results": "Export Results",
+    "dialog.save_as": "Save As",
     "dialog.settings": "Settings",
     "dialog.theme_selector": "Theme Selector",
     "dialog.unique_values": "Unique Values - {column_name}",
@@ -90,6 +94,8 @@ TRANSLATIONS_EN = {
     "error.no_selection_msg": "Please select at least one value to filter.",
     "error.export_error": "Export Error",
     "error.export_error_msg": "Error: {error}",
+    "error.save_failed": "Save Failed",
+    "error.save_failed_msg": "Failed to save file:\n{error}",
 
     # Warning Messages
     "warning.no_data": "No Data",
@@ -99,10 +105,14 @@ TRANSLATIONS_EN = {
     "warning.large_dataset_cells": "This dataset has {cells:,} cells ({rows:,} rows × {columns} columns, threshold: {threshold:,}).\nCalculating unique values may take some time.\n\nContinue?",
     "warning.large_dataset_size": "This file is {size:.1f} MB (threshold: {threshold} MB).\nCalculating unique values may take some time.\n\nContinue?",
     "warning.file_not_found_recent": "File not found:\n{path}\n\nRemove from recents?",
+    "warning.unsaved_changes": "Unsaved Changes",
+    "warning.unsaved_changes_msg": "You have {count} unsaved cell edit(s).\n\nSave before closing?",
 
     # Success Messages
     "success.export_complete": "Export Complete",
     "success.export_complete_msg": "Results exported to:\n{path}",
+    "success.save_complete": "Save Complete",
+    "success.save_complete_msg": "File saved to:\n{path}",
     "success.export_failed": "Export Failed",
     "success.export_failed_msg": "Failed to export results.",
     "success.import_theme": "Import Successful",

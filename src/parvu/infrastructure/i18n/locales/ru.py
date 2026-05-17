@@ -14,6 +14,8 @@ TRANSLATIONS_RU = {
     "menu.file.new_window": "Новое окно",
     "menu.file.open": "Открыть файл...",
     "menu.file.export": "Экспортировать результаты...",
+    "menu.file.save": "Сохранить",
+    "menu.file.save_as": "Сохранить как...",
     "menu.file.settings": "Настройки...",
     "menu.file.change_theme": "Изменить тему...",
     "menu.file.recent_files": "Последние файлы",
@@ -57,12 +59,14 @@ TRANSLATIONS_RU = {
     "status.sorted": "Отсортировано по {column} ({direction})",
     "status.loaded": "Загружено: {filename} ({rows:,} строк)",
     "status.calculating": "Расчёт уникальных значений...",
+    "status.saving": "Сохранение...",
 
     # Dialog Titles
     "dialog.open_file": "Открыть файл",
     "dialog.table_info": "Информация о таблице",
     "dialog.about": "О программе ParVu",
     "dialog.export_results": "Экспорт результатов",
+    "dialog.save_as": "Сохранить как",
     "dialog.settings": "Настройки",
     "dialog.theme_selector": "Выбор темы",
     "dialog.unique_values": "Уникальные значения - {column_name}",
@@ -90,6 +94,8 @@ TRANSLATIONS_RU = {
     "error.no_selection_msg": "Пожалуйста, выберите хотя бы одно значение для фильтрации.",
     "error.export_error": "Ошибка экспорта",
     "error.export_error_msg": "Ошибка: {error}",
+    "error.save_failed": "Ошибка сохранения",
+    "error.save_failed_msg": "Не удалось сохранить файл:\n{error}",
 
     # Warning Messages
     "warning.no_data": "Нет данных",
@@ -99,10 +105,14 @@ TRANSLATIONS_RU = {
     "warning.large_dataset_cells": "Этот набор данных содержит {cells:,} ячеек ({rows:,} строк × {columns} столбцов, порог: {threshold:,}).\nРасчёт уникальных значений может занять время.\n\nПродолжить?",
     "warning.large_dataset_size": "Размер этого файла {size:.1f} МБ (порог: {threshold} МБ).\nРасчёт уникальных значений может занять время.\n\nПродолжить?",
     "warning.file_not_found_recent": "Файл не найден:\n{path}\n\nУдалить из последних?",
+    "warning.unsaved_changes": "Несохранённые изменения",
+    "warning.unsaved_changes_msg": "У вас {count} несохранённых изменений(я).\n\nСохранить перед закрытием?",
 
     # Success Messages
     "success.export_complete": "Экспорт завершён",
     "success.export_complete_msg": "Результаты экспортированы в:\n{path}",
+    "success.save_complete": "Сохранение завершено",
+    "success.save_complete_msg": "Файл сохранён в:\n{path}",
     "success.export_failed": "Ошибка экспорта",
     "success.export_failed_msg": "Не удалось экспортировать результаты.",
     "success.import_theme": "Импорт успешен",

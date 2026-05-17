@@ -3,27 +3,61 @@ Custom Data Table View for ParVu.
 """
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QMenu, QApplication
+from PyQt6.QtWidgets import (
+    QTableWidget, QTableWidgetItem, QMenu, QApplication,
+    QStyledItemDelegate, QWidget
+)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QAction
+from PyQt6.QtGui import QFont, QAction, QColor
 
 import pandas as pd
 from loguru import logger
 
 from parvu.infrastructure.themes.models import Theme
+from parvu.core.edit_queue import EditQueue, CellEdit
+
+
+class EditTrackingDelegate(QStyledItemDelegate):
+    """Delegate that intercepts cell commits to track edits."""
+
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        logger.debug(f"[DELEGATE] createEditor at row={index.row()}, col={index.column()}")
+        return editor
+
+    def setModelData(self, editor: QWidget, model, index) -> None:
+        logger.debug(f"[DELEGATE] setModelData called row={index.row()}, col={index.column()}")
+        # Read old value before commit
+        old_value = model.data(index, Qt.ItemDataRole.DisplayRole)
+        logger.debug(f"[DELEGATE] old_value={old_value!r}")
+        # Let default implementation commit
+        super().setModelData(editor, model, index)
+        # Read new value after commit
+        new_value = model.data(index, Qt.ItemDataRole.DisplayRole)
+        logger.debug(f"[DELEGATE] new_value={new_value!r}")
+
+        # Notify the table view
+        view = self.parent()
+        logger.debug(f"[DELEGATE] parent()={view!r}, isinstance={isinstance(view, DataTableView)}")
+        if isinstance(view, DataTableView):
+            view._on_cell_committed(index.row(), index.column(), old_value, new_value)
 
 
 class DataTableView(QTableWidget):
-    """Enhanced table widget with column header context menu."""
+    """Enhanced table widget with column header context menu and cell editing."""
 
     sort_requested = pyqtSignal(str, bool)  # column_name, ascending
     unique_values_requested = pyqtSignal(str)  # column_name
     filter_requested = pyqtSignal(str, list)  # column_name, values
+    cell_edited = pyqtSignal(int, str, object, object)  # absolute_row, column, old_value, new_value
 
     def __init__(self, parent=None, theme: Theme | None = None):
         super().__init__(parent)
         self._current_data = pd.DataFrame()
         self._theme = theme
+        self._edit_queue: EditQueue | None = None
+        self._page_offset = 0  # absolute row index of first row in current page
+        logger.debug(f"[TABLE] DataTableView created id={id(self)}")
 
         font = QFont(
             theme.layout.table_font_family if theme else "Courier",
@@ -35,10 +69,26 @@ class DataTableView(QTableWidget):
             self.setShowGrid(theme.layout.show_grid)
             self.setAlternatingRowColors(theme.layout.alternate_row_colors)
 
-        self.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+        self.setEditTriggers(
+            QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
+        )
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
         self.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
+
+        # Install edit-tracking delegate
+        self._edit_delegate = EditTrackingDelegate(self)
+        self.setItemDelegate(self._edit_delegate)
+
+
+    def set_edit_queue(self, queue: EditQueue | None) -> None:
+        """Attach an edit queue to track modifications."""
+        logger.debug(f"[TABLE] set_edit_queue called on id={id(self)}, queue_id={id(queue) if queue is not None else None}")
+        self._edit_queue = queue
+
+    def set_page_offset(self, offset: int) -> None:
+        """Set the absolute row offset for the current page."""
+        self._page_offset = offset
 
     def load_data(self, df: pd.DataFrame) -> None:
         """Load DataFrame into table."""
@@ -47,14 +97,75 @@ class DataTableView(QTableWidget):
         self.setColumnCount(len(df.columns))
         self.setHorizontalHeaderLabels(df.columns.tolist())
 
-        for i in range(len(df)):
-            for j, col in enumerate(df.columns):
-                value = df.iloc[i, j]
-                item = QTableWidgetItem(str(value))
-                item.setData(Qt.ItemDataRole.UserRole, value)
-                self.setItem(i, j, item)
+        # Temporarily block itemChanged to avoid re-queuing edits while loading
+        self.blockSignals(True)
+        try:
+            for i in range(len(df)):
+                for j, col in enumerate(df.columns):
+                    value = df.iloc[i, j]
+                    item = QTableWidgetItem(str(value))
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+                    item.setData(Qt.ItemDataRole.UserRole, value)
+
+                    # Check if this cell has a pending edit
+                    absolute_row = self._page_offset + i
+                    if self._edit_queue is not None and self._edit_queue.has_edit(absolute_row, col):
+                        edit = self._edit_queue.get_edit(absolute_row, col)
+                        if edit:
+                            item.setText(str(edit.new_value))
+                            item.setBackground(QColor("#FFF9C4"))  # light yellow for edited cells
+
+                    self.setItem(i, j, item)
+        finally:
+            self.blockSignals(False)
 
         self.resizeColumnsToContents()
+
+    def _on_cell_committed(self, row: int, col: int, old_value, new_value) -> None:
+        """Called by EditTrackingDelegate when a cell edit is committed."""
+        logger.debug(f"[TABLE] _on_cell_committed row={row}, col={col}, old={old_value!r}, new={new_value!r}")
+        self._process_cell_edit(row, col, old_value, new_value)
+
+    def _process_cell_edit(self, row: int, col: int, old_value, new_value) -> None:
+        """Process a cell edit: queue it, highlight, emit signal."""
+        logger.debug(f"[TABLE] _process_cell_edit self_id={id(self)} row={row}, col={col}, old={old_value!r}, new={new_value!r}")
+        logger.debug(f"[TABLE] self._edit_queue={self._edit_queue!r}, id={id(self._edit_queue) if self._edit_queue is not None else None}")
+        if self._edit_queue is None:
+            logger.warning("[TABLE] No edit_queue attached, skipping edit tracking")
+            return
+
+        column_name = self.horizontalHeaderItem(col).text() if col >= 0 else ""
+        absolute_row = self._page_offset + row
+        logger.debug(f"[TABLE] column_name={column_name!r}, absolute_row={absolute_row}, page_offset={self._page_offset}")
+
+        # Skip if value didn't actually change
+        if str(old_value) == str(new_value):
+            logger.debug("[TABLE] Value unchanged, skipping")
+            return
+
+        # Highlight the cell
+        item = self.item(row, col)
+        if item:
+            item.setBackground(QColor("#FFF9C4"))
+            logger.debug("[TABLE] Cell highlighted yellow")
+
+        # Queue the edit
+        edit = CellEdit(
+            absolute_row=absolute_row,
+            column=column_name,
+            old_value=old_value,
+            new_value=new_value,
+        )
+        self._edit_queue.add(edit)
+        self.cell_edited.emit(absolute_row, column_name, old_value, new_value)
+        logger.info(
+            f"[TABLE] Cell edited: row={absolute_row}, col={column_name}, "
+            f"{old_value!r} → {new_value!r}, queue_size={self._edit_queue.edit_count()}"
+        )
+
+    def discard_edits(self) -> None:
+        """Reload current data without pending edits."""
+        self.load_data(self._current_data)
 
     def _show_context_menu(self, pos) -> None:
         column = self.columnAt(pos.x())

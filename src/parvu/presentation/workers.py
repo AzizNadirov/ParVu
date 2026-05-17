@@ -5,10 +5,14 @@ QThread-based workers for non-blocking operations.
 """
 from __future__ import annotations
 
+import gc
+from pathlib import Path
+
 import pandas as pd
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from parvu.core.interfaces import IQueryEngine
+from parvu.core.edit_queue import CellEdit, apply_edits_to_dataframe, read_source_file, write_source_file
 
 
 class QueryWorker(QThread):
@@ -60,6 +64,31 @@ class ExportWorker(QThread):
             self.finished.emit(success, "")
         except Exception as e:
             self.finished.emit(False, str(e))
+
+
+class SaveWorker(QThread):
+    """Background thread for saving edits to disk."""
+
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(self, output_path: Path, edits: list[CellEdit]):
+        super().__init__()
+        self._output_path = output_path
+        self._edits = edits
+
+    def run(self) -> None:
+        """Read, apply edits, write — all in background."""
+        try:
+            df = read_source_file(self._output_path)
+            df = apply_edits_to_dataframe(df, self._edits)
+            write_source_file(df, self._output_path)
+            # Explicitly free memory
+            del df
+            gc.collect()
+            self.finished.emit()
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class UniqueValuesWorker(QThread):
