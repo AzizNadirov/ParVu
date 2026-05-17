@@ -78,16 +78,23 @@ class ServiceContainer:
         """Persist current settings."""
         self.settings_manager.save()
 
-    def create_query_engine(self, file_path: Path, page_size: int | None = None):
+    def create_query_engine(
+        self,
+        file_path: Path,
+        page_size: int | None = None,
+        table_name: str | None = None,
+    ):
         """Factory method for creating query engines."""
         from parvu.core.query_engine import QueryEngine
 
         if page_size is None:
             page_size = int(self.settings.result_pagination_rows_per_page)
+        if table_name is None:
+            table_name = self.settings.default_data_var_name
 
         return QueryEngine(
             file_path=file_path,
             page_size=page_size,
-            table_name=self.settings.default_data_var_name,
+            table_name=table_name,
             adapter_registry=self.file_adapter_registry,
         )

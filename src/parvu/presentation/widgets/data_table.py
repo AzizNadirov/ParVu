@@ -20,25 +20,11 @@ from parvu.core.edit_queue import EditQueue, CellEdit
 class EditTrackingDelegate(QStyledItemDelegate):
     """Delegate that intercepts cell commits to track edits."""
 
-    def createEditor(self, parent, option, index):
-        editor = super().createEditor(parent, option, index)
-        logger.debug(f"[DELEGATE] createEditor at row={index.row()}, col={index.column()}")
-        return editor
-
     def setModelData(self, editor: QWidget, model, index) -> None:
-        logger.debug(f"[DELEGATE] setModelData called row={index.row()}, col={index.column()}")
-        # Read old value before commit
         old_value = model.data(index, Qt.ItemDataRole.DisplayRole)
-        logger.debug(f"[DELEGATE] old_value={old_value!r}")
-        # Let default implementation commit
         super().setModelData(editor, model, index)
-        # Read new value after commit
         new_value = model.data(index, Qt.ItemDataRole.DisplayRole)
-        logger.debug(f"[DELEGATE] new_value={new_value!r}")
-
-        # Notify the table view
         view = self.parent()
-        logger.debug(f"[DELEGATE] parent()={view!r}, isinstance={isinstance(view, DataTableView)}")
         if isinstance(view, DataTableView):
             view._on_cell_committed(index.row(), index.column(), old_value, new_value)
 
@@ -57,8 +43,6 @@ class DataTableView(QTableWidget):
         self._theme = theme
         self._edit_queue: EditQueue | None = None
         self._page_offset = 0  # absolute row index of first row in current page
-        logger.debug(f"[TABLE] DataTableView created id={id(self)}")
-
         font = QFont(
             theme.layout.table_font_family if theme else "Courier",
             theme.layout.table_font_size if theme else 10,
@@ -83,7 +67,6 @@ class DataTableView(QTableWidget):
 
     def set_edit_queue(self, queue: EditQueue | None) -> None:
         """Attach an edit queue to track modifications."""
-        logger.debug(f"[TABLE] set_edit_queue called on id={id(self)}, queue_id={id(queue) if queue is not None else None}")
         self._edit_queue = queue
 
     def set_page_offset(self, offset: int) -> None:
@@ -123,31 +106,24 @@ class DataTableView(QTableWidget):
 
     def _on_cell_committed(self, row: int, col: int, old_value, new_value) -> None:
         """Called by EditTrackingDelegate when a cell edit is committed."""
-        logger.debug(f"[TABLE] _on_cell_committed row={row}, col={col}, old={old_value!r}, new={new_value!r}")
         self._process_cell_edit(row, col, old_value, new_value)
 
     def _process_cell_edit(self, row: int, col: int, old_value, new_value) -> None:
         """Process a cell edit: queue it, highlight, emit signal."""
-        logger.debug(f"[TABLE] _process_cell_edit self_id={id(self)} row={row}, col={col}, old={old_value!r}, new={new_value!r}")
-        logger.debug(f"[TABLE] self._edit_queue={self._edit_queue!r}, id={id(self._edit_queue) if self._edit_queue is not None else None}")
         if self._edit_queue is None:
-            logger.warning("[TABLE] No edit_queue attached, skipping edit tracking")
             return
 
         column_name = self.horizontalHeaderItem(col).text() if col >= 0 else ""
         absolute_row = self._page_offset + row
-        logger.debug(f"[TABLE] column_name={column_name!r}, absolute_row={absolute_row}, page_offset={self._page_offset}")
 
         # Skip if value didn't actually change
         if str(old_value) == str(new_value):
-            logger.debug("[TABLE] Value unchanged, skipping")
             return
 
         # Highlight the cell
         item = self.item(row, col)
         if item:
             item.setBackground(QColor("#FFF9C4"))
-            logger.debug("[TABLE] Cell highlighted yellow")
 
         # Queue the edit
         edit = CellEdit(
@@ -159,8 +135,8 @@ class DataTableView(QTableWidget):
         self._edit_queue.add(edit)
         self.cell_edited.emit(absolute_row, column_name, old_value, new_value)
         logger.info(
-            f"[TABLE] Cell edited: row={absolute_row}, col={column_name}, "
-            f"{old_value!r} → {new_value!r}, queue_size={self._edit_queue.edit_count()}"
+            f"Cell edited: row={absolute_row}, col={column_name}, "
+            f"{old_value!r} → {new_value!r}"
         )
 
     def discard_edits(self) -> None:
