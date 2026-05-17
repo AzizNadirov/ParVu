@@ -62,8 +62,9 @@ class DataTableView(QTableWidget):
         self.setEditTriggers(
             QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
         )
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._show_context_menu)
+        # Column context menu on header right-click
+        self.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.horizontalHeader().customContextMenuRequested.connect(self._show_header_context_menu)
         self.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
 
         # Install edit-tracking delegate
@@ -149,8 +150,8 @@ class DataTableView(QTableWidget):
         """Reload current data without pending edits."""
         self.load_data(self._current_data)
 
-    def _show_context_menu(self, pos) -> None:
-        column = self.columnAt(pos.x())
+    def _show_header_context_menu(self, pos) -> None:
+        column = self.horizontalHeader().logicalIndexAt(pos)
         if column < 0:
             return
 
@@ -199,7 +200,7 @@ class DataTableView(QTableWidget):
         unique.triggered.connect(lambda: self.unique_values_requested.emit(column_name))
         menu.addAction(unique)
 
-        menu.exec(self.mapToGlobal(pos))
+        menu.exec(self.horizontalHeader().mapToGlobal(pos))
 
     def _rename_column(self, column_name: str) -> None:
         from PyQt6.QtWidgets import QInputDialog
