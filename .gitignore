@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.claude
+AGENTS.MD
+PROJECT_MAP.md
+.pytest_cache
 
 # Virtual environments
 .venv/
