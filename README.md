@@ -28,8 +28,9 @@ A powerful desktop application for viewing and querying large Parquet, CSV, and 
 ### Expression Language (DSL)
 - **Dual-mode editor** — switch between raw SQL and expression mode
 - **Column assignment** — `data[new_col] = old_col * 2` adds computed columns
-- **Built-in functions** — `ABS`, `UPPER`, `LEN`, `ROUND`, `DROP_DUPLICATES`, etc.
-- **Auto-completion** for functions, columns, and table names in expression mode
+- **Built-in functions** — `ABS`, `UPPER`, `LEN`, `ROUND`, `REPLACE`, `DROP_DUPLICATES`, etc.
+- **Auto-completion** for functions, columns, table names, and methods in expression mode
+- **Function documentation popup** — hover completer items or click function names to see signature, parameters, examples, and SQL mapping
 - Seamless compilation to DuckDB SQL behind the scenes
 
 ### Table Operations
@@ -38,9 +39,10 @@ A powerful desktop application for viewing and querying large Parquet, CSV, and 
 - **Applied steps** - Every transform, sort, filter, and cell edit is tracked
 - **Undo** - Revert the last applied step (SQL transform or cell edit)
 - **Drop duplicates** - Remove duplicate rows via Operations menu or expression
+- **Replace values** - Replace text/regex in columns via Operations menu or expression
 - **Column sorting** - Sort by any column (ascending/descending)
 - **Unique values filter** - Excel-like dropdown showing unique column values
-- **Copy operations** - Copy column names or values as Python tuple
+- **Copy operations** - Copy column names or values as Python tuple (with sampling options for large tables)
 - **Large file warnings** - Warns when calculating unique values on files >1M rows
 
 ![alt text](src/static/image.png)
@@ -55,8 +57,9 @@ A powerful desktop application for viewing and querying large Parquet, CSV, and 
 - Clean, modern PyQt6 interface
 - **Theme System** - 3 built-in themes (Light, Excel, ParVu Black)
 - **Internationalization (i18n)** - 3 languages: English, Russian, Azerbaijani
-- **Operations menu** — Math, Join, Append, and Drop Duplicates operations
+- **Operations menu** — Math, Join, Append, Drop Duplicates, and Replace Values operations
 - **Collapsible applied steps** — Toggle the steps panel to save screen space
+- **Exit warning** — Warns about unsaved transforms with Save & Close option
 - Import/Export custom themes
 - Customizable colors, fonts, and layouts
 - Recent files history

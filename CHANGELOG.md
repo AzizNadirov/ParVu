@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Function Documentation Popup** — Expression editor now shows a tooltip-style popup with function signature, parameters, description, example, and SQL mapping when navigating the completer or clicking a function name.
+- **REPLACE function** — New DSL function and method for string replacement with support for literal/regex matching and case-insensitive mode.
+  - `REPLACE(text, pattern, with_value, case_sensitive, regex)`
+  - Also available as method: `data[name].replace('old', 'new', FALSE, FALSE)`
+  - Compiles to DuckDB `REPLACE()` or `REGEXP_REPLACE()` with appropriate flags.
+- **Confirm Close dialog** — Warns when closing with applied transforms. Options: Save & Close (exports results), Close anyway, Cancel. Includes "Do not ask again" checkbox with setting persistence.
+- **Tab deduplication** — Opening the same file twice creates tabs with `_2`, `_3`, etc. suffixes instead of overwriting.
+- **Copy Values as Tuple dialog** — For large tables, shows sampling options: Only this page, First N, Random N (N configurable up to 1000). Optional label prefix (e.g. `my_values = (1, 2, 3)`).
+- **Button styling** — Smaller, rounded (8px radius), with 2px margin for a Material-like appearance.
+
+### Changed
+- **Assignment compilation** — Overwrites existing columns instead of creating duplicates (e.g. `brand` instead of `brand_1`).
+- **Table qualifier stripping** — Math operations and Replace dialog now strip table qualifiers when generating subquery SQL to avoid "table not found" errors.
+- **Method call grammar** — Parser now supports method arguments: `data[name].replace('a', 'b')`.
+- **DROP_DUPLICATES registry** — First parameter corrected from `columns` to `table`.
+
+### Fixed
+- **Expression editor assignment** — Fixed issue where assigning to an existing column created a duplicate column.
+- **Replace dialog SQL** — Fixed binder error when using table-qualified column references inside subqueries.
+
 ## [0.2.0] - 2025-12-29
 
 ### Added - i18n System ✅

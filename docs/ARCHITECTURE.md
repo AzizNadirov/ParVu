@@ -113,7 +113,7 @@ Cell edits are tracked separately in `TableTab._undo_stack` (parallel to `applie
 ParVu includes a small expression language (DSL) compiled to DuckDB SQL:
 
 1. **Parser** (`dsl/parser.py`) — Lark grammar parses text into AST
-2. **Resolver** (`dsl/resolver.py`) — Transforms AST into typed IR nodes (`ColumnRef`, `Call`, `Assignment`, `DropDuplicates`, etc.)
+2. **Resolver** (`dsl/resolver.py`) — Transforms AST into typed IR nodes (`ColumnRef`, `Call`, `Assignment`, `DropDuplicates`, `Replace`, etc.)
 3. **Compiler** (`dsl/compiler.py`) — Converts IR to sqlglot expressions, then to SQL string
 4. **Registry** (`dsl/registry.py`) — Function definitions for auto-completion and validation
 
@@ -123,6 +123,8 @@ data[total] = price * quantity
   → Assignment(table="data", column="total", value=BinaryOp(...))
   → SELECT *, price * quantity AS "total" FROM data
 ```
+
+Special-case functions like `DROP_DUPLICATES` and `REPLACE` are handled in the resolver before registry lookup, producing dedicated IR nodes that the compiler translates to complex SQL patterns.
 
 ## Testing Strategy
 

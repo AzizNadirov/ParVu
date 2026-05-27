@@ -15,7 +15,7 @@
 
 | Component | Responsibility | Key Classes |
 |-----------|---------------|-------------|
-| `ir.py` | Intermediate representation | `Expr`, `ColumnRef`, `Literal`, `Call`, `BinaryOp`, `Assignment`, `DropDuplicates` |
+| `ir.py` | Intermediate representation | `Expr`, `ColumnRef`, `Literal`, `Call`, `BinaryOp`, `Assignment`, `DropDuplicates`, `Replace` |
 | `parser.py` | Lark grammar parser | `Parser` - parses expressions into AST |
 | `resolver.py` | AST → IR transformation | `Resolver` - Lark Tree → typed IR nodes |
 | `compiler.py` | IR → SQL compilation | `Compiler` - generates DuckDB SQL via sqlglot |
@@ -62,6 +62,7 @@
 | `widgets/query_toolbar.py` | Query buttons | `QueryToolbar` |
 | `widgets/applied_steps.py` | Steps & undo | `AppliedStepsPanel` - collapsible, undo button |
 | `widgets/query_editor.py` | Dual SQL/expr editor | `QueryEditor` - SQL mode + expression mode |
+| `widgets/function_doc_popup.py` | Function docs | `FunctionDocPopup` - signature, params, example, SQL mapping |
 | `dialogs/settings_dialog.py` | Settings UI | `SettingsDialog` |
 | `dialogs/theme_selector.py` | Theme picker | `ThemeSelectorDialog` |
 | `dialogs/crash_reporter.py` | Crash UI | `CrashReportDialog` |
@@ -70,6 +71,9 @@
 | `dialogs/unique_values_dialog.py` | Filter | `UniqueValuesDialog` |
 | `dialogs/language_selector.py` | Language | `LanguageSelector` |
 | `dialogs/drop_duplicates_dialog.py` | Deduplication | `DropDuplicatesDialog` - column checklist + keep strategy |
+| `dialogs/replace_dialog.py` | String replacement | `ReplaceDialog` - pattern, replacement, case sensitive, regex |
+| `dialogs/confirm_close_dialog.py` | Exit warning | `ConfirmCloseDialog` - Save & Close / Close anyway / Cancel |
+| `dialogs/copy_tuple_dialog.py` | Copy sampling | `CopyTupleDialog` - page/first-N/random-N + label |
 
 ## Plugin Layer (`parvu.plugins`)
 

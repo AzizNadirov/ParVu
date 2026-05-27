@@ -126,7 +126,7 @@ Functions are case-insensitive: `upper`, `UPPER`, `Upper` all work.
 | `LEN(s)` | Length | `LEN(data[code])` |
 | `TRIM(s)` | Remove whitespace | `TRIM(data[comment])` |
 | `SUBSTRING(s, start, len)` | Extract substring | `SUBSTRING(data[id], 1, 4)` |
-| `REPLACE(s, old, new)` | Replace text | `REPLACE(data[phone], '-', '')` |
+| `REPLACE(s, old, new, case_sensitive, regex)` | Replace text | `REPLACE(data[phone], '-', '')` |
 | `CONTAINS(s, sub)` | Contains check | `CONTAINS(data[desc], 'sale')` |
 | `STARTSWITH(s, prefix)` | Prefix check | `STARTSWITH(data[id], 'US')` |
 | `ENDSWITH(s, suffix)` | Suffix check | `ENDSWITH(data[file], '.csv')` |
@@ -147,7 +147,40 @@ Functions are case-insensitive: `upper`, `UPPER`, `Upper` all work.
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `DROP_DUPLICATES(cols..., keep)` | Remove duplicates | `DROP_DUPLICATES(data[id], data[name], 'first')` |
+| `DROP_DUPLICATES(table, cols..., keep)` | Remove duplicates | `DROP_DUPLICATES(data[id], data[name], 'first')` |
+
+#### REPLACE
+
+Replace occurrences of a pattern in text. Supports literal and regex replacement, with optional case-insensitive matching.
+
+```python
+# Simple literal replacement (case-sensitive, default)
+REPLACE(data[brand], 'no brand', '-')
+
+# Case-insensitive literal replacement
+REPLACE(data[brand], 'No Brand', '-', FALSE)
+
+# Regex replacement
+REPLACE(data[phone], '[0-9]+', '#', TRUE, TRUE)
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `text` | TEXT | ✅ | Source string |
+| `pattern` | TEXT | ✅ | Search pattern |
+| `with_value` | TEXT | ✅ | Replacement string |
+| `case_sensitive` | BOOLEAN | ❌ | Default `TRUE` |
+| `regex` | BOOLEAN | ❌ | Default `FALSE` |
+
+**SQL compilation:**
+- `case_sensitive=TRUE, regex=FALSE` → `REPLACE(text, pattern, with_value)`
+- `case_sensitive=FALSE, regex=FALSE` → `REGEXP_REPLACE(text, pattern, with_value, 'gi')` (pattern escaped for literal matching)
+- `regex=TRUE` → `REGEXP_REPLACE(text, pattern, with_value, 'g')` or `'gi'`
+
+Also available as a method:
+```python
+data[brand].replace('old', 'new', FALSE, FALSE)
+```
 
 #### DROP_DUPLICATES
 
@@ -220,6 +253,8 @@ The expression editor provides context-aware suggestions:
 - **Functions** — Type `DR` and see `DROP_DUPLICATES`
 - **Columns** — Type `data[` and see available columns
 - **Tables** — Type a table name prefix for multi-table scenarios
+- **Function docs** — Navigate the completer with arrow keys to see signature, parameters, description, example, and SQL mapping in a side popup. Click a function name in the editor to show its documentation.
+- **Methods** — Type `data[name].` to see available methods (e.g., `.upper()`, `.replace()`)
 
 Suggestions appear after typing 2+ characters. Press **Tab** or **Enter** to accept.
 
