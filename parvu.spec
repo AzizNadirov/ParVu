@@ -1,7 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for ParVu - Parquet Viewer
-Builds a cross-platform application bundle
+PyInstaller spec file for ParVu - Parquet/CSV/JSON Viewer.
+
+Builds a cross-platform application bundle. Resources are bundled at
+``parvu/resources/...`` to match ``parvu.infrastructure.paths.RESOURCES_DIR``
+(which resolves to ``<package_root>/resources`` at runtime).
 """
 
 import sys
@@ -9,17 +12,14 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
-# Collect all data files from important packages
 datas = []
 datas += collect_data_files('duckdb')
 datas += collect_data_files('pyarrow')
 
-# Add data directories from src
-datas += [('src/settings', 'settings')]
-datas += [('src/static', 'static')]
-datas += [('src/history', 'history')]
+datas += [('src/parvu/resources/settings', 'parvu/resources/settings')]
+datas += [('src/parvu/resources/static',   'parvu/resources/static')]
+datas += [('src/parvu/resources/history',  'parvu/resources/history')]
 
-# Collect hidden imports that PyInstaller might miss
 hiddenimports = [
     'PyQt6.QtCore',
     'PyQt6.QtGui',
@@ -31,15 +31,19 @@ hiddenimports = [
     'loguru',
     'pydantic',
     'dateutil',
+    'sqlglot',
+    'lark',
 ]
 
-# Add all submodules from key packages
 hiddenimports += collect_submodules('duckdb')
 hiddenimports += collect_submodules('pyarrow')
 hiddenimports += collect_submodules('pandas')
+hiddenimports += collect_submodules('sqlglot')
+hiddenimports += collect_submodules('lark')
+hiddenimports += collect_submodules('parvu')
 
 a = Analysis(
-    ['src/app.py'],
+    ['src/parvu/__main__.py'],
     pathex=['src'],
     binaries=[],
     datas=datas,
@@ -52,6 +56,9 @@ a = Analysis(
         'tkinter',
         'numpy.distutils',
         'scipy',
+        'IPython',
+        'jupyter',
+        'notebook',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

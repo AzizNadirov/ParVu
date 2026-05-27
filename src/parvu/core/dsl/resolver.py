@@ -13,7 +13,7 @@ from __future__ import annotations
 from loguru import logger
 from lark import Tree, Token
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates, Replace
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates, DropNull, Replace
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.catalog import Catalog
 from parvu.core.dsl.types import LogicalType, duckdb_type_to_logical
@@ -189,6 +189,10 @@ class Resolver:
         if func_name.upper() == "DROP_DUPLICATES":
             return self._resolve_drop_duplicates(args)
 
+        # Special-case: drop_null(column, null_value=NULL)
+        if func_name.upper() == "DROP_NULL":
+            return self._resolve_drop_null(args)
+
         # Special-case: REPLACE(text, pattern, with_value, case_sensitive, regex)
         if func_name.upper() == "REPLACE":
             return self._resolve_replace(args)
@@ -244,6 +248,39 @@ class Resolver:
 
         logger.debug(f"Resolved drop_duplicates: {table}({subset_cols}, keep={keep})")
         return DropDuplicates(table=table, columns=subset_cols, keep=keep, logical_type=LogicalType.QUERY)
+
+    def _resolve_drop_null(self, args: list[Expr]) -> Expr:
+        """Resolve drop_null(column_ref [, null_value]) special form."""
+        if not args:
+            raise ResolutionError("drop_null requires a column reference")
+        col_ref = args[0]
+        if not isinstance(col_ref, ColumnRef):
+            raise ResolutionError(
+                "drop_null first argument must be a column reference like sales[note]"
+            )
+        if col_ref.table not in self._catalog.tables():
+            raise ResolutionError(f"Unknown table: '{col_ref.table}'")
+
+        null_value = None
+        if len(args) >= 2:
+            if not isinstance(args[1], Literal):
+                raise ResolutionError(
+                    "drop_null second argument must be a literal value (e.g. -1, '', 'N/A')"
+                )
+            null_value = args[1].value
+
+        if len(args) > 2:
+            raise ResolutionError("drop_null takes at most 2 arguments (column, null_value)")
+
+        logger.debug(
+            f"Resolved drop_null: {col_ref.table}[{col_ref.column}], null_value={null_value!r}"
+        )
+        return DropNull(
+            table=col_ref.table,
+            column=col_ref.column,
+            null_value=null_value,
+            logical_type=LogicalType.QUERY,
+        )
 
     def _resolve_method_call(self, children: list) -> Expr:
         """Resolve expr.method or expr.method(args...) call."""

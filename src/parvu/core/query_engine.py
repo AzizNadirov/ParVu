@@ -232,6 +232,125 @@ class QueryEngine(IQueryEngine):
             logger.error(f"Error fetching page {page_num}: {e}")
             return pd.DataFrame()
 
+    def find_next_match(
+        self,
+        query: str,
+        column: str | None = None,
+        after_row: int | None = None,
+        after_col_index: int | None = None,
+        direction: str = "next",
+        case_sensitive: bool = False,
+        whole_cell: bool = False,
+        use_regex: bool = False,
+    ) -> tuple[int, int, str, str] | None:
+        """Find a single match relative to an anchor.
+
+        With ``direction="next"`` the match is strictly after
+        ``(after_row, after_col_index)`` in ascending order; with ``"prev"``
+        strictly before, in descending order. With ``after_row=None`` the
+        anchor is unset and the first/last match in the table is returned.
+
+        Returns ``(absolute_row, column_index, column_name, value)`` or
+        ``None`` if no further match exists. ``column_index`` is the column's
+        position in ``get_columns()`` (matches the table widget column order).
+        """
+        if not query:
+            return None
+        if direction not in ("next", "prev"):
+            raise ValueError(f"direction must be 'next' or 'prev', got {direction!r}")
+
+        all_cols = self.get_columns()
+        if not all_cols:
+            return None
+
+        if column is not None:
+            try:
+                target_idx = all_cols.index(column)
+            except ValueError:
+                return None
+            scope = [(target_idx, column)]
+        else:
+            scope = list(enumerate(all_cols))
+
+        def sql_lit(s: str) -> str:
+            return s.replace("'", "''")
+
+        def quote_col(c: str) -> str:
+            return '"' + c.replace('"', '""') + '"'
+
+        needle = sql_lit(query)
+
+        def predicate(c: str) -> str:
+            col_expr = f"CAST({quote_col(c)} AS VARCHAR)"
+            if use_regex:
+                fn = "regexp_full_match" if whole_cell else "regexp_matches"
+                flag = "" if case_sensitive else ", 'i'"
+                return f"{fn}({col_expr}, '{needle}'{flag})"
+            if whole_cell:
+                if case_sensitive:
+                    return f"{col_expr} = '{needle}'"
+                return f"LOWER({col_expr}) = LOWER('{needle}')"
+            escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            op = "LIKE" if case_sensitive else "ILIKE"
+            return f"{col_expr} {op} '%{escaped}%' ESCAPE '\\'"
+
+        union_parts: list[str] = []
+        for idx, c in scope:
+            union_parts.append(
+                f"SELECT __rn, {idx} AS __col_idx, '{sql_lit(c)}' AS __col_name, "
+                f"CAST({quote_col(c)} AS VARCHAR) AS __val "
+                f"FROM base WHERE {predicate(c)}"
+            )
+
+        body = " UNION ALL ".join(union_parts)
+        order = "ASC" if direction == "next" else "DESC"
+
+        where_anchor = ""
+        if after_row is not None:
+            if after_col_index is None:
+                cmp = ">" if direction == "next" else "<"
+                where_anchor = f"WHERE __rn {cmp} {after_row}"
+            else:
+                if direction == "next":
+                    where_anchor = (
+                        f"WHERE (__rn > {after_row} "
+                        f"OR (__rn = {after_row} AND __col_idx > {after_col_index}))"
+                    )
+                else:
+                    where_anchor = (
+                        f"WHERE (__rn < {after_row} "
+                        f"OR (__rn = {after_row} AND __col_idx < {after_col_index}))"
+                    )
+
+        sql = (
+            "WITH base AS (SELECT *, ROW_NUMBER() OVER () - 1 AS __rn "
+            f"FROM ({self._current_query})), "
+            f"hits AS ({body}) "
+            f"SELECT __rn, __col_idx, __col_name, __val FROM hits "
+            f"{where_anchor} "
+            f"ORDER BY __rn {order}, __col_idx {order} "
+            f"LIMIT 1"
+        )
+
+        logger.debug(
+            f"[find_next_match] direction={direction}, anchor=({after_row}, {after_col_index}), "
+            f"scope_cols={[c for _, c in scope]}, "
+            f"sql={sql[:400]}{'...' if len(sql) > 400 else ''}"
+        )
+
+        try:
+            row = self._conn.execute(sql).fetchone()
+        except Exception as e:
+            logger.exception(f"[find_next_match] SQL failed: {e}\nSQL was: {sql}")
+            raise
+
+        if row is None:
+            logger.debug("[find_next_match] no match")
+            return None
+        result = (int(row[0]), int(row[1]), str(row[2]), str(row[3]))
+        logger.debug(f"[find_next_match] match: {result}")
+        return result
+
     def get_unique_values(self, column: str) -> list[Any]:
         """Get unique values for a column (limited to 10000 for performance)."""
         try:

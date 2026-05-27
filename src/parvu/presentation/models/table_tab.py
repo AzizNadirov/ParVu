@@ -38,6 +38,8 @@ class TableTab:
     current_page: int = 1
     sql_query: str = ""
     applied_steps: list[str] = field(default_factory=list)
+    sort_column: str | None = None
+    sort_ascending: bool = True
     _undo_stack: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:

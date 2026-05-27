@@ -1,154 +1,247 @@
-# Build script for ParVu - Windows build
-# Creates both an installable .exe and a portable version
+<#
+.SYNOPSIS
+    Build ParVu for Windows: portable ZIP + Inno Setup installer.
 
+.DESCRIPTION
+    Produces three artifacts in the repo root:
+
+      1. dist\parvu\                              standalone folder bundle
+      2. ParVu-<version>-portable-win64.zip       portable ZIP (no install)
+      3. ParVu-<version>-setup-win64.exe          installer (requires Inno Setup 6)
+
+.PARAMETER SkipInstaller
+    Skip building the Inno Setup installer (portable ZIP is still produced).
+
+.PARAMETER SkipPortable
+    Skip building the portable ZIP (installer is still produced).
+
+.PARAMETER NoClean
+    Do not delete the previous build\ and dist\ directories before building.
+    Useful for incremental rebuilds, but PyInstaller is still invoked with --clean.
+
+.PARAMETER Help
+    Print extended usage information and exit.
+
+.EXAMPLE
+    .\build.ps1
+    Full build: portable ZIP + installer.
+
+.EXAMPLE
+    .\build.ps1 -SkipInstaller
+    Portable ZIP only (use when Inno Setup is not installed).
+
+.NOTES
+    Prerequisites:
+      - Python 3.13+ available via the uv package manager
+        Install uv: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+      - Inno Setup 6 at "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        (only needed for the installer; download: https://jrsoftware.org/isdl.php)
+
+    The script reads the version from pyproject.toml and writes parvu.spec
+    only if it does not already exist. Edit parvu.spec directly for advanced
+    PyInstaller tuning.
+#>
+
+[CmdletBinding()]
 param(
-    [switch]$SkipInstaller = $false
+    [switch]$SkipInstaller,
+    [switch]$SkipPortable,
+    [switch]$NoClean,
+    [switch]$Help
 )
 
-Write-Host "===================================" -ForegroundColor Blue
-Write-Host "ParVu Windows Build Script" -ForegroundColor Blue
-Write-Host "===================================" -ForegroundColor Blue
+if ($Help) {
+    Get-Help -Full $MyInvocation.MyCommand.Path
+    exit 0
+}
 
-# Get version from pyproject.toml
-$version = (Get-Content pyproject.toml | Select-String '^version').ToString().Split('"')[1]
+function Write-Section($text) {
+    Write-Host ""
+    Write-Host "=== $text ===" -ForegroundColor Blue
+}
+
+function Write-Step($text) {
+    Write-Host "-> $text" -ForegroundColor Yellow
+}
+
+function Write-Ok($text) {
+    Write-Host "[OK] $text" -ForegroundColor Green
+}
+
+function Write-Warn($text) {
+    Write-Host "[!]  $text" -ForegroundColor Yellow
+}
+
+function Write-Err($text) {
+    Write-Host "[X]  $text" -ForegroundColor Red
+}
+
+Write-Section "ParVu Windows Build"
+
+# --- Version -----------------------------------------------------------------
+$versionLine = (Get-Content pyproject.toml | Select-String '^version\s*=').ToString()
+$version = $versionLine.Split('"')[1]
+if (-not $version) {
+    Write-Err "Could not parse version from pyproject.toml"
+    exit 1
+}
 Write-Host "Building ParVu v$version" -ForegroundColor Cyan
 
-# Clean previous builds
-Write-Host "`nCleaning previous builds..." -ForegroundColor Yellow
-Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
-Remove-Item ParVu-*.exe -ErrorAction SilentlyContinue
+# --- uv check ----------------------------------------------------------------
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Err "uv is not installed or not on PATH."
+    Write-Host "Install with: powershell -c `"irm https://astral.sh/uv/install.ps1 | iex`"" -ForegroundColor Yellow
+    exit 1
+}
 
-# Install build dependencies
-Write-Host "`nInstalling build dependencies..." -ForegroundColor Yellow
+# --- Clean -------------------------------------------------------------------
+if (-not $NoClean) {
+    Write-Section "Cleaning previous artifacts"
+    foreach ($p in @('build', 'dist')) {
+        if (Test-Path $p) {
+            Write-Step "Removing $p\"
+            Remove-Item -Recurse -Force $p
+        }
+    }
+    Get-ChildItem -Path . -Filter "ParVu-*-portable*.zip" -ErrorAction SilentlyContinue | Remove-Item -Force
+    Get-ChildItem -Path . -Filter "ParVu-*-setup*.exe"    -ErrorAction SilentlyContinue | Remove-Item -Force
+}
+
+# --- Dependencies ------------------------------------------------------------
+Write-Section "Installing build dependencies"
 uv sync --extra build
+if ($LASTEXITCODE -ne 0) {
+    Write-Err "uv sync failed (exit $LASTEXITCODE)"
+    exit 1
+}
 
-# Create spec file if it doesn't exist
+# --- Spec file ---------------------------------------------------------------
 if (-not (Test-Path "parvu.spec")) {
-    Write-Host "`nCreating parvu.spec file..." -ForegroundColor Yellow
+    Write-Section "Generating parvu.spec"
     @'
 # -*- mode: python ; coding: utf-8 -*-
-"""
-PyInstaller spec file for ParVu - Parquet Viewer
-Builds a cross-platform application bundle
-"""
-
+"""PyInstaller spec for ParVu (auto-generated by build.ps1)."""
 import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
-# Collect all data files from important packages
 datas = []
 datas += collect_data_files('duckdb')
 datas += collect_data_files('pyarrow')
+datas += [('src/parvu/resources/settings', 'parvu/resources/settings')]
+datas += [('src/parvu/resources/static',   'parvu/resources/static')]
+datas += [('src/parvu/resources/history',  'parvu/resources/history')]
 
-# Add data directories from src
-datas += [('src/settings', 'settings')]
-datas += [('src/static', 'static')]
-datas += [('src/history', 'history')]
-
-# Collect hidden imports that PyInstaller might miss
 hiddenimports = [
-    'PyQt6.QtCore',
-    'PyQt6.QtGui',
-    'PyQt6.QtWidgets',
-    'duckdb',
-    'pyarrow',
-    'pandas',
-    'openpyxl',
-    'loguru',
-    'pydantic',
-    'dateutil',
+    'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets',
+    'duckdb', 'pyarrow', 'pandas', 'openpyxl',
+    'loguru', 'pydantic', 'dateutil', 'sqlglot', 'lark',
 ]
-
-# Add all submodules from key packages
 hiddenimports += collect_submodules('duckdb')
 hiddenimports += collect_submodules('pyarrow')
 hiddenimports += collect_submodules('pandas')
+hiddenimports += collect_submodules('sqlglot')
+hiddenimports += collect_submodules('lark')
+hiddenimports += collect_submodules('parvu')
 
 a = Analysis(
-    ['src/app.py'],
+    ['src/parvu/__main__.py'],
     pathex=['src'],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[
-        'matplotlib',
-        'tkinter',
-        'numpy.distutils',
-        'scipy',
-    ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
+    hookspath=[], hooksconfig={}, runtime_hooks=[],
+    excludes=['matplotlib', 'tkinter', 'numpy.distutils', 'scipy',
+              'IPython', 'jupyter', 'notebook'],
+    win_no_prefer_redirects=False, win_private_assemblies=False,
+    cipher=block_cipher, noarchive=False,
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
-    pyz,
-    a.scripts,
-    [],
+    pyz, a.scripts, [],
     exclude_binaries=True,
     name='parvu',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    debug=False, bootloader_ignore_signals=False,
+    strip=False, upx=True, console=False,
+    disable_windowed_traceback=False, argv_emulation=False,
+    target_arch=None, codesign_identity=None, entitlements_file=None,
     icon='assets/parvu.ico',
 )
 
 coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
+    exe, a.binaries, a.zipfiles, a.datas,
+    strip=False, upx=True, upx_exclude=[],
     name='parvu',
 )
 '@ | Out-File -Encoding UTF8 "parvu.spec"
-    Write-Host "✓ Created parvu.spec" -ForegroundColor Green
+    Write-Ok "Created parvu.spec"
+} else {
+    Write-Host "Using existing parvu.spec (delete it to regenerate)" -ForegroundColor DarkGray
 }
 
-# Build with PyInstaller
-Write-Host "`nBuilding with PyInstaller..." -ForegroundColor Yellow
+# --- PyInstaller -------------------------------------------------------------
+Write-Section "Running PyInstaller"
 uv run pyinstaller parvu.spec --clean --noconfirm
-
-# Check if build succeeded
-if (Test-Path "dist\parvu") {
-    Write-Host "✓ Build successful!" -ForegroundColor Green
-} else {
-    Write-Host "ERROR: Build failed!" -ForegroundColor Red
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path "dist\parvu\parvu.exe")) {
+    Write-Err "PyInstaller build failed."
+    Write-Host "Check build\parvu\warn-parvu.txt for import warnings." -ForegroundColor Yellow
     exit 1
 }
+Write-Ok "Standalone bundle ready: dist\parvu\"
 
-# Create portable version (zip)
-Write-Host "`nCreating portable version..." -ForegroundColor Yellow
-$portableName = "ParVu-$version-portable-win64.zip"
-Compress-Archive -Path "dist\parvu\*" -DestinationPath $portableName -Force
-Write-Host "✓ Portable version created: $portableName" -ForegroundColor Green
+# --- Portable ZIP ------------------------------------------------------------
+$portableName = "ParVu-$version-portable.zip"
+if (-not $SkipPortable) {
+    Write-Section "Creating portable ZIP"
+    Write-Step "Compressing dist\parvu\ -> $portableName"
+    if (Test-Path $portableName) { Remove-Item $portableName -Force }
 
-# Create installer with Inno Setup (if available and not skipped)
+    # Prefer tar.exe (Windows 10+, streaming, handles large trees).
+    # PowerShell 5.1's Compress-Archive loads the whole archive into memory
+    # and dies on PyInstaller bundles (300+ MB, thousands of files).
+    $tarExe = "$env:SystemRoot\System32\tar.exe"
+    if (Test-Path $tarExe) {
+        & $tarExe -a -c -f $portableName -C dist parvu
+        $zipExit = $LASTEXITCODE
+    } else {
+        Write-Warn "tar.exe not found; falling back to Compress-Archive (may OOM on large bundles)"
+        try {
+            Compress-Archive -Path "dist\parvu\*" -DestinationPath $portableName -Force
+            $zipExit = 0
+        } catch {
+            Write-Err "Compress-Archive failed: $_"
+            $zipExit = 1
+        }
+    }
+
+    if ($zipExit -eq 0 -and (Test-Path $portableName)) {
+        Write-Ok "Portable: $portableName"
+    } else {
+        Write-Err "Portable ZIP creation failed."
+    }
+} else {
+    Write-Host "Skipping portable ZIP (-SkipPortable)" -ForegroundColor DarkGray
+}
+
+# --- Installer ---------------------------------------------------------------
+$setupName = "ParVu-$version-setup.exe"
+$installerBuilt = $false
+
 if (-not $SkipInstaller) {
-    Write-Host "`nCreating installer..." -ForegroundColor Yellow
-
-    # Check if Inno Setup is installed
+    Write-Section "Creating installer (Inno Setup)"
     $innoPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
-    if (Test-Path $innoPath) {
-        # Create Inno Setup script
+    if (-not (Test-Path $innoPath)) {
+        Write-Warn "Inno Setup 6 not found -- installer will NOT be created."
+        Write-Host "  Expected at: $innoPath" -ForegroundColor Yellow
+        Write-Host "  Direct (6.7.3): https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe" -ForegroundColor Yellow
+        Write-Host "  Releases page : https://jrsoftware.org/isdl.php" -ForegroundColor Yellow
+        Write-Host "  After install, re-run: .\build.ps1" -ForegroundColor Yellow
+        Write-Host "  Or skip with        : .\build.ps1 -SkipInstaller" -ForegroundColor Yellow
+    } else {
         $issScript = @"
 #define MyAppName "ParVu"
 #define MyAppVersion "$version"
@@ -168,7 +261,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=.
-OutputBaseFilename=ParVu-{#MyAppVersion}-setup-win64
+OutputBaseFilename=ParVu-{#MyAppVersion}-setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -182,8 +275,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "associatefiles"; Description: "Associate .parquet, .csv, and .json files"; GroupDescription: "File associations:"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "associatefiles"; Description: "Associate .parquet, .pq, .csv, and .json files with ParVu"; GroupDescription: "File associations:"
 
 [Files]
 Source: "dist\parvu\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -194,68 +287,64 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-; Parquet file associations
+; Parquet
 Root: HKCR; Subkey: ".parquet"; ValueType: string; ValueName: ""; ValueData: "ParVu.ParquetFile"; Flags: uninsdeletevalue; Tasks: associatefiles
-Root: HKCR; Subkey: ".pq"; ValueType: string; ValueName: ""; ValueData: "ParVu.ParquetFile"; Flags: uninsdeletevalue; Tasks: associatefiles
+Root: HKCR; Subkey: ".pq";      ValueType: string; ValueName: ""; ValueData: "ParVu.ParquetFile"; Flags: uninsdeletevalue; Tasks: associatefiles
 Root: HKCR; Subkey: "ParVu.ParquetFile"; ValueType: string; ValueName: ""; ValueData: "Parquet File"; Flags: uninsdeletekey; Tasks: associatefiles
 Root: HKCR; Subkey: "ParVu.ParquetFile"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "Apache Parquet File"; Tasks: associatefiles
 Root: HKCR; Subkey: "ParVu.ParquetFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: associatefiles
 Root: HKCR; Subkey: "ParVu.ParquetFile\shell\open"; ValueType: string; ValueName: ""; ValueData: "Open with ParVu"; Tasks: associatefiles
 Root: HKCR; Subkey: "ParVu.ParquetFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associatefiles
 
-; CSV file associations (optional - many users prefer Excel)
-Root: HKCR; Subkey: "Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".csv"; ValueData: ""; Tasks: associatefiles
-Root: HKCR; Subkey: "Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".json"; ValueData: ""; Tasks: associatefiles
+; Open With for CSV/JSON (do not override defaults)
+Root: HKCR; Subkey: "Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".csv";     ValueData: ""; Tasks: associatefiles
+Root: HKCR; Subkey: "Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".json";    ValueData: ""; Tasks: associatefiles
 Root: HKCR; Subkey: "Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".parquet"; ValueData: ""; Tasks: associatefiles
-Root: HKCR; Subkey: "Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".pq"; ValueData: ""; Tasks: associatefiles
+Root: HKCR; Subkey: "Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".pq";      ValueData: ""; Tasks: associatefiles
 
-; Add to "Open With" context menu for CSV and JSON files
-Root: HKCR; Subkey: ".csv\OpenWithProgids"; ValueType: string; ValueName: "ParVu.CSVFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associatefiles
+Root: HKCR; Subkey: ".csv\OpenWithProgids";  ValueType: string; ValueName: "ParVu.CSVFile";  ValueData: ""; Flags: uninsdeletevalue; Tasks: associatefiles
 Root: HKCR; Subkey: ".json\OpenWithProgids"; ValueType: string; ValueName: "ParVu.JSONFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associatefiles
 
-; CSV handler
-Root: HKCR; Subkey: "ParVu.CSVFile"; ValueType: string; ValueName: ""; ValueData: "CSV File"; Flags: uninsdeletekey; Tasks: associatefiles
-Root: HKCR; Subkey: "ParVu.CSVFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associatefiles
-
-; JSON handler
+Root: HKCR; Subkey: "ParVu.CSVFile";  ValueType: string; ValueName: ""; ValueData: "CSV File";  Flags: uninsdeletekey; Tasks: associatefiles
+Root: HKCR; Subkey: "ParVu.CSVFile\shell\open\command";  ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associatefiles
 Root: HKCR; Subkey: "ParVu.JSONFile"; ValueType: string; ValueName: ""; ValueData: "JSON File"; Flags: uninsdeletekey; Tasks: associatefiles
 Root: HKCR; Subkey: "ParVu.JSONFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associatefiles
 "@
 
         $issScript | Out-File -Encoding UTF8 "parvu_installer.iss"
-
-        # Build installer
         & $innoPath "parvu_installer.iss"
-
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ Installer created successfully!" -ForegroundColor Green
-        } else {
-            Write-Host "⚠ Installer creation failed" -ForegroundColor Yellow
-        }
-
-        # Cleanup
+        $isccExit = $LASTEXITCODE
         Remove-Item "parvu_installer.iss" -ErrorAction SilentlyContinue
-    } else {
-        Write-Host "⚠ Inno Setup not found at: $innoPath" -ForegroundColor Yellow
-        Write-Host "  Download from: https://jrsoftware.org/isdl.php" -ForegroundColor Yellow
-        Write-Host "  Installer creation skipped." -ForegroundColor Yellow
+
+        if ($isccExit -eq 0 -and (Test-Path $setupName)) {
+            Write-Ok "Installer: $setupName"
+            $installerBuilt = $true
+        } else {
+            Write-Err "Inno Setup compile failed (exit $isccExit)."
+        }
     }
+} else {
+    Write-Host "Skipping installer (-SkipInstaller)" -ForegroundColor DarkGray
 }
 
-Write-Host "`n===================================" -ForegroundColor Green
-Write-Host "Build completed successfully!" -ForegroundColor Green
-Write-Host "===================================" -ForegroundColor Green
-Write-Host "`nOutputs:"
-Write-Host "  1. Standalone folder: dist\parvu\" -ForegroundColor Cyan
-Write-Host "  2. Portable version: $portableName" -ForegroundColor Cyan
+# --- Summary -----------------------------------------------------------------
+Write-Section "Build summary"
+Write-Host "Version : $version" -ForegroundColor Cyan
+Write-Host "Bundle  : dist\parvu\parvu.exe"
 
-if (-not $SkipInstaller -and (Test-Path "ParVu-$version-setup-win64.exe")) {
-    Write-Host "  3. Installer: ParVu-$version-setup-win64.exe" -ForegroundColor Cyan
+if (-not $SkipPortable -and (Test-Path $portableName)) {
+    $sz = "{0:N1} MB" -f ((Get-Item $portableName).Length / 1MB)
+    Write-Host "Portable: $portableName  ($sz)"
+}
+if ($installerBuilt) {
+    $sz = "{0:N1} MB" -f ((Get-Item $setupName).Length / 1MB)
+    Write-Host "Setup   : $setupName  ($sz)"
 }
 
-Write-Host "`nTo run the application:" -ForegroundColor Yellow
-Write-Host "  cd dist\parvu" -ForegroundColor White
-Write-Host "  .\parvu.exe" -ForegroundColor White
+Write-Host ""
+Write-Host "Run locally  : .\dist\parvu\parvu.exe"
+Write-Host "Install setup: double-click $setupName (or right-click -> Run as admin)"
+Write-Host ""

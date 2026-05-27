@@ -115,14 +115,24 @@ def generate_stylesheet(theme: Theme) -> str:
         color: {c.menu_foreground};
         border: 1px solid {c.table_grid};
         icon-size: 16px;
+        padding: 4px 0;
     }}
     QMenu::item {{
-        padding: 6px 20px 6px 10px;
+        padding: 6px 24px 6px 32px;
         color: {c.menu_foreground};
+    }}
+    QMenu::icon {{
+        padding-left: 12px;
+        padding-right: 4px;
     }}
     QMenu::item:selected {{
         background-color: {c.menu_hover};
         color: {c.menu_foreground};
+    }}
+    QMenu::separator {{
+        height: 1px;
+        background-color: {c.table_grid};
+        margin: 4px 8px;
     }}
 
     /* Status Bar */

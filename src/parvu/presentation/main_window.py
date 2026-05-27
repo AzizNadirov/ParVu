@@ -46,12 +46,15 @@ from parvu.presentation.dialogs.expression_dialog import ExpressionDialog
 from parvu.presentation.dialogs.join_dialog import JoinDialog
 from parvu.presentation.dialogs.append_dialog import AppendDialog
 from parvu.presentation.dialogs.drop_duplicates_dialog import DropDuplicatesDialog
+from parvu.presentation.dialogs.drop_null_dialog import DropNullDialog
 from parvu.presentation.dialogs.replace_dialog import ReplaceDialog
 from parvu.presentation.dialogs.confirm_close_dialog import ConfirmCloseDialog
 from parvu.presentation.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from parvu.presentation.dialogs.copy_tuple_dialog import CopyTupleDialog
 from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
 from parvu.presentation.widgets.collapsible_panel import CollapsiblePanel
+from parvu.presentation.widgets.find_bar import FindBar
+from parvu.presentation.dialogs.search_dialog import SearchDialog
 
 
 class MainWindow(QMainWindow, ThemeableMixin):
@@ -73,14 +76,45 @@ class MainWindow(QMainWindow, ThemeableMixin):
         # Shared DuckDB connection for multi-table operations
         self._shared_conn = duckdb.connect(":memory:")
 
+        self.setAcceptDrops(True)
+
         self._setup_ui()
         self._apply_theme()
         self._setup_menu()
+        self._install_shortcuts()
 
         if file_path:
             self._add_tab(file_path)
 
         logger.info("MainWindow initialized")
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls() and any(
+            url.isLocalFile() for url in event.mimeData().urls()
+        ):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:
+        urls = event.mimeData().urls()
+        opened = 0
+        for url in urls:
+            if not url.isLocalFile():
+                continue
+            path = Path(url.toLocalFile())
+            if path.is_file():
+                logger.info(f"Drop opened: {path}")
+                self._add_tab(path)
+                opened += 1
+        if opened:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
     def set_window_service(self, service: WindowService) -> None:
         """Set the window service for creating new windows."""
@@ -140,7 +174,10 @@ class MainWindow(QMainWindow, ThemeableMixin):
         layout.addWidget(self._steps_panel)
 
         # Data table
-        self._data_table = DataTableView(theme=self._container.theme_manager.current_theme)
+        self._data_table = DataTableView(
+            theme=self._container.theme_manager.current_theme,
+            translator=self._t,
+        )
         self._data_table.sort_requested.connect(self._on_sort)
         self._data_table.unique_values_requested.connect(self._on_unique_values)
         self._data_table.cell_edited.connect(self._on_cell_edited)
@@ -150,7 +187,25 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._data_table.column_duplicated.connect(self._on_column_duplicated)
         self._data_table.replace_values_requested.connect(self._on_column_replace_values)
         self._data_table.copy_column_tuple_requested.connect(self._on_copy_column_tuple)
+        self._data_table.drop_null_requested.connect(self._on_column_drop_null)
         layout.addWidget(self._data_table)
+
+        # Find bar (Ctrl+F overlay)
+        self._find_bar = FindBar(self._t, self)
+        self._find_bar.text_changed.connect(self._find_run)
+        self._find_bar.options_changed.connect(self._find_run)
+        self._find_bar.next_match.connect(lambda: self._find_step(1))
+        self._find_bar.prev_match.connect(lambda: self._find_step(-1))
+        self._find_bar.closed.connect(self._find_close)
+        self._find_matches: list[tuple[int, int]] = []
+        self._find_index: int = -1
+        layout.addWidget(self._find_bar)
+
+        # Full-table search dialog (lazy: created on first open)
+        self._search_dialog: SearchDialog | None = None
+        # If a search jump triggers a page load, remember the cell to select
+        # once _on_page_loaded fires.
+        self._pending_search_jump: tuple[int, str] | None = None
 
         # Pagination
         self._pagination = PaginationBar()
@@ -176,7 +231,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         file_menu = menubar.addMenu(self._t("menu.file"))
 
         new_action = QAction(self._t("menu.file.new_window"), self)
-        new_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder))
+        new_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon))
         new_action.setShortcut("Ctrl+N")
         new_action.triggered.connect(self._new_window)
         file_menu.addAction(new_action)
@@ -190,7 +245,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         file_menu.addSeparator()
 
         export_action = QAction(self._t("menu.file.export"), self)
-        export_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ArrowDown))
+        export_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileLinkIcon))
         export_action.triggered.connect(self._export_results)
         file_menu.addAction(export_action)
         file_menu.addSeparator()
@@ -214,7 +269,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         file_menu.addAction(settings_action)
 
         self._recents_menu = file_menu.addMenu(self._t("menu.file.recent_files"))
-        self._recents_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirHomeIcon))
+        self._recents_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirIcon))
         self._update_recents_menu()
         file_menu.addSeparator()
 
@@ -223,11 +278,30 @@ class MainWindow(QMainWindow, ThemeableMixin):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
+        # ── Edit Menu ──
+        edit_menu = menubar.addMenu(self._t("menu.edit"))
+
+        find_action = QAction(self._t("menu.edit.find"), self)
+        find_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
+        find_action.setShortcut("Ctrl+F")
+        find_action.triggered.connect(self._open_search_dialog_from_menu)
+        edit_menu.addAction(find_action)
+
+        find_next_action = QAction(self._t("menu.edit.find_next"), self)
+        find_next_action.setShortcut("F3")
+        find_next_action.triggered.connect(self._find_next_from_menu)
+        edit_menu.addAction(find_next_action)
+
+        find_prev_action = QAction(self._t("menu.edit.find_prev"), self)
+        find_prev_action.setShortcut("Shift+F3")
+        find_prev_action.triggered.connect(self._find_prev_from_menu)
+        edit_menu.addAction(find_prev_action)
+
         # ── Operations Menu ──
         operations_menu = menubar.addMenu(self._t("menu.operations"))
 
         math_action = QAction(self._t("menu.operations.math"), self)
-        math_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
+        math_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
         math_action.triggered.connect(self._on_op_math)
         operations_menu.addAction(math_action)
 
@@ -241,13 +315,18 @@ class MainWindow(QMainWindow, ThemeableMixin):
         append_action.triggered.connect(self._on_op_append)
         operations_menu.addAction(append_action)
 
-        drop_dup_action = QAction("Drop Duplicates", self)
-        drop_dup_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_BrowserStop))
+        drop_dup_action = QAction(self._t("menu.operations.drop_duplicates"), self)
+        drop_dup_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton))
         drop_dup_action.triggered.connect(self._on_op_drop_duplicates)
         operations_menu.addAction(drop_dup_action)
 
+        drop_null_action = QAction(self._t("menu.operations.drop_null"), self)
+        drop_null_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton))
+        drop_null_action.triggered.connect(self._on_op_drop_null)
+        operations_menu.addAction(drop_null_action)
+
         replace_action = QAction(self._t("menu.operations.replace"), self)
-        replace_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton))
+        replace_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
         replace_action.triggered.connect(self._on_op_replace)
         operations_menu.addAction(replace_action)
 
@@ -255,9 +334,15 @@ class MainWindow(QMainWindow, ThemeableMixin):
         help_menu = menubar.addMenu(self._t("menu.help"))
 
         expr_help_action = QAction(self._t("menu.help.expression"), self)
-        expr_help_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
+        expr_help_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogHelpButton))
         expr_help_action.triggered.connect(self._show_expression_help)
         help_menu.addAction(expr_help_action)
+
+        shortcuts_action = QAction(self._t("menu.help.shortcuts"), self)
+        shortcuts_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogListView))
+        shortcuts_action.setShortcut("Ctrl+/")
+        shortcuts_action.triggered.connect(self._show_shortcuts)
+        help_menu.addAction(shortcuts_action)
 
         about_action = QAction(self._t("menu.help.about"), self)
         about_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
@@ -357,6 +442,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
             logger.debug(f"Switching from tab '{current.name}' (page {self._current_page})")
             current.current_page = self._current_page
             current.sql_query = self._query_editor.get_query()
+            current.sort_column = self._data_table._sort_column
+            current.sort_ascending = self._data_table._sort_ascending
             self._data_table.set_edit_queue(None)
 
         self._active_tab_index = index
@@ -368,6 +455,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         # Restore new tab state
         self._current_page = new_tab.current_page
+        self._data_table._sort_column = new_tab.sort_column
+        self._data_table._sort_ascending = new_tab.sort_ascending
         self._data_table.set_edit_queue(new_tab.edit_queue)
         self._query_editor.set_query(new_tab.sql_query)
         self._query_editor.update_completions(
@@ -386,6 +475,10 @@ class MainWindow(QMainWindow, ThemeableMixin):
         # Update tab bar visuals
         self._tab_bar.set_tabs([t.name for t in self._tabs])
         self._tab_bar.set_active_index(index)
+
+        # Refresh search dialog (if open) with the new engine
+        if self._search_dialog is not None and self._search_dialog.isVisible():
+            self._search_dialog.set_engine(new_tab.engine)
 
         # Load data
         self._load_page()
@@ -463,6 +556,16 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         logger.debug(f"Page {self._current_page} loaded: {len(df)} rows, base_query={is_base}")
         self._update_status_bar()
+
+        # Complete any deferred search-jump now that the page is in the table.
+        if self._pending_search_jump is not None:
+            row_in_page, col_name = self._pending_search_jump
+            logger.info(
+                f"[search] _on_page_loaded: completing deferred jump to "
+                f"row_in_page={row_in_page}, col='{col_name}'"
+            )
+            self._pending_search_jump = None
+            self._select_search_cell(row_in_page, col_name)
 
     def _on_query_error(self, error_msg: str) -> None:
         self._pending_step = None
@@ -720,6 +823,227 @@ class MainWindow(QMainWindow, ThemeableMixin):
         dialog = AboutDialog(self._container.translator, self)
         dialog.exec()
 
+    # ── Keyboard shortcuts & Find-in-table ──────────────────────────────────
+    def _install_shortcuts(self) -> None:
+        from PyQt6.QtGui import QShortcut, QKeySequence
+
+        # Ctrl+Shift+F kept as alias so muscle memory still works.
+        search_alias_sc = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        search_alias_sc.activated.connect(self._open_search_dialog_from_shortcut)
+
+        cheat_sc = QShortcut(QKeySequence("Ctrl+/"), self)
+        cheat_sc.activated.connect(self._show_shortcuts)
+        logger.info(
+            "[shortcuts] installed: Ctrl+Shift+F=Search, Ctrl+/=Shortcuts cheatsheet. "
+            "Ctrl+F bound via Edit menu QAction."
+        )
+
+    def _open_search_dialog_from_shortcut(self) -> None:
+        logger.info("[shortcut] Ctrl+Shift+F pressed -> opening search dialog")
+        self._open_search_dialog()
+
+    def _open_search_dialog_from_menu(self) -> None:
+        logger.info("[menu] Edit > Find / Ctrl+F -> opening search dialog")
+        self._open_search_dialog()
+
+    def _find_next_from_menu(self) -> None:
+        logger.info("[menu] Find Next (F3)")
+        if self._search_dialog is None or not self._search_dialog.isVisible():
+            self._open_search_dialog()
+            return
+        self._search_dialog._on_next()
+
+    def _find_prev_from_menu(self) -> None:
+        logger.info("[menu] Find Previous (Shift+F3)")
+        if self._search_dialog is None or not self._search_dialog.isVisible():
+            self._open_search_dialog()
+            return
+        self._search_dialog._on_prev()
+
+    def _open_search_dialog(self) -> None:
+        tab = self._active_tab()
+        if not tab:
+            QMessageBox.information(
+                self,
+                self._t("search.menu_msgbox.title"),
+                self._t("search.menu_msgbox.no_file"),
+            )
+            return
+        if self._search_dialog is None:
+            self._search_dialog = SearchDialog(self._t, self)
+            self._search_dialog.jump_requested.connect(self._search_jump)
+        logger.info(
+            f"[search] opening dialog: tab='{tab.name}', "
+            f"engine.total_rows={tab.engine.total_rows}, "
+            f"page={self._current_page}, table_rows={self._data_table.rowCount()}"
+        )
+        self._search_dialog.set_engine(tab.engine)
+
+        # Anchor at the current table cursor so the first Next/Prev moves
+        # forward/backward from where the user is looking.
+        page_size = tab.engine.page_size
+        page_offset = (self._current_page - 1) * page_size
+        cur_row = self._data_table.currentRow()
+        cur_col = self._data_table.currentColumn()
+        anchor_row = page_offset + cur_row if cur_row >= 0 else None
+        anchor_col = cur_col if cur_col >= 0 else None
+        self._search_dialog.set_initial_anchor(anchor_row, anchor_col)
+
+        preset = ""
+        selected = self._data_table.selectedItems()
+        if selected and selected[0].text() and len(selected[0].text()) < 80:
+            preset = selected[0].text()
+
+        # Position near top-right of main window so dialog isn't hidden.
+        parent_rect = self.geometry()
+        dialog_w = 560
+        dialog_h = 260
+        target_x = max(0, parent_rect.x() + parent_rect.width() - dialog_w - 40)
+        target_y = parent_rect.y() + 80
+        self._search_dialog.resize(dialog_w, dialog_h)
+        self._search_dialog.move(target_x, target_y)
+
+        self._search_dialog.show()
+        self._search_dialog.raise_()
+        self._search_dialog.activateWindow()
+        self._search_dialog.focus_input(preset)
+        logger.info(
+            f"[search] dialog shown at ({target_x}, {target_y}), "
+            f"visible={self._search_dialog.isVisible()}, "
+            f"active={self._search_dialog.isActiveWindow()}"
+        )
+
+    def _search_jump(self, absolute_row: int, column_name: str) -> None:
+        tab = self._active_tab()
+        if not tab:
+            logger.warning("[search] _search_jump: no active tab")
+            return
+        page_size = tab.engine.page_size
+        target_page = (absolute_row // page_size) + 1
+        row_in_page = absolute_row % page_size
+        logger.info(
+            f"[search] _search_jump: absolute_row={absolute_row}, col='{column_name}', "
+            f"target_page={target_page} (current={self._current_page}), "
+            f"row_in_page={row_in_page}"
+        )
+
+        if target_page != self._current_page:
+            self._pending_search_jump = (row_in_page, column_name)
+            self._current_page = target_page
+            logger.debug(
+                f"[search] cross-page jump; deferring select until page {target_page} loads"
+            )
+            self._load_page()
+            return
+
+        self._select_search_cell(row_in_page, column_name)
+
+    def _select_search_cell(self, row_in_page: int, column_name: str) -> None:
+        """Select and scroll-to the cell on the currently loaded page."""
+        col_idx = -1
+        for i in range(self._data_table.columnCount()):
+            item = self._data_table.horizontalHeaderItem(i)
+            if item and item.text() == column_name:
+                col_idx = i
+                break
+
+        rc = self._data_table.rowCount()
+        cc = self._data_table.columnCount()
+        if not (0 <= row_in_page < rc) or col_idx < 0:
+            logger.warning(
+                f"[search] _select_search_cell out of range: "
+                f"row_in_page={row_in_page}, col='{column_name}', "
+                f"col_idx={col_idx}, rowCount={rc}, colCount={cc}"
+            )
+            return
+
+        self._data_table.setCurrentCell(row_in_page, col_idx)
+        cell = self._data_table.item(row_in_page, col_idx)
+        if cell:
+            self._data_table.scrollToItem(cell)
+        page_size = self._active_tab().engine.page_size
+        absolute = (self._current_page - 1) * page_size + row_in_page
+        logger.info(
+            f"[search] _select_search_cell: selected ({row_in_page}, {col_idx}), "
+            f"absolute row {absolute + 1}, col='{column_name}'"
+        )
+        self.statusBar().showMessage(
+            self._t("search.statusbar.jumped", row=absolute + 1, column=column_name)
+        )
+
+    def _find_open(self) -> None:
+        preset = ""
+        selected = self._data_table.selectedItems()
+        if selected:
+            text = selected[0].text()
+            if text and len(text) < 80:
+                preset = text
+        self._find_bar.show()
+        self._find_bar.focus_input(preset)
+        if preset:
+            self._find_run()
+
+    def _find_close(self) -> None:
+        self._find_bar.hide()
+        self._find_matches = []
+        self._find_index = -1
+        self._data_table.setFocus()
+
+    def _find_run(self) -> None:
+        query = self._find_bar.query
+        self._find_matches = []
+        self._find_index = -1
+        if not query:
+            self._find_bar.set_match_count(0, 0)
+            return
+
+        case = self._find_bar.case_sensitive
+        whole = self._find_bar.whole_cell
+        needle = query if case else query.lower()
+
+        rows = self._data_table.rowCount()
+        cols = self._data_table.columnCount()
+        for r in range(rows):
+            for c in range(cols):
+                item = self._data_table.item(r, c)
+                if item is None:
+                    continue
+                hay = item.text() if case else item.text().lower()
+                if whole:
+                    matched = hay == needle
+                else:
+                    matched = needle in hay
+                if matched:
+                    self._find_matches.append((r, c))
+
+        if self._find_matches:
+            self._find_index = 0
+            self._find_jump_to_current()
+        self._find_bar.set_match_count(
+            self._find_index + 1 if self._find_matches else 0,
+            len(self._find_matches),
+        )
+
+    def _find_step(self, direction: int) -> None:
+        if not self._find_matches:
+            if self._find_bar.isVisible():
+                self._find_run()
+            return
+        self._find_index = (self._find_index + direction) % len(self._find_matches)
+        self._find_jump_to_current()
+        self._find_bar.set_match_count(self._find_index + 1, len(self._find_matches))
+
+    def _find_jump_to_current(self) -> None:
+        r, c = self._find_matches[self._find_index]
+        self._data_table.setCurrentCell(r, c)
+        item = self._data_table.item(r, c)
+        if item:
+            self._data_table.scrollToItem(item)
+
+    def _show_shortcuts(self) -> None:
+        from parvu.presentation.dialogs.shortcuts_dialog import ShortcutsDialog
+        ShortcutsDialog(self._t, self).exec()
+
     def _update_recents_menu(self) -> None:
         self._recents_menu.clear()
         file_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
@@ -765,17 +1089,21 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self.statusBar().showMessage(page_info)
 
     def _save_file(self) -> None:
-        """Save edits to the original file."""
+        """Save edits and applied transforms to the original file."""
         tab = self._active_tab()
         if not tab:
             return
-        if not tab.edit_queue.is_dirty():
-            logger.debug("Save file: no unsaved changes")
+        if not tab.edit_queue.is_dirty() and not tab.applied_steps:
+            logger.debug("Save file: no unsaved changes (no edits and no transforms)")
             return
         if not tab.file_path or not tab.file_path.exists():
             self._save_file_as()
             return
-        logger.info(f"Saving edits to original file: {tab.file_path}")
+        logger.info(
+            f"Saving to original file: {tab.file_path} "
+            f"(edits={tab.edit_queue.edited_cells_count()}, "
+            f"transforms={len(tab.applied_steps)})"
+        )
         self._do_save(tab.file_path)
 
     def _save_file_as(self) -> None:
@@ -795,32 +1123,93 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._do_save(Path(file_path))
 
     def _do_save(self, output_path: Path) -> None:
-        """Perform the actual save operation in a background thread."""
+        """Save the active tab's state (transforms + edits) to ``output_path``.
+
+        Three paths:
+        - Transforms only: synchronous DuckDB COPY (fast, single-threaded).
+        - Transforms + edits: synchronous COPY to a temp file, then pandas
+          applies edits and rewrites.
+        - Edits only: legacy background worker reads the original file with
+          pandas, applies edits, writes.
+        """
         tab = self._active_tab()
         if not tab:
             return
         edits = tab.edit_queue.all_edits()
-        if not edits:
-            logger.debug("Do save: no edits to save")
+        has_transforms = bool(tab.applied_steps)
+        if not edits and not has_transforms:
+            logger.debug("Do save: nothing to save (no edits, no transforms)")
             return
 
-        logger.info(f"Starting background save ({len(edits)} edits) -> {output_path}")
+        logger.info(
+            f"Starting save -> {output_path} "
+            f"(edits={len(edits)}, transforms={len(tab.applied_steps)})"
+        )
         self.statusBar().showMessage(self._t("status.saving"))
+
+        if has_transforms:
+            # Run synchronously to avoid sharing the DuckDB connection with a
+            # QThread (DuckDB connections are not thread-safe).
+            if hasattr(self, "_worker") and self._worker is not None and self._worker.isRunning():
+                self._worker.wait(10000)
+            self._save_progress = QProgressDialog(
+                self._t("status.saving"), None, 0, 0, self
+            )
+            self._save_progress.setWindowModality(Qt.WindowModality.WindowModal)
+            self._save_progress.setCancelButton(None)
+            self._save_progress.show()
+            QApplication.processEvents()
+            try:
+                if edits:
+                    # Transforms + edits: COPY transformed result to a temp
+                    # file, then read it with pandas, apply edits, rewrite.
+                    import tempfile
+                    from parvu.core.edit_queue import (
+                        apply_edits_to_dataframe,
+                        read_source_file,
+                        write_source_file,
+                    )
+                    suffix = output_path.suffix or ".parquet"
+                    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+                    tmp.close()
+                    tmp_path = Path(tmp.name)
+                    try:
+                        tab.engine.export_results(tmp_path)
+                        df = read_source_file(tmp_path)
+                        df = apply_edits_to_dataframe(df, edits)
+                        write_source_file(df, output_path)
+                        del df
+                    finally:
+                        tmp_path.unlink(missing_ok=True)
+                else:
+                    # Transforms only: direct DuckDB COPY to the output file.
+                    tab.engine.export_results(output_path)
+            except Exception as e:
+                self._save_progress.close()
+                self._save_progress = None
+                logger.exception(f"Transformed save failed: {e}")
+                self._on_save_error(str(e))
+                return
+            self._on_save_finished(output_path)
+            return
+
+        # Edits-only fast path — pandas read of original file, apply edits, write back.
         self._save_progress = QProgressDialog(
             self._t("status.saving"), None, 0, 0, self
         )
         self._save_progress.setWindowModality(Qt.WindowModality.WindowModal)
         self._save_progress.setCancelButton(None)
         self._save_progress.show()
-
         self._save_worker = SaveWorker(output_path, edits)
         self._save_worker.finished.connect(lambda: self._on_save_finished(output_path))
         self._save_worker.error.connect(self._on_save_error)
         self._save_worker.start()
 
     def _on_save_finished(self, output_path: Path) -> None:
-        """Called when background save completes successfully."""
-        self._save_progress.close()
+        """Called when save completes successfully (sync or background)."""
+        if getattr(self, "_save_progress", None) is not None:
+            self._save_progress.close()
+            self._save_progress = None
         tab = self._active_tab()
         if tab:
             tab.edit_queue.clear()
@@ -852,8 +1241,10 @@ class MainWindow(QMainWindow, ThemeableMixin):
         logger.info(f"Saved edits to {output_path}")
 
     def _on_save_error(self, error_msg: str) -> None:
-        """Called when background save fails."""
-        self._save_progress.close()
+        """Called when save fails (sync or background)."""
+        if getattr(self, "_save_progress", None) is not None:
+            self._save_progress.close()
+            self._save_progress = None
         QMessageBox.critical(
             self,
             self._t("error.save_failed"),
@@ -1169,6 +1560,69 @@ class MainWindow(QMainWindow, ThemeableMixin):
         """Open replace dialog from column context menu and apply the transform."""
         self._run_replace_dialog(selected_column=column_name)
 
+    def _on_op_drop_null(self) -> None:
+        """Open drop-null dialog from Operations menu."""
+        self._run_drop_null_dialog()
+
+    def _on_column_drop_null(self, column_name: str) -> None:
+        """Open drop-null dialog from column header context menu."""
+        self._run_drop_null_dialog(selected_column=column_name)
+
+    def _run_drop_null_dialog(self, selected_column: str | None = None) -> None:
+        """Shared helper to run DropNullDialog and apply the transform."""
+        tab = self._active_tab()
+        if not tab:
+            return
+        cols = tab.engine.get_columns()
+        if not cols:
+            return
+        dialog = DropNullDialog(
+            tab.name, cols,
+            translator=self._t,
+            selected_column=selected_column,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.get_result()
+        if result is None:
+            return
+        col, null_value = result
+        query, value_repr = self._build_drop_null_query(tab, col, null_value)
+        step = self._t("step.drop_null", column=col, value=value_repr)
+        self._apply_transform(tab, query, step)
+
+    @staticmethod
+    def _build_drop_null_query(tab, col: str, null_value: object) -> tuple[str, str]:
+        """Build the SQL for DROP_NULL and a human-readable value label.
+
+        Returns (sql, value_repr).
+        """
+        quoted_col = f'"{col}"'
+        if null_value is None:
+            sql = (
+                f"SELECT * FROM ({tab.engine.current_query}) "
+                f"WHERE {quoted_col} IS NOT NULL"
+            )
+            return sql, "NULL"
+        # User-typed sentinel: try numeric first, fall back to quoted string.
+        raw = str(null_value)
+        try:
+            int(raw)
+            literal_sql = raw
+        except ValueError:
+            try:
+                float(raw)
+                literal_sql = raw
+            except ValueError:
+                escaped = raw.replace("'", "''")
+                literal_sql = f"'{escaped}'"
+        sql = (
+            f"SELECT * FROM ({tab.engine.current_query}) "
+            f"WHERE {quoted_col} IS NULL OR {quoted_col} <> {literal_sql}"
+        )
+        return sql, raw
+
     def _run_replace_dialog(self, selected_column: str | None = None) -> None:
         """Shared helper to run ReplaceDialog and apply the transform."""
         tab = self._active_tab()
@@ -1247,9 +1701,9 @@ class MainWindow(QMainWindow, ThemeableMixin):
             if tabs_with_transforms:
                 names = ", ".join(t.name for t in tabs_with_transforms)
                 dialog = ConfirmCloseDialog(
-                    f"The following tabs have applied transforms that will be lost:\n\n{names}\n\n"
-                    "Are you sure you want to close?",
+                    self._t("dialog.confirm_close.message", tabs=names),
                     parent=self,
+                    translator=self._t,
                 )
                 dialog.exec()
                 result = dialog.get_result()
@@ -1265,8 +1719,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
                     self._container.settings_manager.save()
                     QMessageBox.information(
                         self,
-                        "Setting Saved",
-                        "You can re-enable this warning in Settings → General.",
+                        self._t("dialog.confirm_close.setting_saved"),
+                        self._t("dialog.confirm_close.setting_saved_msg"),
                     )
 
         for tab in self._tabs:

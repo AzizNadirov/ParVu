@@ -67,23 +67,40 @@ class ExportWorker(QThread):
 
 
 class SaveWorker(QThread):
-    """Background thread for saving edits to disk."""
+    """Background thread for saving the active result to disk.
+
+    Two source modes:
+    - Legacy file mode (``source_df`` None): reads ``output_path`` directly
+      via pandas inside the worker, applies cell edits, writes back. Used
+      when only cell edits are pending — no transforms applied.
+    - DataFrame mode (``source_df`` provided): the caller has already
+      materialized the current engine query on the main thread (DuckDB
+      connections are not safe across threads). The worker just applies
+      edits and writes.
+    """
 
     finished = pyqtSignal()
     error = pyqtSignal(str)
 
-    def __init__(self, output_path: Path, edits: list[CellEdit]):
+    def __init__(
+        self,
+        output_path: Path,
+        edits: list[CellEdit],
+        source_df=None,
+    ):
         super().__init__()
         self._output_path = output_path
         self._edits = edits
+        self._source_df = source_df
 
     def run(self) -> None:
-        """Read, apply edits, write — all in background."""
         try:
-            df = read_source_file(self._output_path)
+            if self._source_df is not None:
+                df = self._source_df
+            else:
+                df = read_source_file(self._output_path)
             df = apply_edits_to_dataframe(df, self._edits)
             write_source_file(df, self._output_path)
-            # Explicitly free memory
             del df
             gc.collect()
             self.finished.emit()

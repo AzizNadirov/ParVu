@@ -3,11 +3,16 @@ Confirm Close Dialog — warns about applied transforms on exit.
 """
 from __future__ import annotations
 
+from typing import Callable
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QCheckBox, QPushButton,
 )
-from PyQt6.QtCore import Qt
+
+
+def _identity(key: str, **_kw) -> str:
+    return key
 
 
 class ConfirmCloseDialog(QDialog):
@@ -17,9 +22,15 @@ class ConfirmCloseDialog(QDialog):
     CLOSE_ANYWAY = 2
     CANCEL = 0
 
-    def __init__(self, message: str, parent=None):
+    def __init__(
+        self,
+        message: str,
+        parent=None,
+        translator: Callable[..., str] | None = None,
+    ):
         super().__init__(parent)
-        self.setWindowTitle("Confirm Close")
+        self._t: Callable[..., str] = translator or _identity
+        self.setWindowTitle(self._t("dialog.confirm_close.title"))
         self.setMinimumWidth(380)
         self._result = ConfirmCloseDialog.CANCEL
         self._setup_ui(message)
@@ -32,21 +43,21 @@ class ConfirmCloseDialog(QDialog):
         self._label.setWordWrap(True)
         layout.addWidget(self._label)
 
-        self._dont_ask = QCheckBox("Do not ask again")
+        self._dont_ask = QCheckBox(self._t("dialog.confirm_close.dont_ask"))
         layout.addWidget(self._dont_ask)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(self._t("btn.cancel"))
         cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(cancel_btn)
 
-        close_btn = QPushButton("Close anyway")
+        close_btn = QPushButton(self._t("dialog.confirm_close.close_anyway"))
         close_btn.clicked.connect(self._on_close_anyway)
         btn_row.addWidget(close_btn)
 
-        save_btn = QPushButton("Save & Close")
+        save_btn = QPushButton(self._t("dialog.confirm_close.save_and_close"))
         save_btn.setDefault(True)
         save_btn.clicked.connect(self._on_save_and_close)
         btn_row.addWidget(save_btn)

@@ -59,6 +59,28 @@ class IQueryEngine(Protocol):
         """Get unique values for a column."""
         ...
 
+    def find_next_match(
+        self,
+        query: str,
+        column: str | None = None,
+        after_row: int | None = None,
+        after_col_index: int | None = None,
+        direction: str = "next",
+        case_sensitive: bool = False,
+        whole_cell: bool = False,
+        use_regex: bool = False,
+    ) -> tuple[int, int, str, str] | None:
+        """Find one match relative to an anchor (row, col_index).
+
+        ``direction`` is ``"next"`` (strictly after the anchor, ascending order)
+        or ``"prev"`` (strictly before, descending). With no anchor the search
+        returns the first/last match in the table.
+
+        Returns ``(absolute_row, column_index, column_name, value)`` or ``None``
+        if no further match exists.
+        """
+        ...
+
     def export_results(self, output_path: Path) -> bool:
         """Export current query results to file."""
         ...

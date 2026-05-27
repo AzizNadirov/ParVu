@@ -11,7 +11,7 @@ import sqlglot
 from sqlglot import exp
 from loguru import logger
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates, Replace
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates, DropNull, Replace
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.types import LogicalType
 
@@ -65,6 +65,24 @@ class Compiler:
                 expressions=[star],
                 qualify=exp.Qualify(this=qualify_expr),
             ).from_(table_id)
+
+        if isinstance(expr, DropNull):
+            # SELECT * FROM table WHERE col IS NOT NULL          (null_value is None)
+            # SELECT * FROM table WHERE col IS NULL OR col <> v  (sentinel: keep real nulls)
+            table_id = exp.to_identifier(expr.table)
+            col_expr = exp.Column(this=exp.to_identifier(expr.column))
+            if expr.null_value is None:
+                where_clause = exp.Not(this=exp.Is(this=col_expr, expression=exp.Null()))
+            else:
+                value_literal = (
+                    exp.Literal.string(expr.null_value)
+                    if isinstance(expr.null_value, str)
+                    else exp.Literal.number(expr.null_value)
+                )
+                neq = exp.NEQ(this=col_expr, expression=value_literal)
+                is_null = exp.Is(this=col_expr, expression=exp.Null())
+                where_clause = exp.Or(this=is_null, expression=neq)
+            return exp.Select(expressions=[exp.Star()]).from_(table_id).where(where_clause)
 
         if isinstance(expr, Replace):
             text = self._to_sqlglot(expr.text)

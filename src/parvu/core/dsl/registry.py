@@ -277,6 +277,16 @@ class FunctionRegistry:
             "Remove duplicate rows based on column subset.",
             "DROP_DUPLICATES(sales[id], sales[name], 'first')",
         ))
+        self.register(FunctionDef(
+            "DROP_NULL", [
+                ParamDef("column", LT.UNKNOWN),
+                ParamDef("null_value", LT.UNKNOWN, required=False),
+            ], LT.QUERY,
+            "Drop rows where a column equals the null sentinel. "
+            "With no sentinel, drops SQL NULLs. With a sentinel value, "
+            "drops only rows whose column equals that value (real NULLs are kept).",
+            "DROP_NULL(sales[note])  or  DROP_NULL(sales[score], -1)",
+        ))
 
         # Register method mappings
         from parvu.core.dsl.types import methods_for_type

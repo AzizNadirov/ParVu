@@ -85,3 +85,19 @@ class Replace(Expr):
     with_value: Expr
     case_sensitive: bool = True
     regex: bool = False
+
+
+@dataclass(kw_only=True)
+class DropNull(Expr):
+    """Filter rows where a column equals the null sentinel.
+
+    ``null_value`` semantics:
+    - ``None`` (default): drop rows where ``column IS NULL``.
+    - any other value:    drop rows where ``column = null_value``.
+
+    Real SQL NULLs are NOT also dropped when a sentinel is supplied; chain
+    another DropNull call (with no sentinel) to remove them too.
+    """
+    table: str
+    column: str
+    null_value: Any = None
