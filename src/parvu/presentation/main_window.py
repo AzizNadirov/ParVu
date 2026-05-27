@@ -67,8 +67,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._shared_conn = duckdb.connect(":memory:")
 
         self._setup_ui()
-        self._setup_menu()
         self._apply_theme()
+        self._setup_menu()
 
         if file_path:
             self._add_tab(file_path)
@@ -127,7 +127,6 @@ class MainWindow(QMainWindow, ThemeableMixin):
         layout.addWidget(self._steps_panel)
 
         # Data table
-        layout.addWidget(QLabel(self._t("label.results")))
         self._data_table = DataTableView(theme=self._container.theme_manager.current_theme)
         self._data_table.sort_requested.connect(self._on_sort)
         self._data_table.unique_values_requested.connect(self._on_unique_values)
@@ -160,7 +159,6 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         # ── File Menu ──
         file_menu = menubar.addMenu(self._t("menu.file"))
-        file_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirIcon))
 
         new_action = QAction(self._t("menu.file.new_window"), self)
         new_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder))
@@ -212,7 +210,6 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         # ── Operations Menu ──
         operations_menu = menubar.addMenu(self._t("menu.operations"))
-        operations_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_CommandLink))
 
         math_action = QAction(self._t("menu.operations.math"), self)
         math_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
@@ -231,7 +228,6 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         # ── Help Menu ──
         help_menu = menubar.addMenu(self._t("menu.help"))
-        help_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxQuestion))
 
         about_action = QAction(self._t("menu.help.about"), self)
         about_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
@@ -296,6 +292,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
             self._tabs.append(tab)
             self._switch_tab(len(self._tabs) - 1)
+            self._file_toolbar.setVisible(False)
 
             self._container.file_service.add_to_recents(file_path)
             self._update_recents_menu()
@@ -377,6 +374,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
             from parvu.core.dsl.catalog import Catalog
             self._query_editor.set_expression_catalog(Catalog())
             self._file_toolbar.set_path("")
+            self._file_toolbar.setVisible(True)
             self._query_toolbar.set_enabled(False)
             self._tab_bar.set_tabs([])
             self.statusBar().showMessage(self._t("status.ready"))
