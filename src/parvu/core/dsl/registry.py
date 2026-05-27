@@ -258,7 +258,8 @@ class FunctionRegistry:
         # Table-level operations
         self.register(FunctionDef(
             "DROP_DUPLICATES", [
-                ParamDef("columns", LT.UNKNOWN),
+                ParamDef("table", LT.UNKNOWN),
+                ParamDef("columns", LT.UNKNOWN, required=False),
                 ParamDef("keep", LT.TEXT, required=False),
             ], LT.QUERY,
             "Remove duplicate rows based on column subset.",

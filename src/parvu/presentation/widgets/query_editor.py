@@ -91,6 +91,7 @@ class QueryEditor(QWidget):
         self._expr_editor = ExpressionEditor(
             self._catalog or Catalog(),
             self._registry,
+            theme=self._theme,
         )
         self._expr_editor.setPlaceholderText(
             "Type a DSL expression, e.g. SUM(sales[revenue]) / COUNT(sales[id])"
@@ -199,7 +200,9 @@ class QueryEditor(QWidget):
 
     def apply_theme(self, theme: Theme) -> None:
         """Apply theme to editors."""
+        self._theme = theme
         self._sql_editor.apply_theme(theme)
+        self._expr_editor.apply_theme(theme)
 
     def set_expression_catalog(self, catalog: Catalog) -> None:
         """Update the catalog used for expression autocomplete."""
