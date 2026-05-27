@@ -46,6 +46,7 @@ TRANSLATIONS_AZ = {
     # Labels & Placeholders
     "label.file_placeholder": "Parquet, CSV və ya JSON faylı seçin...",
     "label.sql_query": "SQL sorğusu (Cədvəl: {table_name}):",
+    "label.expression_query": "İfade sorğusu (Cədvəl: {table_name}):",
     "label.results": "Nəticələr:",
     "label.page": "Səhifə: -",
     "label.page_info": "Səhifə: {page}",

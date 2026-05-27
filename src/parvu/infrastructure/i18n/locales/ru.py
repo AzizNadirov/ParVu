@@ -46,6 +46,7 @@ TRANSLATIONS_RU = {
     # Labels & Placeholders
     "label.file_placeholder": "Выберите файл Parquet, CSV или JSON...",
     "label.sql_query": "SQL запрос (Таблица: {table_name}):",
+    "label.expression_query": "Выражение (Таблица: {table_name}):",
     "label.results": "Результаты:",
     "label.page": "Страница: -",
     "label.page_info": "Страница: {page}",

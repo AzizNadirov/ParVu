@@ -67,13 +67,14 @@ class CrashReportDialog(QDialog):
         layout.addWidget(report)
 
         instructions = QLabel(
-            f"1. Copy the error details above\n"
-            f"2. Send an email to: <b>{self._settings.bug_report_email}</b>\n"
-            f"3. Attach the log file: <b>{self._log_file.name}</b>\n"
-            f"   (Located at: {self._log_file.parent})\n\n"
-            f"Please include:\n"
-            f"  • What you were doing when the error occurred\n"
-            f"  • Steps to reproduce the issue\n"
+            f"<b>📧 Please send this report to:</b> <a href='mailto:{self._settings.bug_report_email}'>{self._settings.bug_report_email}</a><br><br>"
+            f"1. Copy the error details above<br>"
+            f"2. Send an email to the address above<br>"
+            f"3. Attach the log file: <b>{self._log_file.name}</b><br>"
+            f"   (Located at: {self._log_file.parent})<br><br>"
+            f"Please include:<br>"
+            f"  • What you were doing when the error occurred<br>"
+            f"  • Steps to reproduce the issue<br>"
             f"  • The error details and log file"
         )
         instructions.setWordWrap(True)
@@ -84,11 +85,15 @@ class CrashReportDialog(QDialog):
         layout.addWidget(instructions)
 
         btn_layout = QHBoxLayout()
-        copy_btn = QPushButton("Copy Error Details")
+        copy_btn = QPushButton("📋 Copy Error Details")
         copy_btn.clicked.connect(self._copy_error)
         btn_layout.addWidget(copy_btn)
 
-        open_btn = QPushButton("Open Logs Folder")
+        email_btn = QPushButton("📧 Open Email Client")
+        email_btn.clicked.connect(self._open_email)
+        btn_layout.addWidget(email_btn)
+
+        open_btn = QPushButton("📁 Open Logs Folder")
         open_btn.clicked.connect(self._open_logs)
         btn_layout.addWidget(open_btn)
         btn_layout.addStretch()
@@ -127,8 +132,34 @@ End of Error Report
         QMessageBox.information(
             self, "Copied",
             f"Error details copied to clipboard.\n\n"
-            f"Send to: {self._settings.bug_report_email}"
+            f"Please send to: {self._settings.bug_report_email}"
         )
+
+    def _open_email(self) -> None:
+        """Open default email client with pre-filled message."""
+        import urllib.parse
+        subject = urllib.parse.quote("ParVu Crash Report")
+        body = urllib.parse.quote(
+            f"ParVu crashed.\n\n"
+            f"Log file: {self._log_file}\n\n"
+            f"Error details:\n{self._error_text.toPlainText()[:2000]}"
+        )
+        import subprocess
+        import sys
+        mailto = f"mailto:{self._settings.bug_report_email}?subject={subject}&body={body}"
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["start", mailto], shell=True)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", mailto])
+            else:
+                subprocess.run(["xdg-open", mailto])
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Error",
+                f"Could not open email client:\n{e}\n\n"
+                f"Please manually send an email to:\n{self._settings.bug_report_email}"
+            )
 
     def _open_logs(self) -> None:
         logs_path = self._log_file.parent

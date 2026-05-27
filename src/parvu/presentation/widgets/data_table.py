@@ -82,6 +82,7 @@ class DataTableView(QTableWidget):
 
     def load_data(self, df: pd.DataFrame) -> None:
         """Load DataFrame into table."""
+        logger.debug(f"DataTable loading {len(df)} rows x {len(df.columns)} cols")
         self._current_data = df
         self.setRowCount(len(df))
         self.setColumnCount(len(df.columns))
@@ -156,6 +157,7 @@ class DataTableView(QTableWidget):
             return
 
         column_name = self.horizontalHeaderItem(column).text()
+        logger.debug(f"Header context menu for column '{column_name}'")
         menu = QMenu(self)
 
         copy_name = QAction("Copy Column Name", self)

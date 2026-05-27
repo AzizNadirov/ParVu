@@ -34,9 +34,9 @@ class SessionService:
         if self._container.settings.enable_crash_reporting and self._container.log_file:
             try:
                 from parvu.presentation.dialogs.crash_reporter import show_crash_report
-                show_crash_report(exc_value, self._container.log_file)
-            except Exception:
-                pass
+                show_crash_report(exc_value, self._container.log_file, self._container.settings)
+            except Exception as e:
+                logger.error(f"Failed to show crash report: {e}")
 
         # Call original hook
         self._original_excepthook(exc_type, exc_value, exc_traceback)

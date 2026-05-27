@@ -37,6 +37,7 @@ class TableTab:
     edit_queue: EditQueue = field(default_factory=EditQueue)
     current_page: int = 1
     sql_query: str = ""
+    applied_steps: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.sql_query:

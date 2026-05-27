@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loguru import logger
+
 from parvu.core.interfaces import IFileAdapter
 from parvu.core.exceptions import FileFormatError
 
@@ -87,7 +89,9 @@ class FileAdapterRegistry:
         """Find an adapter for the given file path."""
         for adapter in self._adapters:
             if adapter.can_handle(file_path):
+                logger.debug(f"Selected adapter {type(adapter).__name__} for {file_path}")
                 return adapter
+        logger.error(f"Unsupported file format: {file_path.suffix}")
         raise FileFormatError(
             f"Unsupported file format: {file_path.suffix}. "
             f"Supported: {', '.join(self.supported_extensions)}"

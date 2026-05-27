@@ -6,12 +6,13 @@ Supports multiple data-table tabs (Excel-style) with a shared OPSPan.
 """
 from __future__ import annotations
 
+import duckdb
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QFileDialog,
     QMessageBox, QProgressDialog, QApplication, QLabel,
-    QTableWidget, QInputDialog,
+    QTableWidget, QInputDialog, QDialog,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QAction
@@ -29,7 +30,7 @@ from parvu.presentation.themeable import ThemeableMixin
 from parvu.presentation.workers import QueryWorker, SaveWorker, UniqueValuesWorker
 from parvu.presentation.widgets.file_toolbar import FileToolbar
 from parvu.presentation.widgets.query_toolbar import QueryToolbar
-from parvu.presentation.widgets.sql_editor import SQLEditor
+from parvu.presentation.widgets.query_editor import QueryEditor
 from parvu.presentation.widgets.data_table import DataTableView
 from parvu.presentation.widgets.pagination_bar import PaginationBar
 from parvu.presentation.widgets.tab_bar import TabBar
@@ -41,6 +42,10 @@ from parvu.presentation.dialogs.about_dialog import AboutDialog
 from parvu.presentation.dialogs.table_info_dialog import TableInfoDialog
 from parvu.presentation.dialogs.unique_values_dialog import UniqueValuesDialog
 from parvu.presentation.dialogs.crash_reporter import CrashReportDialog
+from parvu.presentation.dialogs.expression_dialog import ExpressionDialog
+from parvu.presentation.dialogs.join_dialog import JoinDialog
+from parvu.presentation.dialogs.append_dialog import AppendDialog
+from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
 
 
 class MainWindow(QMainWindow, ThemeableMixin):
@@ -57,6 +62,9 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._active_tab_index: int = -1
         self._current_page: int = 1
         self._current_worker_tab: TableTab | None = None
+
+        # Shared DuckDB connection for multi-table operations
+        self._shared_conn = duckdb.connect(":memory:")
 
         self._setup_ui()
         self._setup_menu()
@@ -96,11 +104,15 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._file_toolbar.load_clicked.connect(self._load_from_input)
         layout.addWidget(self._file_toolbar)
 
-        # SQL Editor
-        layout.addWidget(QLabel(self._t("label.sql_query", table_name=self._container.settings.default_data_var_name)))
-        self._sql_editor = SQLEditor(theme=self._container.theme_manager.current_theme)
-        self._sql_editor.setMaximumHeight(100)
-        layout.addWidget(self._sql_editor)
+        # Query Editor
+        self._query_label = QLabel(self._t("label.sql_query", table_name=self._container.settings.default_data_var_name))
+        layout.addWidget(self._query_label)
+        self._query_editor = QueryEditor(
+            theme=self._container.theme_manager.current_theme,
+        )
+        self._query_editor.setMaximumHeight(140)
+        self._query_editor.mode_changed.connect(self._on_query_mode_changed)
+        layout.addWidget(self._query_editor)
 
         # Query toolbar
         self._query_toolbar = QueryToolbar()
@@ -113,7 +125,13 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._ops_pan = OPSPan()
         self._ops_pan.add_column_requested.connect(self._on_op_add_column)
         self._ops_pan.math_op_requested.connect(self._on_op_math)
+        self._ops_pan.join_requested.connect(self._on_op_join)
+        self._ops_pan.append_requested.connect(self._on_op_append)
         layout.addWidget(self._ops_pan)
+
+        # Applied Steps
+        self._steps_panel = AppliedStepsPanel()
+        layout.addWidget(self._steps_panel)
 
         # Data table
         layout.addWidget(QLabel(self._t("label.results")))
@@ -201,7 +219,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self.setStyleSheet(stylesheet)
         self.setMinimumSize(theme.layout.window_min_width, theme.layout.window_min_height)
 
-        self._sql_editor.apply_theme(theme)
+        self._query_editor.apply_theme(theme)
         self._data_table.apply_theme(theme)
 
     def _new_window(self) -> None:
@@ -216,13 +234,16 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._container.file_service.get_file_dialog_filter(),
         )
         if file_path:
+            logger.info(f"Browse selected file: {file_path}")
             self._add_tab(Path(file_path))
 
     def _load_from_input(self) -> None:
         path = self._file_toolbar.path
         if path:
+            logger.info(f"Load from input path: {path}")
             self._add_tab(Path(path))
         else:
+            logger.warning("Load from input: empty path")
             QMessageBox.warning(self, self._t("error.no_file"), self._t("error.no_file_msg"))
 
     def _add_tab(self, file_path: Path) -> None:
@@ -235,7 +256,15 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         try:
             name = slugify_name(file_path.stem)
-            engine = self._container.create_query_engine(file_path, table_name=name)
+
+            # Register file as a named view in the shared connection
+            adapter = self._container.file_adapter_registry.get_adapter(file_path)
+            reader_sql = adapter.build_reader_query(file_path)
+            self._shared_conn.execute(f"CREATE OR REPLACE VIEW {name} AS {reader_sql}")
+
+            engine = self._container.create_query_engine(
+                file_path, table_name=name, conn=self._shared_conn
+            )
             tab = TableTab(name=name, file_path=file_path, engine=engine)
 
             self._tabs.append(tab)
@@ -258,11 +287,11 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
     def _switch_tab(self, index: int) -> None:
         """Switch to the given tab index, saving/restoring per-tab state."""
-        # Save current tab state
         current = self._active_tab()
         if current:
+            logger.debug(f"Switching from tab '{current.name}' (page {self._current_page})")
             current.current_page = self._current_page
-            current.sql_query = self._sql_editor.get_query()
+            current.sql_query = self._query_editor.get_query()
             self._data_table.set_edit_queue(None)
 
         self._active_tab_index = index
@@ -270,15 +299,24 @@ class MainWindow(QMainWindow, ThemeableMixin):
         if not new_tab:
             return
 
+        logger.info(f"Switched to tab '{new_tab.name}' ({new_tab.engine.total_rows} rows)")
+
         # Restore new tab state
         self._current_page = new_tab.current_page
         self._data_table.set_edit_queue(new_tab.edit_queue)
-        self._sql_editor.set_query(new_tab.sql_query)
-        self._sql_editor.update_completions(
+        self._query_editor.set_query(new_tab.sql_query)
+        self._query_editor.update_completions(
             new_tab.engine.get_columns(), new_tab.name
         )
+        # Update expression catalog for autocomplete
+        from parvu.core.dsl.catalog import Catalog
+        catalog = Catalog()
+        catalog.register_tab(new_tab.name, new_tab.engine)
+        self._query_editor.set_expression_catalog(catalog)
+        self._on_query_mode_changed(self._query_editor.is_expression_mode)
         self._file_toolbar.set_path(str(new_tab.file_path) if new_tab.file_path else "")
         self._query_toolbar.set_enabled(True)
+        self._steps_panel.set_steps(new_tab.applied_steps)
 
         # Update tab bar visuals
         self._tab_bar.set_tabs([t.name for t in self._tabs])
@@ -292,11 +330,14 @@ class MainWindow(QMainWindow, ThemeableMixin):
         if not (0 <= index < len(self._tabs)):
             return
         tab = self._tabs[index]
+        logger.info(f"Closing tab '{tab.name}' (dirty={tab.is_dirty})")
         if tab.is_dirty:
-            self._active_tab_index = index  # make it active so user sees which tab
+            self._active_tab_index = index
             self._switch_tab(index)
             if not self._confirm_discard_unsaved():
+                logger.info(f"Close tab '{tab.name}' cancelled by user")
                 return
+        self._shared_conn.execute(f"DROP VIEW IF EXISTS {tab.name}")
         tab.engine.close()
         self._tabs.pop(index)
 
@@ -305,7 +346,9 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._data_table.setRowCount(0)
             self._data_table.setColumnCount(0)
             self._pagination.update_state(0, 0, 0)
-            self._sql_editor.set_query("")
+            self._query_editor.set_query("")
+            from parvu.core.dsl.catalog import Catalog
+            self._query_editor.set_expression_catalog(Catalog())
             self._file_toolbar.set_path("")
             self._query_toolbar.set_enabled(False)
             self._tab_bar.set_tabs([])
@@ -318,6 +361,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if not tab:
             return
+        logger.debug(f"Loading page {self._current_page} for tab '{tab.name}'" + (f" with query: {query[:60]}..." if query else ""))
         self.statusBar().showMessage(self._t("status.loading"))
         self._current_worker_tab = tab
         self._worker = QueryWorker(tab.engine, self._current_page, query)
@@ -328,7 +372,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
     def _on_page_loaded(self, df) -> None:
         tab = self._active_tab()
         if not tab or self._current_worker_tab is not tab:
-            return  # stale result from a different tab
+            logger.debug("Stale page load result ignored")
+            return
 
         offset = (self._current_page - 1) * tab.engine.page_size
         self._data_table.set_page_offset(offset)
@@ -336,12 +381,12 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._pagination.update_state(
             self._current_page, tab.engine.total_pages, tab.engine.total_rows
         )
-        if tab.engine.is_base_query:
-            self._data_table.setEditTriggers(
-                QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
-            )
-        else:
-            self._data_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        is_base = tab.engine.is_base_query
+        self._data_table.setEditTriggers(
+            QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
+            if is_base else QTableWidget.EditTrigger.NoEditTriggers
+        )
+        logger.debug(f"Page {self._current_page} loaded: {len(df)} rows, base_query={is_base}")
         self._update_status_bar()
 
     def _on_query_error(self, error_msg: str) -> None:
@@ -352,14 +397,24 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self.statusBar().showMessage(self._t("status.query_failed"))
         logger.error(f"Query error: {error_msg}")
 
+    def _on_query_mode_changed(self, is_expression: bool) -> None:
+        """Update the query label when the editor mode changes."""
+        tab = self._active_tab()
+        table_name = tab.name if tab else self._container.settings.default_data_var_name
+        if is_expression:
+            self._query_label.setText(self._t("label.expression_query", table_name=table_name))
+        else:
+            self._query_label.setText(self._t("label.sql_query", table_name=table_name))
+
     def _execute_query(self) -> None:
         tab = self._active_tab()
         if not tab:
             return
-        query = self._sql_editor.get_query()
+        query = self._query_editor.get_query()
         if not query:
             QMessageBox.warning(self, self._t("error.empty_query"), self._t("error.empty_query_msg"))
             return
+        logger.info(f"Executing query on '{tab.name}': {query[:80]}...")
         self._current_page = 1
         self._load_page(query)
 
@@ -367,8 +422,11 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if not tab:
             return
+        logger.info(f"Resetting query for tab '{tab.name}'")
         tab.engine.reset_query()
-        self._sql_editor.set_query(
+        tab.applied_steps.clear()
+        self._steps_panel.clear()
+        self._query_editor.set_query(
             self._container.settings.render_vars(self._container.settings.default_sql_query)
         )
         self._current_page = 1
@@ -377,25 +435,32 @@ class MainWindow(QMainWindow, ThemeableMixin):
     def _prev_page(self) -> None:
         if self._current_page > 1:
             self._current_page -= 1
+            logger.debug(f"Previous page: {self._current_page}")
             self._load_page()
 
     def _next_page(self) -> None:
         tab = self._active_tab()
         if tab and self._current_page < tab.engine.total_pages:
             self._current_page += 1
+            logger.debug(f"Next page: {self._current_page}/{tab.engine.total_pages}")
             self._load_page()
 
     def _on_sort(self, column: str, ascending: bool) -> None:
         tab = self._active_tab()
         if not tab:
             return
+        direction = "ascending" if ascending else "descending"
+        logger.info(f"Sorting '{tab.name}' by '{column}' {direction}")
         success, error = tab.engine.sort_by_column(column, ascending)
         if success:
             self._current_page = 1
             self._load_page()
-            direction = "ascending" if ascending else "descending"
+            step = f'Sort "{column}" {direction}'
+            tab.applied_steps.append(step)
+            self._steps_panel.set_steps(tab.applied_steps)
             self.statusBar().showMessage(self._t("status.sorted", column=column, direction=direction))
         else:
+            logger.error(f"Sort failed on '{tab.name}': {error}")
             QMessageBox.warning(
                 self, self._t("error.sort_failed"),
                 self._t("error.sort_failed_msg", column=column, error_msg=error)
@@ -405,9 +470,11 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if not tab:
             return
+        logger.info(f"Getting unique values for '{tab.name}.{column}'")
 
         if self._container.settings.enable_large_dataset_warning:
             if not self._confirm_large_dataset():
+                logger.debug("Unique values cancelled: large dataset warning")
                 return
 
         progress = QProgressDialog(
@@ -419,6 +486,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         try:
             values = tab.engine.get_unique_values(column)
             progress.close()
+            logger.info(f"Unique values for '{tab.name}.{column}': {len(values)} values")
 
             if values:
                 dialog = UniqueValuesDialog(column, values, self)
@@ -431,6 +499,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
                 )
         except Exception as e:
             progress.close()
+            logger.error(f"Unique values error for '{tab.name}.{column}': {e}")
             QMessageBox.critical(
                 self, self._t("error.unique_values_error"),
                 self._t("error.unique_values_error_msg", error=str(e))
@@ -479,7 +548,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
         else:
             values_str = ", ".join(f"'{v}'" for v in values)
             query = f"SELECT * FROM {table} WHERE {column} IN ({values_str})"
-        self._sql_editor.set_query(query)
+        logger.info(f"Filter values on '{table}.{column}': {len(values)} values selected")
+        self._query_editor.set_query(query)
         self._execute_query()
 
     def _export_results(self) -> None:
@@ -493,19 +563,23 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._container.file_service.get_export_dialog_filter()
         )
         if file_path:
+            logger.info(f"Exporting results from '{tab.name}' to {file_path}")
             try:
                 success = tab.engine.export_results(Path(file_path))
                 if success:
+                    logger.info(f"Export complete: {file_path}")
                     QMessageBox.information(
                         self, self._t("success.export_complete"),
                         self._t("success.export_complete_msg", path=file_path)
                     )
                 else:
+                    logger.error(f"Export failed: {file_path}")
                     QMessageBox.critical(
                         self, self._t("success.export_failed"),
                         self._t("success.export_failed_msg")
                     )
             except Exception as e:
+                logger.error(f"Export error: {e}")
                 QMessageBox.critical(
                     self, self._t("error.export_error"),
                     self._t("error.export_error_msg", error=str(e))
@@ -515,12 +589,14 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if not tab:
             return
+        logger.debug(f"Showing table info for '{tab.name}'")
         info = tab.engine.get_table_info()
         columns = tab.engine.get_column_types()
         dialog = TableInfoDialog(info, columns, self)
         dialog.exec()
 
     def _edit_settings(self) -> None:
+        logger.debug("Opening settings dialog")
         dialog = SettingsDialog(
             settings=self._container.settings,
             settings_manager=self._container.settings_manager,
@@ -545,6 +621,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self.statusBar().showMessage("Settings saved. Some changes may require restart.", 5000)
 
     def _show_about(self) -> None:
+        logger.debug("Opening about dialog")
         dialog = AboutDialog(self._container.translator, self)
         dialog.exec()
 
@@ -562,10 +639,14 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._recents_menu.addAction(clear)
 
     def _clear_recents(self) -> None:
+        logger.info("Clearing recent files")
         self._container.file_service.clear_recents()
         self._update_recents_menu()
 
     def _on_cell_edited(self, absolute_row: int, column: str, old_value, new_value) -> None:
+        tab = self._active_tab()
+        if tab:
+            logger.debug(f"Cell edited: {tab.name}[row={absolute_row}, col={column}] '{old_value}' -> '{new_value}'")
         self._update_status_bar()
 
     def _update_status_bar(self) -> None:
@@ -586,10 +667,12 @@ class MainWindow(QMainWindow, ThemeableMixin):
         if not tab:
             return
         if not tab.edit_queue.is_dirty():
+            logger.debug("Save file: no unsaved changes")
             return
         if not tab.file_path or not tab.file_path.exists():
             self._save_file_as()
             return
+        logger.info(f"Saving edits to original file: {tab.file_path}")
         self._do_save(tab.file_path)
 
     def _save_file_as(self) -> None:
@@ -605,6 +688,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._container.file_service.get_export_dialog_filter(),
         )
         if file_path:
+            logger.info(f"Save As selected: {file_path}")
             self._do_save(Path(file_path))
 
     def _do_save(self, output_path: Path) -> None:
@@ -614,8 +698,10 @@ class MainWindow(QMainWindow, ThemeableMixin):
             return
         edits = tab.edit_queue.all_edits()
         if not edits:
+            logger.debug("Do save: no edits to save")
             return
 
+        logger.info(f"Starting background save ({len(edits)} edits) -> {output_path}")
         self.statusBar().showMessage(self._t("status.saving"))
         self._save_progress = QProgressDialog(
             self._t("status.saving"), None, 0, 0, self
@@ -635,8 +721,18 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if tab:
             tab.edit_queue.clear()
-            tab.engine.close()
-            tab.engine = self._container.create_query_engine(output_path, table_name=tab.name)
+            tab.applied_steps.clear()
+            self._steps_panel.clear()
+
+            # Recreate the view pointing to the newly saved file
+            self._shared_conn.execute(f"DROP VIEW IF EXISTS {tab.name}")
+            adapter = self._container.file_adapter_registry.get_adapter(output_path)
+            reader_sql = adapter.build_reader_query(output_path)
+            self._shared_conn.execute(f"CREATE OR REPLACE VIEW {tab.name} AS {reader_sql}")
+
+            tab.engine = self._container.create_query_engine(
+                output_path, table_name=tab.name, conn=self._shared_conn
+            )
             tab.file_path = output_path
             self._current_page = 1
             self._data_table.set_page_offset(0)
@@ -667,10 +763,12 @@ class MainWindow(QMainWindow, ThemeableMixin):
         if not tab or not tab.edit_queue.is_dirty():
             return True
 
+        count = tab.edit_queue.edited_cells_count()
+        logger.debug(f"Confirm discard: {count} unsaved edits on '{tab.name}'")
         reply = QMessageBox.question(
             self,
             self._t("warning.unsaved_changes"),
-            self._t("warning.unsaved_changes_msg", count=tab.edit_queue.edited_cells_count()),
+            self._t("warning.unsaved_changes_msg", count=count),
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Save,
         )
@@ -679,8 +777,10 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._save_file()
             return not tab.edit_queue.is_dirty()
         elif reply == QMessageBox.StandardButton.Discard:
+            logger.info(f"User discarded {count} unsaved edits on '{tab.name}'")
             return True
         else:
+            logger.debug("User cancelled discard dialog")
             return False
 
     # ------------------------------------------------------------------
@@ -691,18 +791,36 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if not tab:
             return
-        name, ok1 = QInputDialog.getText(self, "Add Column", "New column name:")
-        if not ok1 or not name:
+        logger.debug(f"Add column dialog opened for '{tab.name}'")
+        from parvu.core.dsl.catalog import Catalog
+        from parvu.core.dsl.registry import FunctionRegistry
+
+        catalog = Catalog()
+        catalog.register_tab(tab.name, tab.engine)
+        dialog = ExpressionDialog(
+            catalog, FunctionRegistry(), "Add Column", parent=self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            logger.debug("Add column dialog cancelled")
             return
-        expr, ok2 = QInputDialog.getText(self, "Add Column", "SQL expression:")
-        if not ok2 or not expr:
+
+        result = dialog.get_result()
+        if not result:
+            logger.warning("Add column dialog returned no result")
             return
-        self._apply_transform(tab, f'SELECT *, {expr} AS "{name}" FROM ({tab.engine.current_query})')
+        name, sql = result
+        logger.info(f"Add column '{name}' on '{tab.name}': {sql[:60]}...")
+        self._apply_transform(
+            tab,
+            f'SELECT *, {sql} AS "{name}" FROM ({tab.engine.current_query})',
+            f'Add column "{name}"',
+        )
 
     def _on_column_renamed(self, old_name: str, new_name: str) -> None:
         tab = self._active_tab()
         if not tab:
             return
+        logger.info(f"Renaming column '{old_name}' -> '{new_name}' on '{tab.name}'")
         cols = tab.engine.get_columns()
         select_parts = []
         for c in cols:
@@ -711,24 +829,34 @@ class MainWindow(QMainWindow, ThemeableMixin):
             else:
                 select_parts.append(f'"{c}"')
         select_list = ", ".join(select_parts)
-        self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
+        self._apply_transform(
+            tab,
+            f'SELECT {select_list} FROM ({tab.engine.current_query})',
+            f'Rename "{old_name}" to "{new_name}"',
+        )
 
     def _on_column_removed(self, column_name: str) -> None:
         tab = self._active_tab()
         if not tab:
             return
+        logger.info(f"Removing column '{column_name}' from '{tab.name}'")
         cols = tab.engine.get_columns()
         remaining = [c for c in cols if c != column_name]
         if not remaining:
             QMessageBox.warning(self, "Remove Column", "Cannot remove the only column.")
             return
         select_list = ", ".join(f'"{c}"' for c in remaining)
-        self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
+        self._apply_transform(
+            tab,
+            f'SELECT {select_list} FROM ({tab.engine.current_query})',
+            f'Remove "{column_name}"',
+        )
 
     def _on_column_type_changed(self, column_name: str, new_type: str) -> None:
         tab = self._active_tab()
         if not tab:
             return
+        logger.info(f"Changing type of '{tab.name}.{column_name}' to {new_type}")
         cols = tab.engine.get_columns()
         select_parts = []
         for c in cols:
@@ -737,50 +865,129 @@ class MainWindow(QMainWindow, ThemeableMixin):
             else:
                 select_parts.append(f'"{c}"')
         select_list = ", ".join(select_parts)
-        self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
+        self._apply_transform(
+            tab,
+            f'SELECT {select_list} FROM ({tab.engine.current_query})',
+            f'Change "{column_name}" type to {new_type}',
+        )
 
     def _on_column_duplicated(self, column_name: str) -> None:
         tab = self._active_tab()
         if not tab:
             return
+        logger.info(f"Duplicating column '{column_name}' on '{tab.name}'")
         cols = tab.engine.get_columns()
         select_list = ", ".join(f'"{c}"' for c in cols)
         select_list += f', "{column_name}" AS "{column_name}_copy"'
-        self._apply_transform(tab, f'SELECT {select_list} FROM ({tab.engine.current_query})')
+        self._apply_transform(
+            tab,
+            f'SELECT {select_list} FROM ({tab.engine.current_query})',
+            f'Duplicate "{column_name}"',
+        )
 
     def _on_op_math(self) -> None:
         tab = self._active_tab()
         if not tab:
             return
+        logger.debug(f"Math operation dialog opened for '{tab.name}'")
         cols = tab.engine.get_columns()
         if not cols:
             return
 
-        name, ok = QInputDialog.getText(self, "Math Operation", "New column name:")
-        if not ok or not name:
+        from parvu.core.dsl.catalog import Catalog
+        from parvu.core.dsl.registry import FunctionRegistry
+
+        if len(cols) >= 2:
+            default = f'{tab.name}[{cols[0]}] + {tab.name}[{cols[1]}]'
+        else:
+            default = ""
+
+        catalog = Catalog()
+        catalog.register_tab(tab.name, tab.engine)
+        dialog = ExpressionDialog(
+            catalog, FunctionRegistry(), "Math Operation", default, parent=self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            logger.debug("Math operation dialog cancelled")
             return
 
-        left, ok1 = QInputDialog.getItem(self, "Math Operation", "Left operand (column):", cols, editable=False)
-        if not ok1:
+        result = dialog.get_result()
+        if not result:
+            logger.warning("Math operation dialog returned no result")
             return
-        ops = ["+", "-", "*", "/"]
-        op, ok2 = QInputDialog.getItem(self, "Math Operation", "Operator:", ops, editable=False)
-        if not ok2:
+        name, sql = result
+        logger.info(f"Math op '{name}' on '{tab.name}': {sql[:60]}...")
+        self._apply_transform(
+            tab,
+            f'SELECT *, {sql} AS "{name}" FROM ({tab.engine.current_query})',
+            f'Math op "{name}"',
+        )
+
+    def _on_op_join(self) -> None:
+        tab = self._active_tab()
+        if not tab:
             return
-        right, ok3 = QInputDialog.getItem(self, "Math Operation", "Right operand (column):", cols, editable=False)
-        if not ok3:
+        logger.debug(f"Join dialog opened for '{tab.name}'")
+        other_tabs = [
+            (t.name, t.engine.get_columns())
+            for t in self._tabs
+            if t is not tab
+        ]
+        if not other_tabs:
+            QMessageBox.information(self, "Join", "Open another tab to join with.")
             return
 
-        expr = f'"{left}" {op} "{right}"'
-        self._apply_transform(tab, f'SELECT *, {expr} AS "{name}" FROM ({tab.engine.current_query})')
+        dialog = JoinDialog(
+            tab.name, tab.engine.get_columns(), other_tabs, parent=self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            logger.debug("Join dialog cancelled")
+            return
 
-    def _apply_transform(self, tab: TableTab, query: str) -> None:
+        result = dialog.get_result()
+        if not result:
+            logger.warning("Join dialog returned no result")
+            return
+        right, join_type, left_key, right_key, sql = result
+        logger.info(f"Joining '{tab.name}' with '{right}' ON {left_key}={right_key} ({join_type})")
+        self._apply_transform(
+            tab, sql, f'Join {right} ON {tab.name}.{left_key} = {right}.{right_key} ({join_type})'
+        )
+
+    def _on_op_append(self) -> None:
+        tab = self._active_tab()
+        if not tab:
+            return
+        logger.debug(f"Append dialog opened for '{tab.name}'")
+        other_names = [t.name for t in self._tabs if t is not tab]
+        if not other_names:
+            QMessageBox.information(self, "Append", "Open another tab to append.")
+            return
+
+        dialog = AppendDialog(tab.name, other_names, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            logger.debug("Append dialog cancelled")
+            return
+
+        result = dialog.get_result()
+        if not result:
+            logger.warning("Append dialog returned no result")
+            return
+        selected, keyword, sql = result
+        names = ", ".join(selected)
+        logger.info(f"Appending {names} to '{tab.name}' ({keyword})")
+        self._apply_transform(tab, sql, f'Append {names} ({keyword})')
+
+    def _apply_transform(self, tab: TableTab, query: str, description: str = "") -> None:
         """Apply a SQL transformation to the given tab's engine."""
         success, error = tab.engine.apply_transform(query)
         if success:
             self._current_page = 1
             self._load_page()
-            self.statusBar().showMessage("Transformation applied.", 3000)
+            step = description or "Transform"
+            tab.applied_steps.append(step)
+            self._steps_panel.set_steps(tab.applied_steps)
+            self.statusBar().showMessage(f"{step} applied.", 3000)
             logger.info(f"Applied transform: {query[:80]}...")
         else:
             QMessageBox.critical(self, "Transform Error", f"Failed to apply transformation:\n\n{error}")
@@ -789,7 +996,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
-        # Check all tabs for unsaved changes
+        logger.info(f"Window closing. Tabs: {len(self._tabs)}")
         for tab in self._tabs:
             if tab.edit_queue.is_dirty():
                 self._switch_tab(self._tabs.index(tab))
@@ -799,6 +1006,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         for tab in self._tabs:
             tab.engine.close()
+        self._shared_conn.close()
+        logger.info("Window closed, shared connection released")
         if self._window_service:
             self._window_service.remove_window(self)
         event.accept()

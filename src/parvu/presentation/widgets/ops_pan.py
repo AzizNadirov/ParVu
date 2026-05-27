@@ -19,6 +19,8 @@ class OPSPan(QWidget):
 
     add_column_requested = pyqtSignal()
     math_op_requested = pyqtSignal()
+    join_requested = pyqtSignal()
+    append_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -38,5 +40,15 @@ class OPSPan(QWidget):
         self._math_btn.setToolTip("Create a new column from a math expression")
         self._math_btn.clicked.connect(self.math_op_requested.emit)
         layout.addWidget(self._math_btn)
+
+        self._join_btn = QPushButton("🔗 Join")
+        self._join_btn.setToolTip("Join with another table")
+        self._join_btn.clicked.connect(self.join_requested.emit)
+        layout.addWidget(self._join_btn)
+
+        self._append_btn = QPushButton("⬇️ Append")
+        self._append_btn.setToolTip("Append rows from another table")
+        self._append_btn.clicked.connect(self.append_requested.emit)
+        layout.addWidget(self._append_btn)
 
         layout.addStretch(1)

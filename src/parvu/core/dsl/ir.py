@@ -47,6 +47,13 @@ class BinaryOp(Expr):
 
 
 @dataclass(kw_only=True)
+class UnaryOp(Expr):
+    """Unary operator: +expr, -expr, NOT expr."""
+    op: str   # +, -, NOT
+    operand: Expr
+
+
+@dataclass(kw_only=True)
 class MethodCall(Expr):
     """Method call on an expression: expr.method(arg1, ...)."""
     receiver: Expr

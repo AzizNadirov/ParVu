@@ -83,6 +83,10 @@ class FunctionRegistry:
         """Return all registered functions."""
         return list(self._functions.values())
 
+    def all_methods(self) -> list[str]:
+        """Return all registered method names."""
+        return list(self._methods.keys())
+
     def _register_defaults(self) -> None:
         """Register the built-in function set."""
         from parvu.core.dsl.types import LogicalType as LT

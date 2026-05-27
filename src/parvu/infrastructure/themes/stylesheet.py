@@ -39,6 +39,11 @@ def generate_stylesheet(theme: Theme) -> str:
     QPushButton:pressed {{
         background-color: {c.button_pressed};
     }}
+    QPushButton:checked {{
+        background-color: {c.accent_primary};
+        color: white;
+        border: 2px solid {c.accent_secondary};
+    }}
     QPushButton:disabled {{
         background-color: {c.table_alternate_row};
         color: {c.editor_comment};

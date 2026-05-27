@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import sqlglot
 from sqlglot import exp
+from loguru import logger
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, MethodCall
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.types import LogicalType
 
@@ -29,7 +30,9 @@ class Compiler:
     def compile(self, expr: Expr) -> str:
         """Compile an IR expression to DuckDB SQL string."""
         sg_expr = self._to_sqlglot(expr)
-        return sg_expr.sql(dialect="duckdb")
+        sql = sg_expr.sql(dialect="duckdb")
+        logger.debug(f"Compiled to SQL: {sql[:60]}...")
+        return sql
 
     def _to_sqlglot(self, expr: Expr) -> exp.Expression:
         """Convert an IR node to a sqlglot expression."""
@@ -55,6 +58,16 @@ class Compiler:
             args = [self._to_sqlglot(a) for a in expr.args]
             return exp.Anonymous(this=sqlglot_name, expressions=args)
 
+        if isinstance(expr, UnaryOp):
+            operand = self._to_sqlglot(expr.operand)
+            if expr.op == "+":
+                return operand
+            if expr.op == "-":
+                return exp.Neg(this=operand)
+            if expr.op == "NOT":
+                return exp.Not(this=operand)
+            raise CompileError(f"Unknown unary operator: {expr.op}")
+
         if isinstance(expr, BinaryOp):
             left = self._to_sqlglot(expr.left)
             right = self._to_sqlglot(expr.right)
@@ -64,6 +77,7 @@ class Compiler:
                 "*": exp.Mul,
                 "/": exp.Div,
                 "=": exp.EQ,
+                "==": exp.EQ,
                 "<>": exp.NEQ,
                 "!=": exp.NEQ,
                 "<": exp.LT,

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from loguru import logger
+
 from parvu.core.query_engine import QueryEngine
 from parvu.core.dsl.types import LogicalType, duckdb_type_to_logical
 
@@ -31,15 +33,12 @@ class Catalog:
         """Register a tab by reading column metadata from DuckDB."""
         columns: dict[str, ColumnInfo] = {}
         try:
-            # Query information_schema for column types
             query = f"""
                 SELECT column_name, data_type
                 FROM information_schema.columns
                 WHERE table_name = '{name}'
                 ORDER BY ordinal_position
             """
-            # DuckDB information_schema may not have our views registered,
-            # so fall back to DESCRIBE if needed.
             df = engine._conn.execute(query).df()
             for _, row in df.iterrows():
                 col_name = row["column_name"]
@@ -50,7 +49,6 @@ class Catalog:
                     logical_type=duckdb_type_to_logical(phys),
                 )
         except Exception:
-            # Fallback: use DESCRIBE and parse result
             try:
                 result = engine._conn.execute(f"DESCRIBE {engine._wrap_query(engine.current_query)}")
                 for row in result.fetchall():
@@ -61,10 +59,11 @@ class Catalog:
                         physical_type=phys,
                         logical_type=duckdb_type_to_logical(phys),
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Catalog failed to read columns for '{name}': {e}")
 
         self._tabs[name] = columns
+        logger.debug(f"Catalog registered tab '{name}' with {len(columns)} columns")
 
     def unregister_tab(self, name: str) -> None:
         """Remove a tab from the catalog."""

@@ -83,6 +83,7 @@ class ServiceContainer:
         file_path: Path,
         page_size: int | None = None,
         table_name: str | None = None,
+        conn=None,
     ):
         """Factory method for creating query engines."""
         from parvu.core.query_engine import QueryEngine
@@ -97,4 +98,5 @@ class ServiceContainer:
             page_size=page_size,
             table_name=table_name,
             adapter_registry=self.file_adapter_registry,
+            conn=conn,
         )

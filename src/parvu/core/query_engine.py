@@ -35,6 +35,7 @@ class QueryEngine(IQueryEngine):
         page_size: int = 100,
         table_name: str = "data",
         adapter_registry: FileAdapterRegistry | None = None,
+        conn: duckdb.DuckDBPyConnection | None = None,
     ):
         """
         Initialize query engine.
@@ -44,6 +45,8 @@ class QueryEngine(IQueryEngine):
             page_size: Number of rows per page.
             table_name: Virtual table name used in SQL queries.
             adapter_registry: Registry of file format adapters.
+            conn: Optional shared DuckDB connection. If provided, the engine
+                  uses it instead of creating its own in-memory connection.
         """
         self._file_path = Path(file_path)
         self._page_size = page_size
@@ -51,10 +54,16 @@ class QueryEngine(IQueryEngine):
         self._adapter_registry = adapter_registry or default_registry
 
         # DuckDB connection
-        self._conn = duckdb.connect(":memory:")
-
-        # Build base query that reads file directly (lazy evaluation)
-        self._file_reader_query = self._build_file_reader_query()
+        if conn is not None:
+            self._conn = conn
+            self._owns_connection = False
+            # In shared mode the caller creates a view; just reference it
+            self._file_reader_query = f"SELECT * FROM {table_name}"
+        else:
+            self._conn = duckdb.connect(":memory:")
+            self._owns_connection = True
+            # Build base query that reads file directly (lazy evaluation)
+            self._file_reader_query = self._build_file_reader_query()
 
         # Query state
         self._current_query = self._file_reader_query
@@ -178,7 +187,13 @@ class QueryEngine(IQueryEngine):
             Tuple of (success: bool, error_message: str or empty)
         """
         try:
-            substituted = self._substitute_table_name(query)
+            # For shared connections the view already exists in DuckDB,
+            # so substitution (which breaks table-qualified columns) is
+            # unnecessary and harmful.
+            if self._owns_connection:
+                substituted = self._substitute_table_name(query)
+            else:
+                substituted = query
             wrapped = self._wrap_query(substituted)
             # Validate query by executing with LIMIT 0
             self._conn.execute(f"{wrapped} LIMIT 0")
@@ -293,6 +308,9 @@ class QueryEngine(IQueryEngine):
         }
 
     def close(self) -> None:
-        """Close database connection."""
-        self._conn.close()
-        logger.info("QueryEngine closed")
+        """Close database connection if owned by this engine."""
+        if self._owns_connection:
+            self._conn.close()
+            logger.info("QueryEngine closed")
+        else:
+            logger.debug("QueryEngine skipping close (shared connection)")

@@ -46,6 +46,7 @@ TRANSLATIONS_EN = {
     # Labels & Placeholders
     "label.file_placeholder": "Select a Parquet, CSV, or JSON file...",
     "label.sql_query": "SQL Query (Table: {table_name}):",
+    "label.expression_query": "Expression Query (Table: {table_name}):",
     "label.results": "Results:",
     "label.page": "Page: -",
     "label.page_info": "Page: {page}",
