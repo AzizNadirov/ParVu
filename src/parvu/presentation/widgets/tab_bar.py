@@ -24,7 +24,7 @@ class AddButton(QWidget):
     def __init__(self, theme: Theme | None = None, parent=None):
         super().__init__(parent)
         self._theme = theme
-        self.setFixedSize(28, 22)
+        self.setFixedSize(30, 24)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip("Add new tab")
 
@@ -48,9 +48,14 @@ class AddButton(QWidget):
         painter.setPen(QPen(border, 1))
         painter.drawPath(path)
 
-        painter.setPen(accent)
-        painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "+")
+        # Draw + as two lines (more reliable than text at small sizes)
+        pen = QPen(accent, 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        cx, cy = w // 2, h // 2
+        offset = 5
+        painter.drawLine(cx, cy - offset, cx, cy + offset)
+        painter.drawLine(cx - offset, cy, cx + offset, cy)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -75,6 +80,7 @@ class TabButton(QWidget):
         self.setMinimumWidth(90)
         self.setMaximumWidth(220)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(text)
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed,
