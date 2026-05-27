@@ -22,6 +22,7 @@ from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.parser import DSLParser
 from parvu.core.dsl.resolver import Resolver
 from parvu.core.dsl.compiler import Compiler
+from parvu.core.dsl.ir import Assignment
 
 
 class QueryEditor(QWidget):
@@ -172,7 +173,10 @@ class QueryEditor(QWidget):
                 tree = self._parser.parse(expr_text)
                 expr = self._resolver.resolve(tree)
                 compiled = self._compiler.compile(expr)
-                # DSL expressions are scalar — wrap them in a SELECT
+                # Assignments already emit a full SELECT query
+                if isinstance(expr, Assignment):
+                    return compiled
+                # Scalar expressions — wrap them in a SELECT
                 if self._catalog and self._catalog.tables():
                     table = self._catalog.tables()[0]
                     return f"SELECT {compiled} FROM {table}"
@@ -203,6 +207,39 @@ class QueryEditor(QWidget):
         self._resolver = Resolver(catalog, self._registry)
         self._expr_editor._catalog = catalog
         self._update_expr_button_state()
+
+    def set_expression_mode(self, enabled: bool = True) -> None:
+        """Switch to or from expression mode."""
+        if enabled:
+            self._set_expr_mode()
+        else:
+            self._set_sql_mode()
+
+    def focus_expression_editor(self) -> None:
+        """Set keyboard focus to the expression editor."""
+        self._expr_editor.setFocus()
+
+    def get_expression_info(self) -> dict:
+        """Return metadata about the current expression, if any.
+
+        Returns a dict with keys like:
+          - {"type": "assignment", "table": str, "column": str}
+          - {"type": "expression", "logical_type": str}
+          - {} if not in expression mode or parse fails.
+        """
+        if not self._is_expression_mode:
+            return {}
+        expr_text = self._expr_editor.text().strip()
+        if not expr_text or self._resolver is None:
+            return {}
+        try:
+            tree = self._parser.parse(expr_text)
+            expr = self._resolver.resolve(tree)
+            if isinstance(expr, Assignment):
+                return {"type": "assignment", "table": expr.table, "column": expr.column}
+            return {"type": "expression", "logical_type": expr.logical_type.name}
+        except Exception:
+            return {}
 
     @property
     def is_expression_mode(self) -> bool:

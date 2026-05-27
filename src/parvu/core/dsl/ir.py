@@ -59,3 +59,11 @@ class MethodCall(Expr):
     receiver: Expr
     method_name: str
     args: list[Expr]
+
+
+@dataclass(kw_only=True)
+class Assignment(Expr):
+    """Virtual column assignment: table[new_col] = expr."""
+    table: str
+    column: str
+    value: Expr

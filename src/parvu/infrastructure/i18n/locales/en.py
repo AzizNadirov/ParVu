@@ -21,6 +21,11 @@ TRANSLATIONS_EN = {
     "menu.file.recent_files": "Recent Files",
     "menu.file.clear_recents": "Clear List",
     "menu.file.exit": "Exit",
+    "menu.operations": "Operations",
+    "menu.operations.math": "Math Operation",
+    "menu.operations.join": "Join",
+    "menu.operations.append": "Append",
+
     "menu.help": "Help",
     "menu.help.about": "About ParVu",
 

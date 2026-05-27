@@ -2,7 +2,7 @@
 Main Application Window for ParVu.
 
 Orchestrates all UI components via the service container.
-Supports multiple data-table tabs (Excel-style) with a shared OPSPan.
+Supports multiple data-table tabs (Excel-style).
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QFileDialog,
     QMessageBox, QProgressDialog, QApplication, QLabel,
-    QTableWidget, QInputDialog, QDialog,
+    QTableWidget, QInputDialog, QDialog, QStyle,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QAction
@@ -34,7 +34,6 @@ from parvu.presentation.widgets.query_editor import QueryEditor
 from parvu.presentation.widgets.data_table import DataTableView
 from parvu.presentation.widgets.pagination_bar import PaginationBar
 from parvu.presentation.widgets.tab_bar import TabBar
-from parvu.presentation.widgets.ops_pan import OPSPan
 from parvu.presentation.models.table_tab import TableTab, slugify_name
 from parvu.presentation.dialogs.settings_dialog import SettingsDialog
 from parvu.presentation.dialogs.theme_selector import ThemeSelectorDialog
@@ -62,6 +61,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._active_tab_index: int = -1
         self._current_page: int = 1
         self._current_worker_tab: TableTab | None = None
+        self._pending_step: str | None = None
 
         # Shared DuckDB connection for multi-table operations
         self._shared_conn = duckdb.connect(":memory:")
@@ -121,16 +121,9 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._query_toolbar.info_clicked.connect(self._show_table_info)
         layout.addWidget(self._query_toolbar)
 
-        # OPSPan — operations panel
-        self._ops_pan = OPSPan()
-        self._ops_pan.add_column_requested.connect(self._on_op_add_column)
-        self._ops_pan.math_op_requested.connect(self._on_op_math)
-        self._ops_pan.join_requested.connect(self._on_op_join)
-        self._ops_pan.append_requested.connect(self._on_op_append)
-        layout.addWidget(self._ops_pan)
-
         # Applied Steps
         self._steps_panel = AppliedStepsPanel()
+        self._steps_panel.undo_requested.connect(self._undo_last_step)
         layout.addWidget(self._steps_panel)
 
         # Data table
@@ -163,51 +156,85 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
     def _setup_menu(self) -> None:
         menubar = self.menuBar()
+        style = self.style()
 
+        # ── File Menu ──
         file_menu = menubar.addMenu(self._t("menu.file"))
+        file_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirIcon))
 
         new_action = QAction(self._t("menu.file.new_window"), self)
+        new_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder))
         new_action.setShortcut("Ctrl+N")
         new_action.triggered.connect(self._new_window)
         file_menu.addAction(new_action)
         file_menu.addSeparator()
 
         open_action = QAction(self._t("menu.file.open"), self)
+        open_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self._browse_file)
         file_menu.addAction(open_action)
         file_menu.addSeparator()
 
         export_action = QAction(self._t("menu.file.export"), self)
+        export_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ArrowDown))
         export_action.triggered.connect(self._export_results)
         file_menu.addAction(export_action)
         file_menu.addSeparator()
 
         save_action = QAction(self._t("menu.file.save"), self)
+        save_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
         save_action.setShortcut("Ctrl+S")
         save_action.triggered.connect(self._save_file)
         file_menu.addAction(save_action)
 
         save_as_action = QAction(self._t("menu.file.save_as"), self)
+        save_as_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
         save_as_action.setShortcut("Ctrl+Shift+S")
         save_as_action.triggered.connect(self._save_file_as)
         file_menu.addAction(save_as_action)
         file_menu.addSeparator()
 
         settings_action = QAction(self._t("menu.file.settings"), self)
+        settings_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
         settings_action.triggered.connect(self._edit_settings)
         file_menu.addAction(settings_action)
 
         self._recents_menu = file_menu.addMenu(self._t("menu.file.recent_files"))
+        self._recents_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirHomeIcon))
         self._update_recents_menu()
         file_menu.addSeparator()
 
         exit_action = QAction(self._t("menu.file.exit"), self)
+        exit_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton))
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
+        # ── Operations Menu ──
+        operations_menu = menubar.addMenu(self._t("menu.operations"))
+        operations_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_CommandLink))
+
+        math_action = QAction(self._t("menu.operations.math"), self)
+        math_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
+        math_action.triggered.connect(self._on_op_math)
+        operations_menu.addAction(math_action)
+
+        join_action = QAction(self._t("menu.operations.join"), self)
+        join_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirLinkIcon))
+        join_action.triggered.connect(self._on_op_join)
+        operations_menu.addAction(join_action)
+
+        append_action = QAction(self._t("menu.operations.append"), self)
+        append_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ArrowDown))
+        append_action.triggered.connect(self._on_op_append)
+        operations_menu.addAction(append_action)
+
+        # ── Help Menu ──
         help_menu = menubar.addMenu(self._t("menu.help"))
+        help_menu.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxQuestion))
+
         about_action = QAction(self._t("menu.help.about"), self)
+        about_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
@@ -386,10 +413,19 @@ class MainWindow(QMainWindow, ThemeableMixin):
             QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
             if is_base else QTableWidget.EditTrigger.NoEditTriggers
         )
+
+        # Record applied step for expression-mode assignments
+        if self._pending_step:
+            tab.applied_steps.append(self._pending_step)
+            self._steps_panel.set_steps(tab.applied_steps)
+            self.statusBar().showMessage(f"{self._pending_step} applied.", 3000)
+            self._pending_step = None
+
         logger.debug(f"Page {self._current_page} loaded: {len(df)} rows, base_query={is_base}")
         self._update_status_bar()
 
     def _on_query_error(self, error_msg: str) -> None:
+        self._pending_step = None
         QMessageBox.critical(
             self, self._t("error.query_error"),
             self._t("error.query_error_msg", error_msg=error_msg)
@@ -414,6 +450,14 @@ class MainWindow(QMainWindow, ThemeableMixin):
         if not query:
             QMessageBox.warning(self, self._t("error.empty_query"), self._t("error.empty_query_msg"))
             return
+
+        # Detect expression-mode assignments so we can record an applied step
+        self._pending_step = None
+        if self._query_editor.is_expression_mode:
+            expr_info = self._query_editor.get_expression_info()
+            if expr_info.get("type") == "assignment":
+                self._pending_step = f'Add column "{expr_info["column"]}"'
+
         logger.info(f"Executing query on '{tab.name}': {query[:80]}...")
         self._current_page = 1
         self._load_page(query)
@@ -627,14 +671,18 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
     def _update_recents_menu(self) -> None:
         self._recents_menu.clear()
+        file_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
         for recent in self._container.file_service.get_recent_files():
-            action = QAction(recent, self)
+            action = QAction(file_icon, recent, self)
             action.triggered.connect(lambda checked, path=recent: self._add_tab(Path(path)))
             self._recents_menu.addAction(action)
 
         if self._container.file_service.get_recent_files():
             self._recents_menu.addSeparator()
-            clear = QAction(self._t("menu.file.clear_recents"), self)
+            clear = QAction(
+                self.style().standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton),
+                self._t("menu.file.clear_recents"), self,
+            )
             clear.triggered.connect(self._clear_recents)
             self._recents_menu.addAction(clear)
 
@@ -784,37 +832,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
             return False
 
     # ------------------------------------------------------------------
-    # OPSPan operations
+    # Operations
     # ------------------------------------------------------------------
-
-    def _on_op_add_column(self) -> None:
-        tab = self._active_tab()
-        if not tab:
-            return
-        logger.debug(f"Add column dialog opened for '{tab.name}'")
-        from parvu.core.dsl.catalog import Catalog
-        from parvu.core.dsl.registry import FunctionRegistry
-
-        catalog = Catalog()
-        catalog.register_tab(tab.name, tab.engine)
-        dialog = ExpressionDialog(
-            catalog, FunctionRegistry(), "Add Column", parent=self
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            logger.debug("Add column dialog cancelled")
-            return
-
-        result = dialog.get_result()
-        if not result:
-            logger.warning("Add column dialog returned no result")
-            return
-        name, sql = result
-        logger.info(f"Add column '{name}' on '{tab.name}': {sql[:60]}...")
-        self._apply_transform(
-            tab,
-            f'SELECT *, {sql} AS "{name}" FROM ({tab.engine.current_query})',
-            f'Add column "{name}"',
-        )
 
     def _on_column_renamed(self, old_name: str, new_name: str) -> None:
         tab = self._active_tab()
@@ -977,6 +996,23 @@ class MainWindow(QMainWindow, ThemeableMixin):
         names = ", ".join(selected)
         logger.info(f"Appending {names} to '{tab.name}' ({keyword})")
         self._apply_transform(tab, sql, f'Append {names} ({keyword})')
+
+    def _undo_last_step(self) -> None:
+        """Undo the most recent applied step for the active tab."""
+        tab = self._active_tab()
+        if not tab or not tab.applied_steps:
+            return
+        success, error = tab.engine.undo()
+        if not success:
+            QMessageBox.critical(self, "Undo Error", f"Failed to undo:\n\n{error}")
+            logger.error(f"Undo failed: {error}")
+            return
+        tab.applied_steps.pop()
+        self._steps_panel.set_steps(tab.applied_steps)
+        self._current_page = 1
+        self._load_page()
+        self.statusBar().showMessage("Last step undone.", 3000)
+        logger.info("Undo applied")
 
     def _apply_transform(self, tab: TableTab, query: str, description: str = "") -> None:
         """Apply a SQL transformation to the given tab's engine."""

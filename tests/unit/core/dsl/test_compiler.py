@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall
+from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment
 from parvu.core.dsl.compiler import Compiler
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.types import LogicalType
@@ -131,3 +131,24 @@ class TestCompiler:
         )
         with pytest.raises(CompileError):
             compiler.compile(expr)
+
+    def test_assignment(self, compiler: Compiler) -> None:
+        expr = Assignment(
+            table="sales",
+            column="new_col",
+            value=Call(func_name="CONCAT", args=[
+                ColumnRef(table="sales", column="name"),
+                Literal(value="!"),
+            ]),
+        )
+        sql = compiler.compile(expr)
+        assert sql == 'SELECT *, CONCAT(sales.name, \'!\') AS "new_col" FROM sales'
+
+    def test_assignment_quoted_column(self, compiler: Compiler) -> None:
+        expr = Assignment(
+            table="sales",
+            column="new col",
+            value=Literal(value=42),
+        )
+        sql = compiler.compile(expr)
+        assert sql == 'SELECT *, 42 AS "new col" FROM sales'

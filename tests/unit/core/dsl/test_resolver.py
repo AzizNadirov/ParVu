@@ -10,7 +10,7 @@ from parvu.core.dsl.resolver import Resolver, ResolutionError
 from parvu.core.dsl.compiler import Compiler
 from parvu.core.dsl.catalog import Catalog
 from parvu.core.dsl.registry import FunctionRegistry
-from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall
+from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment
 from parvu.core.dsl.types import LogicalType
 
 
@@ -102,3 +102,29 @@ class TestResolver:
         expr = resolver.resolve(tree)
         sql = Compiler().compile(expr)
         assert sql == "IF(sales.revenue > 100, 'high', 'low')"
+
+    def test_resolve_assignment(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("sales[new_col] = UPPER(sales[name])")
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, Assignment)
+        assert expr.table == "sales"
+        assert expr.column == "new_col"
+        assert expr.logical_type == LogicalType.TEXT
+
+    def test_resolve_assignment_unknown_table_raises(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("unknown[new_col] = 1")
+        with pytest.raises(ResolutionError, match="Unknown table"):
+            resolver.resolve(tree)
+
+    def test_resolve_assignment_allows_unknown_column(self, parser: DSLParser, resolver: Resolver) -> None:
+        """Target column in assignment need not exist yet."""
+        tree = parser.parse("sales[totally_new_column] = sales[revenue] * 2")
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, Assignment)
+        assert expr.column == "totally_new_column"
+
+    def test_end_to_end_assignment_compile(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("sales[new_col] = CONCAT(sales[name], '!')")
+        expr = resolver.resolve(tree)
+        sql = Compiler().compile(expr)
+        assert sql == 'SELECT *, CONCAT(sales.name, \'!\') AS "new_col" FROM sales'

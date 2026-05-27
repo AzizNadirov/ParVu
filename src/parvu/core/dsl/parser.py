@@ -12,7 +12,9 @@ from lark.exceptions import LarkError
 
 # EBNF grammar for the ParVu expression language
 _GRAMMAR = r"""
-?start: expr
+?start: expr | assignment
+
+assignment: column_ref "=" expr
 
 ?expr: or_expr
 

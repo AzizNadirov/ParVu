@@ -21,6 +21,11 @@ TRANSLATIONS_AZ = {
     "menu.file.recent_files": "Son fayllar",
     "menu.file.clear_recents": "Siyahını təmizlə",
     "menu.file.exit": "Çıxış",
+    "menu.operations": "Əməliyyatlar",
+    "menu.operations.math": "Riyazi əməliyyat",
+    "menu.operations.join": "Birləşdirmə",
+    "menu.operations.append": "Əlavə et",
+
     "menu.help": "Kömək",
     "menu.help.about": "ParVu haqqında",
 

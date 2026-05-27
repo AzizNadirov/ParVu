@@ -17,7 +17,6 @@ class OPSPan(QWidget):
     have moved to the column header context menu.
     """
 
-    add_column_requested = pyqtSignal()
     math_op_requested = pyqtSignal()
     join_requested = pyqtSignal()
     append_requested = pyqtSignal()
@@ -30,11 +29,6 @@ class OPSPan(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(8)
-
-        self._add_col_btn = QPushButton("➕ Add Column")
-        self._add_col_btn.setToolTip("Add a new column with a SQL expression")
-        self._add_col_btn.clicked.connect(self.add_column_requested.emit)
-        layout.addWidget(self._add_col_btn)
 
         self._math_btn = QPushButton("🧮 Math Operation")
         self._math_btn.setToolTip("Create a new column from a math expression")

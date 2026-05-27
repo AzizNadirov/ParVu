@@ -13,7 +13,7 @@ from __future__ import annotations
 from loguru import logger
 from lark import Tree, Token
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.catalog import Catalog
 from parvu.core.dsl.types import LogicalType, duckdb_type_to_logical
@@ -47,6 +47,10 @@ class Resolver:
         # Literals
         if rule in ("number", "string", "boolean", "null"):
             return self._resolve_literal(node)
+
+        # Assignment: table[new_col] = expr
+        if rule == "assignment":
+            return self._resolve_assignment(children)
 
         # Column reference: table[col]
         if rule == "column_ref":
@@ -134,6 +138,21 @@ class Resolver:
         if node.data == "null":
             return Literal(value=None, logical_type=LogicalType.UNKNOWN)
         raise ResolutionError(f"Unknown literal type: {node.data}")
+
+    def _resolve_assignment(self, children: list) -> Expr:
+        """Resolve table[new_col] = expr assignment."""
+        col_ref_node = children[0]
+        table = col_ref_node.children[0].value
+        col = col_ref_node.children[1].value
+        if col.startswith('"') and col.endswith('"'):
+            col = col[1:-1]
+
+        if table not in self._catalog.tables():
+            raise ResolutionError(f"Unknown table: '{table}'")
+
+        value = self._resolve_node(children[1])
+        logger.debug(f"Resolved assignment: {table}[{col}] = <{value.logical_type.name}>")
+        return Assignment(table=table, column=col, value=value, logical_type=value.logical_type)
 
     def _resolve_column_ref(self, children: list) -> Expr:
         """Resolve table[column] reference."""

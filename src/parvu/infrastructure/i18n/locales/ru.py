@@ -21,6 +21,11 @@ TRANSLATIONS_RU = {
     "menu.file.recent_files": "Последние файлы",
     "menu.file.clear_recents": "Очистить список",
     "menu.file.exit": "Выход",
+    "menu.operations": "Операции",
+    "menu.operations.math": "Математическая операция",
+    "menu.operations.join": "Соединение",
+    "menu.operations.append": "Добавить строки",
+
     "menu.help": "Справка",
     "menu.help.about": "О программе ParVu",
 

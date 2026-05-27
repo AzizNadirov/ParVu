@@ -80,3 +80,11 @@ class TestParser:
     def test_parse_partial_valid(self, parser: DSLParser) -> None:
         result = parser.parse_partial("sales[revenue]")
         assert result is not None
+
+    def test_assignment(self, parser: DSLParser) -> None:
+        tree = parser.parse("sales[new_col] = sales[revenue] + 100")
+        assert tree.data == "assignment"
+
+    def test_assignment_quoted_column(self, parser: DSLParser) -> None:
+        tree = parser.parse('sales["new col"] = sales[revenue]')
+        assert tree.data == "assignment"

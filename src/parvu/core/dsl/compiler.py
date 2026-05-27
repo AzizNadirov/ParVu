@@ -11,7 +11,7 @@ import sqlglot
 from sqlglot import exp
 from loguru import logger
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.types import LogicalType
 
@@ -36,6 +36,15 @@ class Compiler:
 
     def _to_sqlglot(self, expr: Expr) -> exp.Expression:
         """Convert an IR node to a sqlglot expression."""
+        if isinstance(expr, Assignment):
+            # SELECT *, <value> AS "<new_col>" FROM <table>
+            value_expr = self._to_sqlglot(expr.value)
+            alias = exp.Alias(this=value_expr, alias=exp.to_identifier(expr.column, quoted=True))
+            star = exp.Star()
+            return exp.Select(
+                expressions=[star, alias],
+            ).from_(exp.to_identifier(expr.table))
+
         if isinstance(expr, ColumnRef):
             # table.col
             return exp.Column(

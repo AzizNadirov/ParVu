@@ -6,12 +6,17 @@ Each step is a human-readable description of an operation
 """
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+    QLabel, QPushButton,
+)
+from PyQt6.QtCore import Qt, pyqtSignal
 
 
 class AppliedStepsPanel(QWidget):
-    """Read-only list of applied transformation steps."""
+    """List of applied transformation steps with undo support."""
+
+    undo_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -30,6 +35,15 @@ class AppliedStepsPanel(QWidget):
         self._list.setMaximumHeight(120)
         layout.addWidget(self._list)
 
+        btn_row = QHBoxLayout()
+        self._undo_btn = QPushButton("↩ Undo")
+        self._undo_btn.setEnabled(False)
+        self._undo_btn.setToolTip("Undo the last applied step")
+        self._undo_btn.clicked.connect(self.undo_requested.emit)
+        btn_row.addWidget(self._undo_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
     def set_steps(self, steps: list[str]) -> None:
         """Replace the entire step list."""
         self._list.clear()
@@ -37,7 +51,13 @@ class AppliedStepsPanel(QWidget):
             item = QListWidgetItem(f"{i}. {step}")
             item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
             self._list.addItem(item)
+        self._undo_btn.setEnabled(bool(steps))
 
     def clear(self) -> None:
         """Remove all steps."""
         self._list.clear()
+        self._undo_btn.setEnabled(False)
+
+    def set_undo_enabled(self, enabled: bool) -> None:
+        """Enable or disable the undo button independently of step count."""
+        self._undo_btn.setEnabled(enabled)

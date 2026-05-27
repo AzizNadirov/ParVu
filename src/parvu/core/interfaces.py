@@ -63,6 +63,15 @@ class IQueryEngine(Protocol):
         """Export current query results to file."""
         ...
 
+    @property
+    def can_undo(self) -> bool:
+        """Return True if there is at least one step to undo."""
+        ...
+
+    def undo(self) -> tuple[bool, str]:
+        """Revert the last transformation. Returns (success, error_message)."""
+        ...
+
     def reset_query(self) -> None:
         """Reset to original file reader query."""
         ...

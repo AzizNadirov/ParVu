@@ -68,6 +68,7 @@ class QueryEngine(IQueryEngine):
         # Query state
         self._current_query = self._file_reader_query
         self._paginator = self._create_paginator()
+        self._history: list[str] = []
 
         logger.info(
             f"QueryEngine initialized: {file_path}, "
@@ -155,6 +156,11 @@ class QueryEngine(IQueryEngine):
         """Return True if viewing the original file without custom queries."""
         return self._current_query == self._file_reader_query
 
+    @property
+    def can_undo(self) -> bool:
+        """Return True if there is at least one step to undo."""
+        return bool(self._history)
+
     # ------------------------------------------------------------------
     # IQueryEngine implementation
     # ------------------------------------------------------------------
@@ -198,6 +204,7 @@ class QueryEngine(IQueryEngine):
             # Validate query by executing with LIMIT 0
             self._conn.execute(f"{wrapped} LIMIT 0")
 
+            self._history.append(self._current_query)
             self._current_query = substituted
             self._paginator = self._create_paginator()
 
@@ -245,6 +252,7 @@ class QueryEngine(IQueryEngine):
         try:
             wrapped = self._wrap_query(query)
             self._conn.execute(f"{wrapped} LIMIT 0")
+            self._history.append(self._current_query)
             self._current_query = query
             self._paginator = self._create_paginator()
             logger.info(
@@ -291,10 +299,32 @@ class QueryEngine(IQueryEngine):
             logger.error(f"Export failed: {e}")
             return False
 
+    def undo(self) -> tuple[bool, str]:
+        """Revert the last transformation by restoring the previous query.
+
+        Returns:
+            Tuple of (success: bool, error_message: str or empty)
+        """
+        if not self._history:
+            return False, "Nothing to undo"
+        previous_query = self._history.pop()
+        try:
+            wrapped = self._wrap_query(previous_query)
+            self._conn.execute(f"{wrapped} LIMIT 0")
+            self._current_query = previous_query
+            self._paginator = self._create_paginator()
+            logger.info(f"Undo applied: {self._paginator.total_rows} rows")
+            return True, ""
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Undo failed: {error_msg}")
+            return False, error_msg
+
     def reset_query(self) -> None:
         """Reset to original file reader query."""
         self._current_query = self._file_reader_query
         self._paginator = self._create_paginator()
+        self._history.clear()
         logger.info("Query reset to original file")
 
     def get_table_info(self) -> dict[str, Any]:
