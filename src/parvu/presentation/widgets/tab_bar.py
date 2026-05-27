@@ -7,13 +7,55 @@ accent border on active tab, and close buttons.
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QApplication,
+    QWidget, QHBoxLayout, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QRect
 from PyQt6.QtGui import QPainter, QPainterPath, QColor, QFont, QPen
 from loguru import logger
 
 from parvu.infrastructure.themes.models import Theme
+
+
+class AddButton(QWidget):
+    """Small + button for adding new tabs."""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, theme: Theme | None = None, parent=None):
+        super().__init__(parent)
+        self._theme = theme
+        self.setFixedSize(28, 22)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Add new tab")
+
+    def set_theme(self, theme: Theme | None) -> None:
+        self._theme = theme
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        accent = QColor(self._theme.colors.accent_primary if self._theme else "#2196F3")
+        bg = QColor(self._theme.colors.button_background if self._theme else "#E8F5E9")
+        border = QColor(self._theme.colors.table_grid if self._theme else "#DDDDDD")
+
+        w, h = self.width(), self.height()
+        r = 4
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, w, h, r, r)
+        painter.fillPath(path, bg)
+        painter.setPen(QPen(border, 1))
+        painter.drawPath(path)
+
+        painter.setPen(accent)
+        painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "+")
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class TabButton(QWidget):
@@ -34,8 +76,8 @@ class TabButton(QWidget):
         self.setMaximumWidth(220)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(
-            QWidget.SizePolicy.Policy.Expanding,
-            QWidget.SizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
         )
 
     def set_active(self, active: bool) -> None:
@@ -190,42 +232,15 @@ class TabBar(QWidget):
         layout.addStretch(1)
 
         # Add tab button
-        self._add_btn = QWidget(self)
-        self._add_btn.setFixedSize(28, 22)
-        self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._add_btn.setToolTip("Add new tab")
-        self._add_btn.mousePressEvent = lambda e: self.add_tab_requested.emit()  # type: ignore[method-assign]
+        self._add_btn = AddButton(self._theme, self)
+        self._add_btn.clicked.connect(self.add_tab_requested.emit)
         layout.addWidget(self._add_btn)
 
     def set_theme(self, theme: Theme) -> None:
         self._theme = theme
         for btn in self._buttons:
             btn.set_theme(theme)
-        self._update_add_button()
-
-    def _update_add_button(self) -> None:
-        self._add_btn.update()
-
-    def paintEvent(self, event) -> None:
-        # Draw the + icon on the add button
-        painter = QPainter(self._add_btn)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        accent = QColor(self._theme.colors.accent_primary if self._theme else "#2196F3")
-        bg = QColor(self._theme.colors.button_background if self._theme else "#E8F5E9")
-        border = QColor(self._theme.colors.table_grid if self._theme else "#DDDDDD")
-
-        w, h = self._add_btn.width(), self._add_btn.height()
-        r = 4
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, w, h, r, r)
-        painter.fillPath(path, bg)
-        painter.setPen(QPen(border, 1))
-        painter.drawPath(path)
-
-        painter.setPen(accent)
-        painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        painter.drawText(self._add_btn.rect(), Qt.AlignmentFlag.AlignCenter, "+")
+        self._add_btn.set_theme(theme)
 
     def set_tabs(self, names: list[str]) -> None:
         """Rebuild tab buttons from names list."""
