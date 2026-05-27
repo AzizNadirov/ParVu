@@ -1,11 +1,6 @@
 # ParVu Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
+## [0.3.1]
 
 ### Added
 - **Search dialog** (`Ctrl+F`, also under **Edit → Find...**) — searches every row in the active table, not just the visible page. Incremental Next/Prev navigation with on-demand DuckDB queries; previously visited matches are cached so re-navigation is instant. Column scope dropdown, `Match case` / `Whole cell` / `Regex` options. `Enter` triggers Next, `Shift+Enter` Prev. Status line reports `Match N of M` (with `+` suffix when more may exist) and "first / last match reached" when the table edge is hit. Selecting a match paginates to the right page and selects the cell (deferred until the async page-load completes so the navigation lands on the loaded data, not stale state).
