@@ -255,6 +255,16 @@ class FunctionRegistry:
             "Cast value, returning NULL on failure.", "TRY_CAST(sales[id], 'INTEGER')", sqlglot_name="TRY_CAST"
         ))
 
+        # Table-level operations
+        self.register(FunctionDef(
+            "DROP_DUPLICATES", [
+                ParamDef("columns", LT.UNKNOWN),
+                ParamDef("keep", LT.TEXT, required=False),
+            ], LT.QUERY,
+            "Remove duplicate rows based on column subset.",
+            "DROP_DUPLICATES(sales[id], sales[name], 'first')",
+        ))
+
         # Register method mappings
         from parvu.core.dsl.types import methods_for_type
         for lt in LT:

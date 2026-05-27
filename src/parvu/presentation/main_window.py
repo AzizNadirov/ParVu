@@ -44,6 +44,7 @@ from parvu.presentation.dialogs.crash_reporter import CrashReportDialog
 from parvu.presentation.dialogs.expression_dialog import ExpressionDialog
 from parvu.presentation.dialogs.join_dialog import JoinDialog
 from parvu.presentation.dialogs.append_dialog import AppendDialog
+from parvu.presentation.dialogs.drop_duplicates_dialog import DropDuplicatesDialog
 from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
 
 
@@ -225,6 +226,11 @@ class MainWindow(QMainWindow, ThemeableMixin):
         append_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_ArrowDown))
         append_action.triggered.connect(self._on_op_append)
         operations_menu.addAction(append_action)
+
+        drop_dup_action = QAction("Drop Duplicates", self)
+        drop_dup_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_BrowserStop))
+        drop_dup_action.triggered.connect(self._on_op_drop_duplicates)
+        operations_menu.addAction(drop_dup_action)
 
         # ── Help Menu ──
         help_menu = menubar.addMenu(self._t("menu.help"))
@@ -415,6 +421,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         # Record applied step for expression-mode assignments
         if self._pending_step:
             tab.applied_steps.append(self._pending_step)
+            tab._undo_stack.append({"type": "sql"})
             self._steps_panel.set_steps(tab.applied_steps)
             self.statusBar().showMessage(f"{self._pending_step} applied.", 3000)
             self._pending_step = None
@@ -467,6 +474,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         logger.info(f"Resetting query for tab '{tab.name}'")
         tab.engine.reset_query()
         tab.applied_steps.clear()
+        tab._undo_stack.clear()
         self._steps_panel.clear()
         self._query_editor.set_query(
             self._container.settings.render_vars(self._container.settings.default_sql_query)
@@ -499,6 +507,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._load_page()
             step = f'Sort "{column}" {direction}'
             tab.applied_steps.append(step)
+            tab._undo_stack.append({"type": "sql"})
             self._steps_panel.set_steps(tab.applied_steps)
             self.statusBar().showMessage(self._t("status.sorted", column=column, direction=direction))
         else:
@@ -693,6 +702,10 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if tab:
             logger.debug(f"Cell edited: {tab.name}[row={absolute_row}, col={column}] '{old_value}' -> '{new_value}'")
+            step = self._t("step.cell_edit", column=column, row=absolute_row + 1)
+            tab.applied_steps.append(step)
+            tab._undo_stack.append({"type": "cell_edit", "row": absolute_row, "column": column})
+            self._steps_panel.set_steps(tab.applied_steps)
         self._update_status_bar()
 
     def _update_status_bar(self) -> None:
@@ -768,6 +781,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         if tab:
             tab.edit_queue.clear()
             tab.applied_steps.clear()
+            tab._undo_stack.clear()
             self._steps_panel.clear()
 
             # Recreate the view pointing to the newly saved file
@@ -1000,10 +1014,23 @@ class MainWindow(QMainWindow, ThemeableMixin):
         tab = self._active_tab()
         if not tab or not tab.applied_steps:
             return
+
+        undo_info = tab._undo_stack.pop()
+        if undo_info["type"] == "cell_edit":
+            tab.edit_queue.remove(undo_info["row"], undo_info["column"])
+            tab.applied_steps.pop()
+            self._steps_panel.set_steps(tab.applied_steps)
+            self._load_page()
+            self.statusBar().showMessage("Cell edit undone.", 3000)
+            logger.info("Cell edit undone")
+            return
+
         success, error = tab.engine.undo()
         if not success:
             QMessageBox.critical(self, "Undo Error", f"Failed to undo:\n\n{error}")
             logger.error(f"Undo failed: {error}")
+            # Push undo info back since we couldn't undo
+            tab._undo_stack.append(undo_info)
             return
         tab.applied_steps.pop()
         self._steps_panel.set_steps(tab.applied_steps)
@@ -1011,6 +1038,32 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._load_page()
         self.statusBar().showMessage("Last step undone.", 3000)
         logger.info("Undo applied")
+
+    def _on_op_drop_duplicates(self) -> None:
+        """Open drop-duplicates dialog and apply the transform."""
+        tab = self._active_tab()
+        if not tab:
+            return
+        cols = tab.engine.get_columns()
+        if not cols:
+            return
+        dialog = DropDuplicatesDialog(tab.name, cols, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.get_result()
+        if result is None:
+            return
+        subset, keep = result
+        if not subset:
+            subset = cols
+        partition_cols = ", ".join(f'"{c}"' for c in subset)
+        if keep == "first":
+            query = f"SELECT * FROM ({tab.engine.current_query}) QUALIFY ROW_NUMBER() OVER (PARTITION BY {partition_cols}) = 1"
+        else:
+            query = f"SELECT * FROM ({tab.engine.current_query}) QUALIFY ROW_NUMBER() OVER (PARTITION BY {partition_cols} ORDER BY rowid DESC) = 1"
+        col_names = ", ".join(subset)
+        step = self._t("step.drop_duplicates", keep=keep, columns=col_names)
+        self._apply_transform(tab, query, step)
 
     def _apply_transform(self, tab: TableTab, query: str, description: str = "") -> None:
         """Apply a SQL transformation to the given tab's engine."""
@@ -1020,6 +1073,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
             self._load_page()
             step = description or "Transform"
             tab.applied_steps.append(step)
+            tab._undo_stack.append({"type": "sql"})
             self._steps_panel.set_steps(tab.applied_steps)
             self.statusBar().showMessage(f"{step} applied.", 3000)
             logger.info(f"Applied transform: {query[:80]}...")

@@ -26,6 +26,9 @@ TRANSLATIONS_AZ = {
     "menu.operations.join": "Birləşdirmə",
     "menu.operations.append": "Əlavə et",
 
+    "step.cell_edit": "'{column}' sətir {row} də redaktə et",
+    "step.drop_duplicates": "Təkrarları sil ({keep}) — {columns}",
+
     "menu.help": "Kömək",
     "menu.help.about": "ParVu haqqında",
 

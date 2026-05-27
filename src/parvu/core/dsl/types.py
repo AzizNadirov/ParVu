@@ -22,6 +22,7 @@ class LogicalType(Enum):
     TIMESTAMP = auto()
     LIST = auto()          # List<T>
     STRUCT = auto()        # Struct{...}
+    QUERY = auto()         # Table-level expression (produces full SELECT)
 
 
 # DuckDB physical type → LogicalType mapping

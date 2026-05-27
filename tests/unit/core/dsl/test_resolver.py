@@ -10,7 +10,7 @@ from parvu.core.dsl.resolver import Resolver, ResolutionError
 from parvu.core.dsl.compiler import Compiler
 from parvu.core.dsl.catalog import Catalog
 from parvu.core.dsl.registry import FunctionRegistry
-from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment
+from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment, DropDuplicates
 from parvu.core.dsl.types import LogicalType
 
 
@@ -128,3 +128,42 @@ class TestResolver:
         expr = resolver.resolve(tree)
         sql = Compiler().compile(expr)
         assert sql == 'SELECT *, CONCAT(sales.name, \'!\') AS "new_col" FROM sales'
+
+    def test_resolve_drop_duplicates(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse('drop_duplicates(sales[id], sales[name], "first")')
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, DropDuplicates)
+        assert expr.table == "sales"
+        assert expr.columns == ["id", "name"]
+        assert expr.keep == "first"
+        assert expr.logical_type == LogicalType.QUERY
+
+    def test_resolve_drop_duplicates_default_all_columns(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse('drop_duplicates(sales[id])')
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, DropDuplicates)
+        assert expr.table == "sales"
+        assert set(expr.columns) == {"revenue", "id", "name"}
+        assert expr.keep == "first"
+
+    def test_resolve_drop_duplicates_single_col_with_keep(self, parser: DSLParser, resolver: Resolver) -> None:
+        """Single column + keep string still falls back to all columns."""
+        tree = parser.parse('drop_duplicates(sales[id], "last")')
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, DropDuplicates)
+        assert set(expr.columns) == {"revenue", "id", "name"}
+        assert expr.keep == "last"
+
+    def test_resolve_drop_duplicates_last(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse('drop_duplicates(sales[id], sales[name], "last")')
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, DropDuplicates)
+        assert expr.keep == "last"
+
+    def test_end_to_end_drop_duplicates_compile(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse('drop_duplicates(sales[id], sales[name], "first")')
+        expr = resolver.resolve(tree)
+        sql = Compiler().compile(expr)
+        assert "QUALIFY" in sql
+        assert "ROW_NUMBER()" in sql
+        assert "PARTITION BY id, name" in sql

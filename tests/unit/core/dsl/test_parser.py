@@ -88,3 +88,7 @@ class TestParser:
     def test_assignment_quoted_column(self, parser: DSLParser) -> None:
         tree = parser.parse('sales["new col"] = sales[revenue]')
         assert tree.data == "assignment"
+
+    def test_drop_duplicates(self, parser: DSLParser) -> None:
+        tree = parser.parse('drop_duplicates(sales[id], sales[name], "first")')
+        assert tree.data == "func_call"

@@ -26,6 +26,9 @@ TRANSLATIONS_EN = {
     "menu.operations.join": "Join",
     "menu.operations.append": "Append",
 
+    "step.cell_edit": "Edit '{column}' at row {row}",
+    "step.drop_duplicates": "Drop duplicates ({keep}) on {columns}",
+
     "menu.help": "Help",
     "menu.help.about": "About ParVu",
 

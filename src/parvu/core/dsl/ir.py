@@ -67,3 +67,11 @@ class Assignment(Expr):
     table: str
     column: str
     value: Expr
+
+
+@dataclass(kw_only=True)
+class DropDuplicates(Expr):
+    """Table-level deduplication: drop_duplicates(table, cols..., keep)."""
+    table: str
+    columns: list[str]
+    keep: str  # "first" or "last"

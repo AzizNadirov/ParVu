@@ -26,6 +26,9 @@ TRANSLATIONS_RU = {
     "menu.operations.join": "Соединение",
     "menu.operations.append": "Добавить строки",
 
+    "step.cell_edit": "Редактирование '{column}' в строке {row}",
+    "step.drop_duplicates": "Удаление дубликатов ({keep}) по {columns}",
+
     "menu.help": "Справка",
     "menu.help.about": "О программе ParVu",
 

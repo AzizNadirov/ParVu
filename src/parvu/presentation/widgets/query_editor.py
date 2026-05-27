@@ -22,7 +22,7 @@ from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.parser import DSLParser
 from parvu.core.dsl.resolver import Resolver
 from parvu.core.dsl.compiler import Compiler
-from parvu.core.dsl.ir import Assignment
+from parvu.core.dsl.ir import Assignment, DropDuplicates
 
 
 class QueryEditor(QWidget):
@@ -173,8 +173,8 @@ class QueryEditor(QWidget):
                 tree = self._parser.parse(expr_text)
                 expr = self._resolver.resolve(tree)
                 compiled = self._compiler.compile(expr)
-                # Assignments already emit a full SELECT query
-                if isinstance(expr, Assignment):
+                # Assignments and table-level ops already emit a full SELECT query
+                if isinstance(expr, (Assignment, DropDuplicates)):
                     return compiled
                 # Scalar expressions — wrap them in a SELECT
                 if self._catalog and self._catalog.tables():
@@ -237,6 +237,8 @@ class QueryEditor(QWidget):
             expr = self._resolver.resolve(tree)
             if isinstance(expr, Assignment):
                 return {"type": "assignment", "table": expr.table, "column": expr.column}
+            if isinstance(expr, DropDuplicates):
+                return {"type": "drop_duplicates", "table": expr.table, "columns": expr.columns, "keep": expr.keep}
             return {"type": "expression", "logical_type": expr.logical_type.name}
         except Exception:
             return {}

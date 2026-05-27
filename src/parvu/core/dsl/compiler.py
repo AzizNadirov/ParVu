@@ -11,7 +11,7 @@ import sqlglot
 from sqlglot import exp
 from loguru import logger
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.types import LogicalType
 
@@ -44,6 +44,27 @@ class Compiler:
             return exp.Select(
                 expressions=[star, alias],
             ).from_(exp.to_identifier(expr.table))
+
+        if isinstance(expr, DropDuplicates):
+            # drop_duplicates(table, cols..., keep)
+            table_id = exp.to_identifier(expr.table)
+            star = exp.Star()
+            if expr.keep == "first" and not expr.columns:
+                # SELECT DISTINCT * FROM table
+                return exp.Select(expressions=[star], distinct=True).from_(table_id)
+            # QUALIFY ROW_NUMBER() OVER (PARTITION BY cols [ORDER BY rowid DESC]) = 1
+            partition_cols = [exp.to_identifier(c) for c in expr.columns]
+            window_this = exp.Anonymous(this="ROW_NUMBER", expressions=[])
+            if expr.keep == "last":
+                order = exp.Order(expressions=[exp.Ordered(this=exp.to_identifier("rowid"), desc=True)])
+                window = exp.Window(this=window_this, partition_by=partition_cols, order=order)
+            else:
+                window = exp.Window(this=window_this, partition_by=partition_cols)
+            qualify_expr = exp.EQ(this=window, expression=exp.Literal.number(1))
+            return exp.Select(
+                expressions=[star],
+                qualify=exp.Qualify(this=qualify_expr),
+            ).from_(table_id)
 
         if isinstance(expr, ColumnRef):
             # table.col

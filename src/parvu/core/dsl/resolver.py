@@ -13,7 +13,7 @@ from __future__ import annotations
 from loguru import logger
 from lark import Tree, Token
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.catalog import Catalog
 from parvu.core.dsl.types import LogicalType, duckdb_type_to_logical
@@ -132,7 +132,12 @@ class Resolver:
             val = float(token.value) if "." in token.value else int(token.value)
             return Literal(value=val, logical_type=LogicalType.NUMERIC)
         if node.data == "string":
-            return Literal(value=token.value.strip("'"), logical_type=LogicalType.TEXT)
+            value = token.value
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            elif value.startswith("'") and value.endswith("'"):
+                value = value[1:-1]
+            return Literal(value=value, logical_type=LogicalType.TEXT)
         if node.data == "boolean":
             return Literal(value=token.value.upper() == "TRUE", logical_type=LogicalType.BOOLEAN)
         if node.data == "null":
@@ -180,6 +185,10 @@ class Resolver:
         if len(children) > 1 and isinstance(children[1], Tree):
             args = [self._resolve_node(c) for c in children[1].children]
 
+        # Special-case: drop_duplicates(table, cols..., keep)
+        if func_name.upper() == "DROP_DUPLICATES":
+            return self._resolve_drop_duplicates(args)
+
         func_def = self._registry.lookup(func_name)
         if func_def is None:
             logger.warning(f"Resolution error: unknown function '{func_name}'")
@@ -188,6 +197,49 @@ class Resolver:
         self._check_args(func_def, args)
         logger.debug(f"Resolved function call: {func_name}({len(args)} args) -> {func_def.return_type.name}")
         return Call(func_name=func_name, args=args, logical_type=func_def.return_type)
+
+    def _resolve_drop_duplicates(self, args: list[Expr]) -> Expr:
+        """Resolve drop_duplicates(col_ref, col_refs..., keep) special form."""
+        if not args:
+            raise ResolutionError("drop_duplicates requires at least one column reference")
+
+        # First arg must be a column ref (extracts table name from it)
+        first_col = args[0]
+        if not isinstance(first_col, ColumnRef):
+            raise ResolutionError("drop_duplicates arguments must be column references like sales[id]")
+        table = first_col.table
+
+        if table not in self._catalog.tables():
+            raise ResolutionError(f"Unknown table: '{table}'")
+
+        # Extract subset columns and optional keep strategy
+        keep = "first"
+        subset_cols: list[str] = []
+        for arg in args:
+            if isinstance(arg, ColumnRef):
+                if arg.table != table:
+                    raise ResolutionError(
+                        f"drop_duplicates column references must belong to table '{table}'"
+                    )
+                subset_cols.append(arg.column)
+            elif isinstance(arg, Literal) and isinstance(arg.value, str):
+                if arg.value.lower() not in ("first", "last"):
+                    raise ResolutionError("drop_duplicates keep must be 'first' or 'last'")
+                keep = arg.value.lower()
+            else:
+                raise ResolutionError(
+                    "drop_duplicates arguments must be column references "
+                    "or a keep strategy string ('first' or 'last')"
+                )
+
+        # If only one column reference was given (with or without keep string),
+        # interpret it as "all columns" for convenience.
+        column_args = [a for a in args if isinstance(a, ColumnRef)]
+        if len(column_args) == 1:
+            subset_cols = list(self._catalog.columns(table))
+
+        logger.debug(f"Resolved drop_duplicates: {table}({subset_cols}, keep={keep})")
+        return DropDuplicates(table=table, columns=subset_cols, keep=keep, logical_type=LogicalType.QUERY)
 
     def _resolve_method_call(self, children: list) -> Expr:
         """Resolve expr.method(args...) call."""

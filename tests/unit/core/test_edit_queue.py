@@ -61,3 +61,21 @@ def test_apply_edits_empty_queue():
     df = pd.DataFrame({"x": [1, 2, 3]})
     result = apply_edits_to_dataframe(df, [])
     assert result.equals(df)
+
+
+def test_edit_queue_remove():
+    queue = EditQueue()
+    queue.add(CellEdit(absolute_row=5, column="name", old_value="Alice", new_value="Bob"))
+    queue.add(CellEdit(absolute_row=3, column="age", old_value=30, new_value=31))
+    assert queue.edit_count() == 2
+
+    queue.remove(5, "name")
+    assert queue.edit_count() == 1
+    assert not queue.has_edit(5, "name")
+    assert queue.get_edit(3, "age") is not None
+
+
+def test_edit_queue_remove_missing():
+    queue = EditQueue()
+    queue.remove(0, "x")  # should not raise
+    assert queue.edit_count() == 0
