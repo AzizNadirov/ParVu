@@ -143,6 +143,12 @@ def generate_stylesheet(theme: Theme) -> str:
         color: {c.foreground};
     }}
 
+    /* Tab Bar Container */
+    #TabBar {{
+        background-color: {c.status_background};
+        border-top: 1px solid {c.tab_inactive_border};
+    }}
+
     /* List Widget */
     QListWidget {{
         background-color: {c.table_background};

@@ -150,7 +150,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         layout.addWidget(self._pagination)
 
         # Tab bar
-        self._tab_bar = TabBar()
+        self._tab_bar = TabBar(theme=self._container.theme_manager.current_theme)
         self._tab_bar.tab_switched.connect(self._switch_tab)
         self._tab_bar.tab_closed.connect(self._close_tab)
         self._tab_bar.add_tab_requested.connect(self._browse_file)
@@ -260,6 +260,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         self._query_editor.apply_theme(theme)
         self._data_table.apply_theme(theme)
+        self._tab_bar.set_theme(theme)
 
     def _new_window(self) -> None:
         if self._window_service:

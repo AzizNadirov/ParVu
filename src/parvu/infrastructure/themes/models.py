@@ -55,6 +55,15 @@ class ColorScheme(BaseModel):
     accent_warning: str = "#FF9800"
     accent_error: str = "#F44336"
 
+    # Tab bar colors
+    tab_active_background: str = "#FFFFFF"
+    tab_active_border: str = "#D4D4D4"
+    tab_inactive_background: str = "#F3F3F3"
+    tab_inactive_border: str = "#D4D4D4"
+    tab_text_active: str = "#333333"
+    tab_text_inactive: str = "#666666"
+    tab_close_hover: str = "#E81123"
+
 
 class LayoutConfig(BaseModel):
     """Layout configuration for UI components."""
