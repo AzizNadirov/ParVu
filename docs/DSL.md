@@ -148,6 +148,7 @@ Functions are case-insensitive: `upper`, `UPPER`, `Upper` all work.
 | Function | Description | Example |
 |----------|-------------|---------|
 | `DROP_DUPLICATES(table, cols..., keep)` | Remove duplicates | `DROP_DUPLICATES(data[id], data[name], 'first')` |
+| `DROP_NULL(col, null_value=NULL)` | Drop rows where col is NULL (or equals a sentinel) | `DROP_NULL(data[score], -1)` |
 
 #### REPLACE
 
@@ -210,6 +211,36 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY rowid DESC) = 1
 ```
 
 If only one column is provided, all columns from the table are used as the partition key.
+
+#### DROP_NULL
+
+Drop rows where a column equals a "null sentinel". Two modes:
+
+```python
+# Mode 1 (default): null_value omitted -> drop SQL NULLs
+DROP_NULL(data[email])
+
+# Mode 2: explicit sentinel -> drop rows where col equals that value;
+# real SQL NULLs are kept (chain another DROP_NULL with no sentinel
+# to remove them too).
+DROP_NULL(data[score], -1)
+DROP_NULL(data[name], '')
+DROP_NULL(data[status], 'N/A')
+```
+
+Compilation:
+
+```sql
+-- DROP_NULL(data[email])
+SELECT * FROM data WHERE NOT email IS NULL
+
+-- DROP_NULL(data[score], -1)
+SELECT * FROM data WHERE score IS NULL OR score <> -1
+```
+
+The first argument must be a column reference. The second (optional) must be a
+literal (string, integer, or float). Available in the UI under
+**Operations → Drop Null Values...** and via the column header context menu.
 
 ## Examples
 

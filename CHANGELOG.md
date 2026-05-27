@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Search dialog** (`Ctrl+F`, also under **Edit → Find...**) — searches every row in the active table, not just the visible page. Incremental Next/Prev navigation with on-demand DuckDB queries; previously visited matches are cached so re-navigation is instant. Column scope dropdown, `Match case` / `Whole cell` / `Regex` options. `Enter` triggers Next, `Shift+Enter` Prev. Status line reports `Match N of M` (with `+` suffix when more may exist) and "first / last match reached" when the table edge is hit. Selecting a match paginates to the right page and selects the cell (deferred until the async page-load completes so the navigation lands on the loaded data, not stale state).
+- **Column Statistics popover** — right-click any column header → **Column Statistics...**. One DuckDB aggregate against the active query returns `rows / non-null / null (with %) / distinct / min / max`, plus `mean / std` for numeric-castable columns (`TRY_CAST(col AS DOUBLE)`). Modal dialog with key/value table and a **Copy** button (TSV to clipboard for paste into Slack/Jira). Respects applied transforms.
+- **DropNull operation** — `Operations → Drop Null Values...` or column header context menu. Drops rows where the column is NULL by default, or where the column equals a sentinel value the user types (`-1`, `''`, `N/A`, ...). With a sentinel, real `NULL` rows are kept; chain another DropNull with no sentinel to remove them too. Also available as expression: `DROP_NULL(table[col])` or `DROP_NULL(table[col], -1)`.
+- **Drag-and-drop file open** — drop one or many local files onto the window to open each as a new tab.
+- **Sortable column headers** — click a header to sort ascending; click again to flip to descending. Sort indicator (▲/▼) shown in the header. Sort state is per-tab and restored on tab switch.
+- **Find in current page** (inline find bar widget) — separate from the full-table dialog, kept available for programmatic use. Status: case-insensitive substring or whole-cell match across visible rows.
+- **Copy as CSV / TSV / Markdown** — right-click any cell selection: `Copy` (TSV, default), `Copy as CSV`, `Copy as Markdown`, `Copy with Headers (TSV)`. `Ctrl+C` produces a rectangular TSV (gaps in non-rectangular selections are filled with empty strings).
+- **Keyboard shortcuts cheatsheet** (`Ctrl+/`, also under **Help → Keyboard Shortcuts**) — modal listing every shortcut grouped by File / Table / Find / Help.
+- **Edit menu** with `Find...` (Ctrl+F), `Find Next` (F3), `Find Previous` (Shift+F3).
+- **Windows build improvements** — installer (`ParVu-<v>-setup.exe`) and portable archive (`ParVu-<v>-portable.zip`):
+  - Portable archive now created via `tar.exe` (built into Windows 10+) instead of `Compress-Archive`, which OOMs on the ~300 MB PyInstaller bundle.
+  - Installer's `Desktop Shortcut` and `Associate .parquet/.pq/.csv/.json files` tasks are **checked by default**.
+  - New `docs/BUILD_WINDOWS.md` with direct Inno Setup 6.7.3 download link and the `build.ps1` switches (`-SkipInstaller`, `-SkipPortable`, `-NoClean`, `-Help`).
+  - `parvu.spec` updated to bundle resources at `parvu/resources/` (matches `RESOURCES_DIR`) and use `src/parvu/__main__.py` as the entry point.
+
+### Changed
+- **Save now commits applied transforms**, not just cell edits. `Ctrl+S` writes the transformed result back to the file (via DuckDB `COPY` for transforms-only; via COPY-to-temp + pandas for transforms+edits; legacy pandas path for edits-only). After save, the Applied Steps panel clears and the tab's engine re-reads the saved file. No more "Confirm Close" dialog if you saved your transforms.
+- **Menu icons** swapped for more appropriate Qt standard pixmaps: New Window (file), Export (file with link arrow), Recent Files (folder), Math (content view), Drop Duplicates (trash), Replace (reload), Expression Help (?). Added left padding to menu icons via `QMenu::icon { padding-left }`.
+
+### i18n
+- All new strings translated in English, Russian, Azerbaijani (~80 new keys): Edit menu, Search dialog, Column Statistics dialog, DropNull dialog/step, shortcuts cheatsheet, find bar, cell context menu, header context menu additions.
+- `ConfirmCloseDialog` now uses the translator (existing `dialog.confirm_close.*` keys), no longer hardcodes English.
+
+### Fixed
+- **Search-jump page race** — when the search dialog jumped to a row on another page, cell selection ran against stale table state before the async `_load_page` finished. Selection is now deferred to `_on_page_loaded`.
+
 ## [0.3.0] - 2026-05-27
 
 ### Added
