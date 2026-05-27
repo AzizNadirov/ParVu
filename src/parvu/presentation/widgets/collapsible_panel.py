@@ -1,18 +1,18 @@
 """
 CollapsiblePanel — reusable widget that wraps content in a toggleable section.
 
-Used to save vertical space by hiding/showing groups of related widgets.
+Uses AccordionHeader for a polished accordion look.
 """
 from __future__ import annotations
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-)
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QVBoxLayout
+
+from parvu.presentation.widgets.accordion_header import AccordionHeader
+from parvu.infrastructure.themes.models import Theme
 
 
 class CollapsiblePanel(QWidget):
-    """A panel with a toggle button header that shows/hides its content."""
+    """A panel with an accordion-style header that shows/hides its content."""
 
     def __init__(
         self,
@@ -23,6 +23,7 @@ class CollapsiblePanel(QWidget):
         super().__init__(parent)
         self._title = title
         self._expanded = expanded
+        self._theme: Theme | None = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -30,31 +31,23 @@ class CollapsiblePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
 
-        # Header row with toggle button
-        header = QHBoxLayout()
-        header.setSpacing(6)
+        self._header = AccordionHeader(self._title, self._expanded)
+        self._header.toggled.connect(self._toggle)
+        layout.addWidget(self._header)
 
-        arrow = "▼" if self._expanded else "▶"
-        self._toggle_btn = QPushButton(f"{arrow} {self._title}")
-        self._toggle_btn.setFlat(True)
-        self._toggle_btn.setStyleSheet(
-            "QPushButton { text-align: left; font-weight: bold; padding: 2px 4px; }"
-        )
-        self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._toggle_btn.clicked.connect(self._toggle)
-        header.addWidget(self._toggle_btn)
-        header.addStretch()
-
-        layout.addLayout(header)
-
-        # Content area
+        # Content area — slightly indented for accordion hierarchy
         self._content = QWidget()
         self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(0, 0, 0, 0)
+        self._content_layout.setContentsMargins(8, 4, 8, 4)
         self._content_layout.setSpacing(4)
 
         layout.addWidget(self._content)
         self._content.setVisible(self._expanded)
+
+    def set_theme(self, theme: Theme | None) -> None:
+        """Update header colors from the current theme."""
+        self._theme = theme
+        self._header.set_theme(theme)
 
     def add_widget(self, widget: QWidget) -> None:
         """Add a widget to the collapsible content area."""
@@ -67,8 +60,7 @@ class CollapsiblePanel(QWidget):
     def _toggle(self) -> None:
         self._expanded = not self._expanded
         self._content.setVisible(self._expanded)
-        arrow = "▼" if self._expanded else "▶"
-        self._toggle_btn.setText(f"{arrow} {self._title}")
+        self._header.set_expanded(self._expanded)
 
     def set_expanded(self, expanded: bool) -> None:
         """Expand or collapse the panel."""

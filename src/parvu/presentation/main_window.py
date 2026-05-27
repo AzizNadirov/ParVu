@@ -269,6 +269,8 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._query_editor.apply_theme(theme)
         self._data_table.apply_theme(theme)
         self._tab_bar.set_theme(theme)
+        self._query_panel.set_theme(theme)
+        self._steps_panel.set_theme(theme)
 
     def _new_window(self) -> None:
         if self._window_service:

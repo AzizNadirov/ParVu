@@ -1,15 +1,17 @@
 """
 Applied Steps Panel — shows the history of transforms for the current tab.
 
-Collapsible to save vertical space. Shows step count in the header.
+Collapsible accordion to save vertical space. Shows step count in the header.
 """
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QLabel, QPushButton,
+    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+
+from parvu.presentation.widgets.accordion_header import AccordionHeader
+from parvu.infrastructure.themes.models import Theme
 
 
 class AppliedStepsPanel(QWidget):
@@ -20,6 +22,7 @@ class AppliedStepsPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._expanded = False
+        self._theme: Theme | None = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -27,32 +30,24 @@ class AppliedStepsPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
 
-        # Header row: toggle + count label + undo button
-        header = QHBoxLayout()
-        header.setSpacing(6)
+        # Accordion header
+        self._header = AccordionHeader("Applied Steps (0)", self._expanded)
+        self._header.toggled.connect(self._toggle)
 
-        self._toggle_btn = QPushButton("▶ Applied Steps (0)")
-        self._toggle_btn.setFlat(True)
-        self._toggle_btn.setStyleSheet(
-            "QPushButton { text-align: left; font-weight: bold; padding: 2px 4px; }"
-        )
-        self._toggle_btn.clicked.connect(self._toggle)
-        header.addWidget(self._toggle_btn)
-        header.addStretch()
-
+        # Undo button inside the header
         self._undo_btn = QPushButton("↩ Undo")
         self._undo_btn.setEnabled(False)
         self._undo_btn.setToolTip("Undo the last applied step")
         self._undo_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
         self._undo_btn.clicked.connect(self.undo_requested.emit)
-        header.addWidget(self._undo_btn)
+        self._header.add_right_widget(self._undo_btn)
 
-        layout.addLayout(header)
+        layout.addWidget(self._header)
 
         # Collapsible content: scrollable step list
         self._content = QWidget()
         content_layout = QVBoxLayout(self._content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setContentsMargins(8, 0, 8, 0)
         content_layout.setSpacing(2)
 
         self._list = QListWidget()
@@ -63,12 +58,17 @@ class AppliedStepsPanel(QWidget):
         layout.addWidget(self._content)
         self._content.setVisible(False)
 
+    def set_theme(self, theme: Theme | None) -> None:
+        """Update header colors from the current theme."""
+        self._theme = theme
+        self._header.set_theme(theme)
+
     def _toggle(self) -> None:
         self._expanded = not self._expanded
         self._content.setVisible(self._expanded)
         count = self._list.count()
-        arrow = "▼" if self._expanded else "▶"
-        self._toggle_btn.setText(f"{arrow} Applied Steps ({count})")
+        self._header.set_title(f"Applied Steps ({count})")
+        self._header.set_expanded(self._expanded)
 
     def set_steps(self, steps: list[str]) -> None:
         """Replace the entire step list."""
@@ -79,17 +79,16 @@ class AppliedStepsPanel(QWidget):
             self._list.addItem(item)
         self._undo_btn.setEnabled(bool(steps))
         count = len(steps)
-        arrow = "▼" if self._expanded else "▶"
-        self._toggle_btn.setText(f"{arrow} Applied Steps ({count})")
+        self._header.set_title(f"Applied Steps ({count})")
+        self._header.set_expanded(self._expanded)
 
     def clear(self) -> None:
         """Remove all steps and collapse."""
         self._list.clear()
         self._undo_btn.setEnabled(False)
+        self._header.set_title("Applied Steps (0)")
         if self._expanded:
             self._toggle()
-        else:
-            self._toggle_btn.setText("▶ Applied Steps (0)")
 
     def set_undo_enabled(self, enabled: bool) -> None:
         """Enable or disable the undo button independently of step count."""
