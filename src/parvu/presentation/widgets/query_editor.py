@@ -52,6 +52,7 @@ class QueryEditor(QWidget):
     def _setup_ui(self) -> None:
         from PyQt6.QtWidgets import QSizePolicy
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        self.setMaximumHeight(85)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
