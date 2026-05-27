@@ -113,12 +113,15 @@ def generate_stylesheet(theme: Theme) -> str:
         background-color: {c.menu_background};
         color: {c.menu_foreground};
         border: 1px solid {c.table_grid};
+        icon-size: 16px;
     }}
     QMenu::item {{
-        padding: 5px 30px;
+        padding: 6px 20px 6px 10px;
+        color: {c.menu_foreground};
     }}
     QMenu::item:selected {{
         background-color: {c.menu_hover};
+        color: {c.menu_foreground};
     }}
 
     /* Status Bar */
