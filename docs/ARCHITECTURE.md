@@ -22,6 +22,9 @@ ParVu uses a **layered architecture** with clear separation of concerns:
 │  Core Layer (Domain)                    │
 │  - QueryEngine, FileAdapters,           │
 │    Pagination, Models                   │
+├─────────────────────────────────────────┤
+│  DSL Layer (Expression Language)        │
+│  - Parser, Resolver, Compiler, Registry │
 └─────────────────────────────────────────┘
 ```
 
@@ -62,6 +65,7 @@ class MyPlugin(Plugin):
 
 ## Data Flow
 
+### SQL Mode
 ```
 User Action
     ↓
@@ -74,6 +78,50 @@ Core Layer (QueryEngine → DuckDB)
 Paginated Results (pd.DataFrame)
     ↓
 DataTableView (Display)
+```
+
+### Expression Mode
+```
+User types expression
+    ↓
+Parser (Lark grammar)
+    ↓
+Resolver (Tree → IR: Assignment, DropDuplicates, Call, etc.)
+    ↓
+Compiler (IR → sqlglot → DuckDB SQL)
+    ↓
+QueryEngine.execute_query()
+    ↓
+Paginated Results
+```
+
+## Undo & History
+
+The `QueryEngine` maintains a `_history` stack of previous queries. Every transform pushes the current query before applying the new one:
+
+```python
+engine.apply_transform(new_query)  # pushes old query to history
+engine.undo()                      # pops and restores previous query
+```
+
+Cell edits are tracked separately in `TableTab._undo_stack` (parallel to `applied_steps`). The `MainWindow._undo_last_step()` dispatcher routes undo to either:
+- **SQL transforms** → `QueryEngine.undo()`
+- **Cell edits** → `EditQueue.remove()`
+
+## DSL Architecture
+
+ParVu includes a small expression language (DSL) compiled to DuckDB SQL:
+
+1. **Parser** (`dsl/parser.py`) — Lark grammar parses text into AST
+2. **Resolver** (`dsl/resolver.py`) — Transforms AST into typed IR nodes (`ColumnRef`, `Call`, `Assignment`, `DropDuplicates`, etc.)
+3. **Compiler** (`dsl/compiler.py`) — Converts IR to sqlglot expressions, then to SQL string
+4. **Registry** (`dsl/registry.py`) — Function definitions for auto-completion and validation
+
+Example compilation chain:
+```
+data[total] = price * quantity
+  → Assignment(table="data", column="total", value=BinaryOp(...))
+  → SELECT *, price * quantity AS "total" FROM data
 ```
 
 ## Testing Strategy

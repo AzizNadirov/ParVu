@@ -6,10 +6,20 @@
 |-----------|---------------|-------------|
 | `interfaces.py` | Protocols/ABCs for DI | `IQueryEngine`, `IFileAdapter`, `ISettings`, `ITranslator` |
 | `models.py` | Domain data models | `Page`, `ColumnInfo`, `FileInfo`, `QueryResult`, `SortSpec` |
-| `query_engine.py` | DuckDB wrapper | `QueryEngine` - lazy loading, pagination |
+| `query_engine.py` | DuckDB wrapper | `QueryEngine` - lazy loading, pagination, undo history |
 | `file_adapters.py` | Format detection | `ParquetAdapter`, `CsvAdapter`, `JsonAdapter`, `FileAdapterRegistry` |
 | `pagination.py` | Page calculations | `Paginator` - clamp, offset, recalculate |
 | `exceptions.py` | Domain errors | `ParVuError`, `QueryError`, `FileFormatError` |
+
+### DSL Subsystem (`parvu.core.dsl`)
+
+| Component | Responsibility | Key Classes |
+|-----------|---------------|-------------|
+| `ir.py` | Intermediate representation | `Expr`, `ColumnRef`, `Literal`, `Call`, `BinaryOp`, `Assignment`, `DropDuplicates` |
+| `parser.py` | Lark grammar parser | `Parser` - parses expressions into AST |
+| `resolver.py` | AST → IR transformation | `Resolver` - Lark Tree → typed IR nodes |
+| `compiler.py` | IR → SQL compilation | `Compiler` - generates DuckDB SQL via sqlglot |
+| `registry.py` | Function definitions | `FunctionRegistry`, `FunctionDef`, `ParamDef` |
 
 ## Config Layer (`parvu.config`)
 
@@ -50,6 +60,8 @@
 | `widgets/pagination_bar.py` | Page nav | `PaginationBar` |
 | `widgets/file_toolbar.py` | File input | `FileToolbar` |
 | `widgets/query_toolbar.py` | Query buttons | `QueryToolbar` |
+| `widgets/applied_steps.py` | Steps & undo | `AppliedStepsPanel` - collapsible, undo button |
+| `widgets/query_editor.py` | Dual SQL/expr editor | `QueryEditor` - SQL mode + expression mode |
 | `dialogs/settings_dialog.py` | Settings UI | `SettingsDialog` |
 | `dialogs/theme_selector.py` | Theme picker | `ThemeSelectorDialog` |
 | `dialogs/crash_reporter.py` | Crash UI | `CrashReportDialog` |
@@ -57,6 +69,7 @@
 | `dialogs/table_info_dialog.py` | Metadata | `TableInfoDialog` |
 | `dialogs/unique_values_dialog.py` | Filter | `UniqueValuesDialog` |
 | `dialogs/language_selector.py` | Language | `LanguageSelector` |
+| `dialogs/drop_duplicates_dialog.py` | Deduplication | `DropDuplicatesDialog` - column checklist + keep strategy |
 
 ## Plugin Layer (`parvu.plugins`)
 

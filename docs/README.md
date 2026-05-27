@@ -20,6 +20,13 @@ Welcome to the ParVu documentation! This directory contains comprehensive guides
   - Adding new languages
   - Best practices
 
+- **[DSL.md](DSL.md)** - Expression language guide
+  - Writing expressions
+  - Assignment syntax (`data[col] = expr`)
+  - Built-in functions
+  - Drop duplicates
+  - Auto-completion
+
 ### Developer Guides
 
 - **[../BUILDING.md](../BUILDING.md)** - Complete build guide
@@ -165,9 +172,11 @@ Key settings in `~/.ParVu/settings/settings.json`:
 - Parquet, CSV, JSON support
 - Lazy loading for huge files
 - Pagination
-- SQL querying
+- SQL querying + Expression language (DSL)
 - Syntax highlighting
 - Auto-completion
+- Applied steps with undo
+- Cell editing tracked in steps
 
 ## 📝 Contributing
 
@@ -217,6 +226,15 @@ Found an issue with documentation?
 - ✅ Organized all docs into docs/ directory
 - ✅ Language preference saved in settings
 
+### Post-0.2.0 Updates
+- ✅ Expression language (DSL) with assignment syntax
+- ✅ Drop duplicates operation (UI + DSL)
+- ✅ Applied steps panel with undo
+- ✅ Cell edit tracking and undo
+- ✅ Operations menu (Math, Join, Append, Drop Duplicates)
+- ✅ Collapsible applied steps panel
+- ✅ Dual-mode query editor (SQL / Expression)
+
 ### Version 0.1.0
 - Theme system implementation (3 built-in themes)
 - Core data viewing features
@@ -225,8 +243,8 @@ Found an issue with documentation?
 
 ---
 
-**Last Updated**: 2025-12-29
-**ParVu Version**: 0.2.0
+**Last Updated**: 2026-05-26
+**ParVu Version**: 0.2.0+
 **Documentation Status**: Complete
 
 For the main project README, see [../README.md](../README.md)

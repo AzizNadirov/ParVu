@@ -164,13 +164,54 @@ See [I18N.md](I18N.md#adding-a-new-language) for instructions.
 - Complete translation
 - Native language support
 
+## Using the Expression Language
+
+ParVu supports a Python-like expression language for quick data transformations.
+
+### Switch to Expression Mode
+
+1. Click the **Expr / SQL** toggle in the query toolbar to switch to expression mode
+2. The editor will now compile expressions to DuckDB SQL
+
+### Add a Computed Column
+
+Type in the expression editor:
+
+```python
+data[total] = price * quantity
+```
+
+Press **Execute** (or Ctrl+Enter). This adds a new column `total` computed from `price * quantity`.
+
+### Remove Duplicates
+
+Via the Operations menu:
+1. Click **Operations → Drop Duplicates**
+2. Select the columns to check for duplicates
+3. Choose **Keep First** or **Keep Last**
+4. Click **Apply**
+
+Or via expression:
+
+```python
+DROP_DUPLICATES(data[id], data[name], 'first')
+```
+
+### Undo a Step
+
+Every transform and cell edit is tracked in the **Applied Steps** panel:
+1. Look at the panel below the data table
+2. Click the **↩ Undo** button to revert the last step
+3. Works for both SQL transforms and cell edits
+
 ## Need Help?
 
 - **Documentation**: [docs/I18N.md](I18N.md)
+- **Expression Language**: [docs/DSL.md](DSL.md)
 - **GitHub Issues**: https://github.com/AzizNadirov/ParVu/issues
 - **Telegram**: @aziz_nadirov
 
 ---
 
-**Version**: 0.2.0
-**Last Updated**: 2025-12-29
+**Version**: 0.2.0+
+**Last Updated**: 2026-05-26

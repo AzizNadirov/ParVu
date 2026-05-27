@@ -25,9 +25,19 @@ A powerful desktop application for viewing and querying large Parquet, CSV, and 
 - Auto-completion for SQL keywords and column names
 - Smart query validation
 
+### Expression Language (DSL)
+- **Dual-mode editor** — switch between raw SQL and expression mode
+- **Column assignment** — `data[new_col] = old_col * 2` adds computed columns
+- **Built-in functions** — `ABS`, `UPPER`, `LEN`, `ROUND`, `DROP_DUPLICATES`, etc.
+- **Auto-completion** for functions, columns, and table names in expression mode
+- Seamless compilation to DuckDB SQL behind the scenes
+
 ### Table Operations
 - **Pagination** - Browse large datasets efficiently (configurable rows per page)
 - **Double-click editing** - Edit cell values in the current view
+- **Applied steps** - Every transform, sort, filter, and cell edit is tracked
+- **Undo** - Revert the last applied step (SQL transform or cell edit)
+- **Drop duplicates** - Remove duplicate rows via Operations menu or expression
 - **Column sorting** - Sort by any column (ascending/descending)
 - **Unique values filter** - Excel-like dropdown showing unique column values
 - **Copy operations** - Copy column names or values as Python tuple
@@ -45,6 +55,8 @@ A powerful desktop application for viewing and querying large Parquet, CSV, and 
 - Clean, modern PyQt6 interface
 - **Theme System** - 3 built-in themes (Light, Excel, ParVu Black)
 - **Internationalization (i18n)** - 3 languages: English, Russian, Azerbaijani
+- **Operations menu** — Math, Join, Append, and Drop Duplicates operations
+- **Collapsible applied steps** — Toggle the steps panel to save screen space
 - Import/Export custom themes
 - Customizable colors, fonts, and layouts
 - Recent files history
@@ -108,14 +120,36 @@ uv run python src/app.py path/to/your/file.parquet
    - Auto-completion appears after typing 2+ characters
    - Press Tab or Enter to accept suggestions
 4. **Navigate** - Use Previous/Next buttons to browse pages
-5. **Column Operations** - Right-click column headers for:
+5. **Expression Mode** - Switch the editor to expression mode and write:
+   - `data[discount] = price * 0.1` to add a computed column
+   - `DROP_DUPLICATES(data[id], data[name], 'first')` to deduplicate
+   - Press Execute to compile and run
+6. **Column Operations** - Right-click column headers for:
    - Copy column name
    - Sort ascending/descending
    - Copy values as tuple
    - Show unique values (with search and filter)
-6. **Edit Cells** - Double-click any cell to edit (view only, not saved to file)
-7. **Export** - File → Export Results to save query results
-8. **Change Theme** - File → Change Theme to switch between Light, Excel, and ParVu Black themes
+7. **Operations Menu** - Use Operations → Drop Duplicates, Math, Join, or Append
+8. **Edit Cells** - Double-click any cell to edit (tracked as an applied step)
+9. **Undo** - Press the ↩ Undo button in the Applied Steps panel to revert changes
+10. **Export** - File → Export Results to save query results
+11. **Change Theme** - File → Change Theme to switch between Light, Excel, and ParVu Black themes
+
+## Expression Language Examples
+
+```python
+-- Add a computed column
+data[total] = price * quantity
+
+-- Remove duplicates keeping the first occurrence
+DROP_DUPLICATES(data[id], data[category], 'first')
+
+-- String and math functions
+data[full_name] = UPPER(first_name) || ' ' || UPPER(last_name)
+data[abs_diff] = ABS(price - avg_price)
+
+-- Use in expression mode; compiled to DuckDB SQL automatically
+```
 
 ## Example SQL Queries
 
@@ -184,6 +218,8 @@ A: This is a complete rewrite with:
 - PyQt6 (modern UI framework)
 - **Lazy loading** for huge files (8GB+) without memory issues
 - **Theme system with 3 built-in themes**
+- **Expression language (DSL)** with auto-completion
+- **Applied steps with undo** for every transform
 - Better SQL auto-completion
 - Excel-like unique value filters
 - Improved pagination performance
