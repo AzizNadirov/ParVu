@@ -38,8 +38,8 @@ class CollapsiblePanel(QWidget):
         # Content area — slightly indented for accordion hierarchy
         self._content = QWidget()
         self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(8, 4, 8, 4)
-        self._content_layout.setSpacing(4)
+        self._content_layout.setContentsMargins(4, 0, 4, 0)
+        self._content_layout.setSpacing(2)
 
         layout.addWidget(self._content)
         self._content.setVisible(self._expanded)

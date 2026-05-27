@@ -11,7 +11,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QFileDialog,
-    QMessageBox, QProgressDialog, QApplication, QLabel,
+    QMessageBox, QProgressDialog, QApplication,
     QTableWidget, QInputDialog, QDialog, QStyle,
 )
 from PyQt6.QtCore import Qt
@@ -115,13 +115,13 @@ class MainWindow(QMainWindow, ThemeableMixin):
             expanded=True,
         )
 
-        self._query_label = QLabel(self._t("label.sql_query", table_name=self._container.settings.default_data_var_name))
-        self._query_panel.add_widget(self._query_label)
-
         self._query_editor = QueryEditor(
             theme=self._container.theme_manager.current_theme,
         )
-        self._query_editor.setMaximumHeight(140)
+        self._query_editor.set_header_label(
+            self._t("label.sql_query", table_name=self._container.settings.default_data_var_name)
+        )
+        self._query_editor.setMaximumHeight(100)
         self._query_editor.mode_changed.connect(self._on_query_mode_changed)
         self._query_panel.add_widget(self._query_editor)
 
@@ -468,13 +468,13 @@ class MainWindow(QMainWindow, ThemeableMixin):
         logger.error(f"Query error: {error_msg}")
 
     def _on_query_mode_changed(self, is_expression: bool) -> None:
-        """Update the query label when the editor mode changes."""
+        """Update the query editor header label when mode changes."""
         tab = self._active_tab()
         table_name = tab.name if tab else self._container.settings.default_data_var_name
         if is_expression:
-            self._query_label.setText(self._t("label.expression_query", table_name=table_name))
+            self._query_editor.set_header_label(self._t("label.expression_query", table_name=table_name))
         else:
-            self._query_label.setText(self._t("label.sql_query", table_name=table_name))
+            self._query_editor.set_header_label(self._t("label.sql_query", table_name=table_name))
 
     def _execute_query(self) -> None:
         tab = self._active_tab()

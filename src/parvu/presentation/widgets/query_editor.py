@@ -52,28 +52,36 @@ class QueryEditor(QWidget):
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
 
-        # Mode toggle row
-        toggle_row = QHBoxLayout()
-        self._mode_label = QLabel("Mode:")
-        toggle_row.addWidget(self._mode_label)
+        # Header row: label (left) + mode toggle (right)
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+
+        self._header_label = QLabel("SQL Query")
+        self._header_label.setStyleSheet("QLabel { font-weight: bold; }")
+        header_row.addWidget(self._header_label)
+        header_row.addStretch()
+
+        mode_label = QLabel("Mode:")
+        header_row.addWidget(mode_label)
 
         self._sql_btn = QPushButton("SQL")
         self._sql_btn.setCheckable(True)
         self._sql_btn.setChecked(True)
+        self._sql_btn.setFixedHeight(22)
         self._sql_btn.clicked.connect(self._set_sql_mode)
-        toggle_row.addWidget(self._sql_btn)
+        header_row.addWidget(self._sql_btn)
 
         self._expr_btn = QPushButton("Expression")
         self._expr_btn.setCheckable(True)
         self._expr_btn.setEnabled(False)
+        self._expr_btn.setFixedHeight(22)
         self._expr_btn.setToolTip("Load a data file to enable expression mode")
         self._expr_btn.clicked.connect(self._set_expr_mode)
-        toggle_row.addWidget(self._expr_btn)
+        header_row.addWidget(self._expr_btn)
 
-        toggle_row.addStretch()
-        layout.addLayout(toggle_row)
+        layout.addLayout(header_row)
 
         # Stacked editor
         self._stack = QStackedWidget()
@@ -221,6 +229,10 @@ class QueryEditor(QWidget):
     def update_completions(self, column_names: list[str], table_name: str = "") -> None:
         """Update completion lists for both editors."""
         self._sql_editor.update_completions(column_names, table_name)
+
+    def set_header_label(self, text: str) -> None:
+        """Update the header label shown above the editor."""
+        self._header_label.setText(text)
 
     def apply_theme(self, theme: Theme) -> None:
         """Apply theme to editors."""
