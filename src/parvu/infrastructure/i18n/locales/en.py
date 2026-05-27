@@ -322,6 +322,25 @@ TRANSLATIONS_EN = {
 
     # Column header context menu addition
     "context.drop_null": "Drop Null Values...",
+    "context.column_stats": "Column Statistics...",
+
+    # Column Stats Dialog
+    "column_stats.title": "Column Statistics — {column}",
+    "column_stats.header": "<b>{column}</b> &nbsp;<span style='color: gray;'>({type})</span>",
+    "column_stats.col.stat": "Statistic",
+    "column_stats.col.value": "Value",
+    "column_stats.rows": "Rows",
+    "column_stats.non_null": "Non-null",
+    "column_stats.null": "Null",
+    "column_stats.distinct": "Distinct",
+    "column_stats.min": "Min",
+    "column_stats.max": "Max",
+    "column_stats.mean": "Mean",
+    "column_stats.std": "Std dev",
+    "column_stats.copy": "Copy",
+    "column_stats.computing": "Computing column statistics...",
+    "column_stats.error_title": "Statistics Failed",
+    "column_stats.error_msg": "Could not compute statistics for '{column}':\n{error}",
 
     # Help menu additions
     "menu.help.shortcuts": "Keyboard Shortcuts",

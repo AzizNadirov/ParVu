@@ -351,6 +351,55 @@ class QueryEngine(IQueryEngine):
         logger.debug(f"[find_next_match] match: {result}")
         return result
 
+    def get_column_stats(self, column: str) -> dict[str, Any]:
+        """Compute summary statistics for ``column`` over the current query.
+
+        Always returns: row_count, non_null, null, distinct, min, max, type.
+        For numeric-castable columns, also returns: mean, std.
+        """
+        quoted = '"' + column.replace('"', '""') + '"'
+        # Probe the column's type
+        col_type = ""
+        try:
+            type_row = self._conn.execute(
+                f"SELECT typeof({quoted}) FROM ({self._current_query}) LIMIT 1"
+            ).fetchone()
+            if type_row:
+                col_type = str(type_row[0])
+        except Exception as e:
+            logger.error(f"get_column_stats: typeof probe failed: {e}")
+
+        sql = (
+            "SELECT "
+            "  COUNT(*) AS row_count, "
+            f"  COUNT({quoted}) AS non_null, "
+            f"  COUNT(*) - COUNT({quoted}) AS null_count, "
+            f"  COUNT(DISTINCT {quoted}) AS distinct_count, "
+            f"  CAST(MIN({quoted}) AS VARCHAR) AS min_val, "
+            f"  CAST(MAX({quoted}) AS VARCHAR) AS max_val, "
+            f"  AVG(TRY_CAST({quoted} AS DOUBLE)) AS mean_val, "
+            f"  STDDEV(TRY_CAST({quoted} AS DOUBLE)) AS std_val "
+            f"FROM ({self._current_query})"
+        )
+        try:
+            row = self._conn.execute(sql).fetchone()
+        except Exception as e:
+            logger.error(f"get_column_stats: aggregate failed: {e}")
+            raise
+
+        return {
+            "column": column,
+            "type": col_type,
+            "row_count": int(row[0]) if row[0] is not None else 0,
+            "non_null": int(row[1]) if row[1] is not None else 0,
+            "null": int(row[2]) if row[2] is not None else 0,
+            "distinct": int(row[3]) if row[3] is not None else 0,
+            "min": row[4],
+            "max": row[5],
+            "mean": float(row[6]) if row[6] is not None else None,
+            "std": float(row[7]) if row[7] is not None else None,
+        }
+
     def get_unique_values(self, column: str) -> list[Any]:
         """Get unique values for a column (limited to 10000 for performance)."""
         try:

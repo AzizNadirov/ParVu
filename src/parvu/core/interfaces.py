@@ -59,6 +59,16 @@ class IQueryEngine(Protocol):
         """Get unique values for a column."""
         ...
 
+    def get_column_stats(self, column: str) -> dict[str, Any]:
+        """Compute summary statistics for a column over the current query.
+
+        Returns a dict with at least: ``row_count``, ``non_null``, ``null``,
+        ``distinct``, ``min``, ``max``, ``mean``, ``std``. Numeric stats are
+        ``None`` when the column is non-numeric. ``type`` carries DuckDB's
+        column type string.
+        """
+        ...
+
     def find_next_match(
         self,
         query: str,

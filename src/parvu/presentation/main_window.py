@@ -188,6 +188,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._data_table.replace_values_requested.connect(self._on_column_replace_values)
         self._data_table.copy_column_tuple_requested.connect(self._on_copy_column_tuple)
         self._data_table.drop_null_requested.connect(self._on_column_drop_null)
+        self._data_table.column_stats_requested.connect(self._on_column_stats)
         layout.addWidget(self._data_table)
 
         # Find bar (Ctrl+F overlay)
@@ -1559,6 +1560,30 @@ class MainWindow(QMainWindow, ThemeableMixin):
     def _on_column_replace_values(self, column_name: str) -> None:
         """Open replace dialog from column context menu and apply the transform."""
         self._run_replace_dialog(selected_column=column_name)
+
+    def _on_column_stats(self, column_name: str) -> None:
+        """Compute and show summary statistics for the chosen column."""
+        tab = self._active_tab()
+        if not tab:
+            return
+        if hasattr(self, "_worker") and self._worker is not None and self._worker.isRunning():
+            self._worker.wait(10000)
+        self.statusBar().showMessage(self._t("column_stats.computing"))
+        QApplication.processEvents()
+        try:
+            stats = tab.engine.get_column_stats(column_name)
+        except Exception as e:
+            logger.exception(f"Column stats failed for '{column_name}': {e}")
+            QMessageBox.warning(
+                self,
+                self._t("column_stats.error_title"),
+                self._t("column_stats.error_msg", column=column_name, error=str(e)),
+            )
+            self._update_status_bar()
+            return
+        self._update_status_bar()
+        from parvu.presentation.dialogs.column_stats_dialog import ColumnStatsDialog
+        ColumnStatsDialog(column_name, stats, translator=self._t, parent=self).exec()
 
     def _on_op_drop_null(self) -> None:
         """Open drop-null dialog from Operations menu."""

@@ -329,6 +329,25 @@ TRANSLATIONS_AZ = {
 
     # Column header context menu addition
     "context.drop_null": "Boş dəyərləri sil...",
+    "context.column_stats": "Sütun statistikası...",
+
+    # Column Stats Dialog
+    "column_stats.title": "Sütun statistikası — {column}",
+    "column_stats.header": "<b>{column}</b> &nbsp;<span style='color: gray;'>({type})</span>",
+    "column_stats.col.stat": "Göstərici",
+    "column_stats.col.value": "Dəyər",
+    "column_stats.rows": "Sətirlər",
+    "column_stats.non_null": "Boş olmayan",
+    "column_stats.null": "Boş",
+    "column_stats.distinct": "Unikal",
+    "column_stats.min": "Minimum",
+    "column_stats.max": "Maksimum",
+    "column_stats.mean": "Orta",
+    "column_stats.std": "Standart sapma",
+    "column_stats.copy": "Kopyala",
+    "column_stats.computing": "Sütun statistikası hesablanır...",
+    "column_stats.error_title": "Statistika alınmadı",
+    "column_stats.error_msg": "'{column}' üçün statistika hesablanmadı:\n{error}",
 
     # Help menu additions
     "menu.help.shortcuts": "Klaviatura qısayolları",

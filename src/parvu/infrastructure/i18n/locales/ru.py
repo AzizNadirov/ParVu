@@ -329,6 +329,25 @@ TRANSLATIONS_RU = {
 
     # Column header context menu addition
     "context.drop_null": "Удалить пустые значения...",
+    "context.column_stats": "Статистика столбца...",
+
+    # Column Stats Dialog
+    "column_stats.title": "Статистика столбца — {column}",
+    "column_stats.header": "<b>{column}</b> &nbsp;<span style='color: gray;'>({type})</span>",
+    "column_stats.col.stat": "Метрика",
+    "column_stats.col.value": "Значение",
+    "column_stats.rows": "Строк",
+    "column_stats.non_null": "Не пустых",
+    "column_stats.null": "Пустых",
+    "column_stats.distinct": "Уникальных",
+    "column_stats.min": "Минимум",
+    "column_stats.max": "Максимум",
+    "column_stats.mean": "Среднее",
+    "column_stats.std": "Стд. отклонение",
+    "column_stats.copy": "Копировать",
+    "column_stats.computing": "Расчёт статистики столбца...",
+    "column_stats.error_title": "Ошибка расчёта статистики",
+    "column_stats.error_msg": "Не удалось рассчитать статистику для '{column}':\n{error}",
 
     # Help menu additions
     "menu.help.shortcuts": "Сочетания клавиш",

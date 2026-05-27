@@ -47,6 +47,7 @@ class DataTableView(QTableWidget):
     replace_values_requested = pyqtSignal(str) # column_name
     copy_column_tuple_requested = pyqtSignal(str) # column_name
     drop_null_requested = pyqtSignal(str) # column_name
+    column_stats_requested = pyqtSignal(str) # column_name
 
     def __init__(
         self,
@@ -237,6 +238,10 @@ class DataTableView(QTableWidget):
         unique = QAction(self._t("context.unique_values"), self)
         unique.triggered.connect(lambda: self.unique_values_requested.emit(column_name))
         menu.addAction(unique)
+
+        stats = QAction(self._t("context.column_stats"), self)
+        stats.triggered.connect(lambda: self.column_stats_requested.emit(column_name))
+        menu.addAction(stats)
         menu.addSeparator()
 
         replace = QAction(self._t("context.replace_values"), self)
