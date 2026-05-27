@@ -33,6 +33,7 @@ TRANSLATIONS_EN = {
 
     "menu.help": "Help",
     "menu.help.about": "About ParVu",
+    "menu.help.expression": "Expression Language Guide",
 
     # Buttons
     "btn.browse": "Browse & Load...",
@@ -265,4 +266,35 @@ TRANSLATIONS_EN = {
     "about.version_number": "2.0 (Complete Rewrite)",
     "about.built_with_text": "PyQt6 and DuckDB",
     "about.license_text": "Open Source",
+
+    # Expression Help Dialog
+    "dialog.expression_help": "Expression Language Guide",
+    "expr.title": "Expression Language Reference",
+    "expr.overview": "Overview",
+    "expr.overview_text": "ParVu includes a small domain-specific language (DSL) for data transformations. It compiles to DuckDB SQL behind the scenes, giving you the power of SQL with a more concise, Python-like syntax.\n\nSwitch between **SQL Mode** and **Expression Mode** using the toggle in the query editor.",
+    "expr.column_refs": "Column References",
+    "expr.column_refs_text": "Reference columns using bracket notation. The table name is optional if there is only one table loaded — the editor infers it automatically.",
+    "expr.assignment": "Assignment",
+    "expr.assignment_text": "Add a new column or overwrite an existing one using the `=` operator. The compiled query uses an explicit SELECT to avoid duplicate columns (e.g. `brand` instead of `brand_1`).",
+    "expr.literals": "Literals",
+    "expr.literals_text": "- **Numbers**: `42`, `3.14`\n- **Strings**: `'hello'`, `\"world\"`\n- **Booleans**: `TRUE`, `FALSE`\n- **NULL**: `NULL`",
+    "expr.operators": "Operators",
+    "expr.operators_text": "| Operator | Description |\n|----------|-------------|\n| `+` | Addition |\n| `-` | Subtraction |\n| `*` | Multiplication |\n| `/` | Division |\n| `||` | String concatenation |\n| `=`, `!=` | Equal / Not equal |\n| `<`, `>`, `<=`, `>=` | Comparison |",
+    "expr.functions": "Built-in Functions",
+    "expr.functions_text": "Functions are case-insensitive. Below is the complete reference of all available functions.",
+    "expr.aggregates": "Aggregation",
+    "expr.conditionals": "Conditionals",
+    "expr.text": "Text",
+    "expr.numeric": "Numeric",
+    "expr.date": "Date",
+    "expr.type_casts": "Type Casts",
+    "expr.special": "Special Operations",
+    "expr.methods": "Methods",
+    "expr.methods_text": "Text columns support dot-methods that map to the same functions:\n\n```\ndata[name].upper()\ndata[name].lower()\ndata[name].len()\ndata[name].trim()\ndata[name].contains('sub')\ndata[name].startswith('pre')\ndata[name].endswith('suf')\ndata[name].replace('old', 'new', FALSE, FALSE)\n```",
+    "expr.examples": "Examples",
+    "expr.examples_text": "**Add computed columns**\n```\ndata[revenue] = data[price] * data[qty]\ndata[discounted] = data[price] * (1 - 0.15)\n```\n\n**String manipulation**\n```\ndata[category_upper] = UPPER(data[category])\ndata[clean_phone] = REPLACE(data[phone], '-', '')\n```\n\n**Deduplication**\n```\nDROP_DUPLICATES(data[customer_id], 'first')\n```",
+    "expr.autocomplete": "Auto-Completion",
+    "expr.autocomplete_text": "The expression editor provides context-aware suggestions:\n\n- **Functions** — Type `UP` and see `UPPER`\n- **Columns** — Type `data[` and see available columns\n- **Methods** — Type `data[name].` to see available methods\n- **Function docs** — Navigate the completer to see signature, parameters, and SQL mapping",
+    "expr.errors": "Common Errors",
+    "expr.errors_text": "| Error | Cause | Fix |\n|-------|-------|-----|\n| Unknown function | Typo or unsupported function | Check spelling or use SQL mode |\n| Column not found | Wrong column name | Check column list or use quotes for spaced names |\n| Type mismatch | Wrong argument type | Ensure correct argument types |",
 }

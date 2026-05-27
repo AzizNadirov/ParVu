@@ -33,6 +33,7 @@ TRANSLATIONS_AZ = {
 
     "menu.help": "Kömək",
     "menu.help.about": "ParVu haqqında",
+    "menu.help.expression": "İfadə dili təlimatı",
 
     # Buttons
     "btn.browse": "Bax və yüklə...",
@@ -272,4 +273,35 @@ TRANSLATIONS_AZ = {
     "about.version_number": "2.0 (Tam yenidən yazılma)",
     "about.built_with_text": "PyQt6 və DuckDB",
     "about.license_text": "Açıq Mənbə",
+
+    # Expression Help Dialog
+    "dialog.expression_help": "İfadə dili təlimatı",
+    "expr.title": "İfadə dili təlimatı",
+    "expr.overview": "Ümumi məlumat",
+    "expr.overview_text": "ParVu məlumat çevrilmələri üçün kiçik domen-spesifik dil (DSL) ehtiva edir. O, arxa planda DuckDB SQL-ə kompilyasiya olunur və SQL-in gücünü Python-oxşar sintaksislə birləşdirir.\n\nSorğu redaktorundakı keçid düyməsi ilə **SQL Rejimi** və **İfadə Rejimi** arasında keçid edin.",
+    "expr.column_refs": "Sütun istinadları",
+    "expr.column_refs_text": "Sütunlara kvadrat mötərizə notasiyası ilə istinad edin. Yalnız bir cədvəl yüklənibsə, cədvəl adı vacib deyil — redaktor avtomatik müəyyən edir.",
+    "expr.assignment": "Təyinat",
+    "expr.assignment_text": "`=` operatoru ilə yeni sütun əlavə edin və ya mövcud sütunu yenidən yazın. Kompilyasiya edilmiş sorğu təkrarlanan sütunlardan qaçmaq üçün açıq SELECT istifadə edir (məsələn, `brand_1` əvəzinə `brand`).",
+    "expr.literals": "Literalar",
+    "expr.literals_text": "- **Ədədlər**: `42`, `3.14`\n- **Sətirlər**: `'hello'`, `\"world\"`\n- **Məntiqi**: `TRUE`, `FALSE`\n- **NULL**: `NULL`",
+    "expr.operators": "Operatorlar",
+    "expr.operators_text": "| Operator | Təsviri |\n|----------|---------|\n| `+` | Toplama |\n| `-` | Çıxma |\n| `*` | Vurma |\n| `/` | Bölmə |\n| `||` | Sətir birləşdirmə |\n| `=`, `!=` | Bərabər / Bərabər deyil |\n| `<`, `>`, `<=`, `>=` | Müqayisə |",
+    "expr.functions": "Daxili funksiyalar",
+    "expr.functions_text": "Funksiyalar registrəduyar deyil. Aşağıda bütün mövcud funksiyaların tam təlimatı verilib.",
+    "expr.aggregates": "Aqreqasiya",
+    "expr.conditionals": "Şərti funksiyalar",
+    "expr.text": "Mətn",
+    "expr.numeric": "Riyazi",
+    "expr.date": "Tarix",
+    "expr.type_casts": "Tip çevrilmələri",
+    "expr.special": "Xüsusi əməliyyatlar",
+    "expr.methods": "Metodlar",
+    "expr.methods_text": "Mətn sütunları nöqtə ilə yazılan metodları dəstəkləyir ki, bunlar da eyni funksiyalara uyğun gəlir:\n\n```\ndata[name].upper()\ndata[name].lower()\ndata[name].len()\ndata[name].trim()\ndata[name].contains('sub')\ndata[name].startswith('pre')\ndata[name].endswith('suf')\ndata[name].replace('old', 'new', FALSE, FALSE)\n```",
+    "expr.examples": "Nümunələr",
+    "expr.examples_text": "**Hesablanmış sütunlar əlavə edin**\n```\ndata[revenue] = data[price] * data[qty]\ndata[discounted] = data[price] * (1 - 0.15)\n```\n\n**Mətn manipulyasiyası**\n```\ndata[category_upper] = UPPER(data[category])\ndata[clean_phone] = REPLACE(data[phone], '-', '')\n```\n\n**Təkrarların silinməsi**\n```\nDROP_DUPLICATES(data[customer_id], 'first')\n```",
+    "expr.autocomplete": "Avtodəstək",
+    "expr.autocomplete_text": "İfadə redaktoru kontekstə əsaslanan təkliflər verir:\n\n- **Funksiyalar** — `UP` yazın və `UPPER` görün\n- **Sütunlar** — `data[` yazın və mövcud sütunları görün\n- **Metodlar** — `data[name].` yazın və mövcud metodları görün\n- **Sənədləşmə** — Təkliflər arasında naviqasiya imza, parametrlər və SQL əks-əlaqəsini göstərir",
+    "expr.errors": "Tez-tez rast gəlinən səhvlər",
+    "expr.errors_text": "| Səhv | Səbəb | Həll |\n|------|-------|------|\n| Unknown function | Yazı səhvi və ya dəstəklənməyən funksiya | Yazılışı yoxlayın və ya SQL rejimindən istifadə edin |\n| Column not found | Yanlış sütun adı | Sütun siyahısını yoxlayın və ya boşluqlu adlar üçün dırnaq işarələrindən istifadə edin |\n| Type mismatch | Yanlış arqument tipi | Arqumentlərin düzgün tipə malik olduğundan əmin olun |",
 }

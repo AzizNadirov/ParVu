@@ -33,6 +33,7 @@ TRANSLATIONS_RU = {
 
     "menu.help": "Справка",
     "menu.help.about": "О программе ParVu",
+    "menu.help.expression": "Справочник по языку выражений",
 
     # Buttons
     "btn.browse": "Обзор и загрузка...",
@@ -272,4 +273,35 @@ TRANSLATIONS_RU = {
     "about.version_number": "2.0 (Полная переработка)",
     "about.built_with_text": "PyQt6 и DuckDB",
     "about.license_text": "Открытый исходный код",
+
+    # Expression Help Dialog
+    "dialog.expression_help": "Справочник по языку выражений",
+    "expr.title": "Справочник по языку выражений",
+    "expr.overview": "Обзор",
+    "expr.overview_text": "ParVu включает небольшой предметно-ориентированный язык (DSL) для преобразования данных. Он компилируется в DuckDB SQL, давая возможности SQL с более лаконичным, похожим на Python синтаксисом.\n\nПереключайтесь между **Режимом SQL** и **Режимом выражений** с помощью переключателя в редакторе запросов.",
+    "expr.column_refs": "Ссылки на столбцы",
+    "expr.column_refs_text": "Ссылайтесь на столбцы, используя квадратные скобки. Имя таблицы необязательно, если загружена только одна таблица — редактор определит её автоматически.",
+    "expr.assignment": "Присваивание",
+    "expr.assignment_text": "Добавьте новый столбец или перезапишите существующий с помощью оператора `=`. Скомпилированный запрос использует явный SELECT, чтобы избежать дублирования столбцов (например, `brand` вместо `brand_1`).",
+    "expr.literals": "Литералы",
+    "expr.literals_text": "- **Числа**: `42`, `3.14`\n- **Строки**: `'hello'`, `\"world\"`\n- **Булевы**: `TRUE`, `FALSE`\n- **NULL**: `NULL`",
+    "expr.operators": "Операторы",
+    "expr.operators_text": "| Оператор | Описание |\n|----------|----------|\n| `+` | Сложение |\n| `-` | Вычитание |\n| `*` | Умножение |\n| `/` | Деление |\n| `||` | Конкатенация строк |\n| `=`, `!=` | Равно / Не равно |\n| `<`, `>`, `<=`, `>=` | Сравнение |",
+    "expr.functions": "Встроенные функции",
+    "expr.functions_text": "Функции нечувствительны к регистру. Ниже приведён полный справочник всех доступных функций.",
+    "expr.aggregates": "Агрегация",
+    "expr.conditionals": "Условные",
+    "expr.text": "Текст",
+    "expr.numeric": "Числовые",
+    "expr.date": "Дата",
+    "expr.type_casts": "Приведение типов",
+    "expr.special": "Специальные операции",
+    "expr.methods": "Методы",
+    "expr.methods_text": "Текстовые столбцы поддерживают методы через точку, которые соответствуют тем же функциям:\n\n```\ndata[name].upper()\ndata[name].lower()\ndata[name].len()\ndata[name].trim()\ndata[name].contains('sub')\ndata[name].startswith('pre')\ndata[name].endswith('suf')\ndata[name].replace('old', 'new', FALSE, FALSE)\n```",
+    "expr.examples": "Примеры",
+    "expr.examples_text": "**Добавление вычисляемых столбцов**\n```\ndata[revenue] = data[price] * data[qty]\ndata[discounted] = data[price] * (1 - 0.15)\n```\n\n**Работа со строками**\n```\ndata[category_upper] = UPPER(data[category])\ndata[clean_phone] = REPLACE(data[phone], '-', '')\n```\n\n**Удаление дубликатов**\n```\nDROP_DUPLICATES(data[customer_id], 'first')\n```",
+    "expr.autocomplete": "Автодополнение",
+    "expr.autocomplete_text": "Редактор выражений предоставляет контекстно-зависимые подсказки:\n\n- **Функции** — Наберите `UP` и увидите `UPPER`\n- **Столбцы** — Наберите `data[` и увидите доступные столбцы\n- **Методы** — Наберите `data[name].` для доступных методов\n- **Документация** — Навигация по подсказкам показывает сигнатуру, параметры и SQL-отображение",
+    "expr.errors": "Частые ошибки",
+    "expr.errors_text": "| Ошибка | Причина | Решение |\n|--------|---------|---------|\n| Unknown function | Опечатка или неподдерживаемая функция | Проверьте правописание или используйте режим SQL |\n| Column not found | Неверное имя столбца | Проверьте список столбцов или используйте кавычки для имён с пробелами |\n| Type mismatch | Неверный тип аргумента | Убедитесь в корректности типов аргументов |",
 }

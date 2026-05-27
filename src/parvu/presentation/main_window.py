@@ -38,6 +38,7 @@ from parvu.presentation.models.table_tab import TableTab, slugify_name
 from parvu.presentation.dialogs.settings_dialog import SettingsDialog
 from parvu.presentation.dialogs.theme_selector import ThemeSelectorDialog
 from parvu.presentation.dialogs.about_dialog import AboutDialog
+from parvu.presentation.dialogs.expression_help_dialog import ExpressionHelpDialog
 from parvu.presentation.dialogs.table_info_dialog import TableInfoDialog
 from parvu.presentation.dialogs.unique_values_dialog import UniqueValuesDialog
 from parvu.presentation.dialogs.crash_reporter import CrashReportDialog
@@ -252,6 +253,11 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         # ── Help Menu ──
         help_menu = menubar.addMenu(self._t("menu.help"))
+
+        expr_help_action = QAction(self._t("menu.help.expression"), self)
+        expr_help_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
+        expr_help_action.triggered.connect(self._show_expression_help)
+        help_menu.addAction(expr_help_action)
 
         about_action = QAction(self._t("menu.help.about"), self)
         about_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
@@ -703,6 +709,11 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
     def _on_settings_changed(self) -> None:
         self.statusBar().showMessage("Settings saved. Some changes may require restart.", 5000)
+
+    def _show_expression_help(self) -> None:
+        logger.debug("Opening expression help dialog")
+        dialog = ExpressionHelpDialog(self._container.translator, self)
+        dialog.exec()
 
     def _show_about(self) -> None:
         logger.debug("Opening about dialog")
