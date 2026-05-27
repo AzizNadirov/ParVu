@@ -50,6 +50,9 @@ class QueryEditor(QWidget):
         self._update_expr_button_state()
 
     def _setup_ui(self) -> None:
+        from PyQt6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
@@ -86,14 +89,17 @@ class QueryEditor(QWidget):
         # Stacked editor — compact height
         self._stack = QStackedWidget()
         self._stack.setMaximumHeight(55)
+        self._stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         # SQL editor
         self._sql_editor = SQLEditor(theme=self._theme)
-        self._sql_editor.setViewportMargins(2, 2, 2, 2)
+        self._sql_editor.setMaximumHeight(50)
+        self._sql_editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._stack.addWidget(self._sql_editor)
 
         # Expression editor container
         expr_container = QWidget()
+        expr_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         expr_layout = QVBoxLayout(expr_container)
         expr_layout.setContentsMargins(0, 0, 0, 0)
         expr_layout.setSpacing(2)
