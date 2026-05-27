@@ -37,8 +37,8 @@ class AddButton(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         accent = QColor(self._theme.colors.accent_primary if self._theme else "#2196F3")
-        bg = QColor(self._theme.colors.button_background if self._theme else "#E8F5E9")
-        border = QColor(self._theme.colors.table_grid if self._theme else "#DDDDDD")
+        bg = QColor(self._theme.colors.tab_inactive_background if self._theme else "#F3F3F3")
+        border = QColor(self._theme.colors.tab_inactive_border if self._theme else "#D4D4D4")
 
         w, h = self.width(), self.height()
         r = 4

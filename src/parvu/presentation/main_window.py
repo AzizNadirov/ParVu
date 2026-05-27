@@ -49,6 +49,7 @@ from parvu.presentation.dialogs.replace_dialog import ReplaceDialog
 from parvu.presentation.dialogs.confirm_close_dialog import ConfirmCloseDialog
 from parvu.presentation.dialogs.copy_tuple_dialog import CopyTupleDialog
 from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
+from parvu.presentation.widgets.collapsible_panel import CollapsiblePanel
 
 
 class MainWindow(QMainWindow, ThemeableMixin):
@@ -108,22 +109,29 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._file_toolbar.load_clicked.connect(self._load_from_input)
         layout.addWidget(self._file_toolbar)
 
-        # Query Editor
+        # Query Editor (collapsible Operations panel)
+        self._query_panel = CollapsiblePanel(
+            title=self._t("menu.operations"),
+            expanded=True,
+        )
+
         self._query_label = QLabel(self._t("label.sql_query", table_name=self._container.settings.default_data_var_name))
-        layout.addWidget(self._query_label)
+        self._query_panel.add_widget(self._query_label)
+
         self._query_editor = QueryEditor(
             theme=self._container.theme_manager.current_theme,
         )
         self._query_editor.setMaximumHeight(140)
         self._query_editor.mode_changed.connect(self._on_query_mode_changed)
-        layout.addWidget(self._query_editor)
+        self._query_panel.add_widget(self._query_editor)
 
-        # Query toolbar
         self._query_toolbar = QueryToolbar()
         self._query_toolbar.execute_clicked.connect(self._execute_query)
         self._query_toolbar.reset_clicked.connect(self._reset_query)
         self._query_toolbar.info_clicked.connect(self._show_table_info)
-        layout.addWidget(self._query_toolbar)
+        self._query_panel.add_widget(self._query_toolbar)
+
+        layout.addWidget(self._query_panel)
 
         # Applied Steps
         self._steps_panel = AppliedStepsPanel()
