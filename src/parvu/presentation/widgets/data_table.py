@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QMenu, QApplication,
-    QStyledItemDelegate, QWidget
+    QStyledItemDelegate, QWidget, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QColor
@@ -47,6 +47,7 @@ class DataTableView(QTableWidget):
 
     def __init__(self, parent=None, theme: Theme | None = None):
         super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._current_data = pd.DataFrame()
         self._theme = theme
         self._edit_queue: EditQueue | None = None

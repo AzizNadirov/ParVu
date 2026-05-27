@@ -6,7 +6,7 @@ Collapsible accordion to save vertical space. Shows step count in the header.
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton,
+    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -46,6 +46,10 @@ class AppliedStepsPanel(QWidget):
 
         # Collapsible content: scrollable step list
         self._content = QWidget()
+        self._content.setMaximumHeight(100)
+        self._content.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
+        )
         content_layout = QVBoxLayout(self._content)
         content_layout.setContentsMargins(8, 0, 8, 0)
         content_layout.setSpacing(2)
