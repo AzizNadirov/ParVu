@@ -121,7 +121,6 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._query_editor.set_header_label(
             self._t("label.sql_query", table_name=self._container.settings.default_data_var_name)
         )
-        self._query_editor.setMaximumHeight(100)
         self._query_editor.mode_changed.connect(self._on_query_mode_changed)
         self._query_panel.add_widget(self._query_editor)
 

@@ -83,11 +83,13 @@ class QueryEditor(QWidget):
 
         layout.addLayout(header_row)
 
-        # Stacked editor
+        # Stacked editor — compact height
         self._stack = QStackedWidget()
+        self._stack.setMaximumHeight(55)
 
         # SQL editor
         self._sql_editor = SQLEditor(theme=self._theme)
+        self._sql_editor.setViewportMargins(2, 2, 2, 2)
         self._stack.addWidget(self._sql_editor)
 
         # Expression editor container
