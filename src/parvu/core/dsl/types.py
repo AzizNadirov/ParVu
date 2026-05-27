@@ -63,6 +63,7 @@ _METHOD_SETS: dict[LogicalType, list[str]] = {
         "contains",
         "startswith",
         "endswith",
+        "replace",
     ],
     LogicalType.NUMERIC: [
         "abs",

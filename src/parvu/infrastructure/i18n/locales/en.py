@@ -25,9 +25,11 @@ TRANSLATIONS_EN = {
     "menu.operations.math": "Math Operation",
     "menu.operations.join": "Join",
     "menu.operations.append": "Append",
+    "menu.operations.replace": "Replace Values...",
 
     "step.cell_edit": "Edit '{column}' at row {row}",
     "step.drop_duplicates": "Drop duplicates ({keep}) on {columns}",
+    "step.replace": "Replace '{pattern}' in '{column}'",
 
     "menu.help": "Help",
     "menu.help.about": "About ParVu",
@@ -202,6 +204,14 @@ TRANSLATIONS_EN = {
     "context.sort_desc": "Sort Descending",
     "context.copy_values": "Copy Values as Tuple",
     "context.unique_values": "Show Unique Values...",
+
+    # Exit Warning Dialog
+    "dialog.confirm_close.title": "Confirm Close",
+    "dialog.confirm_close.message": "The following tabs have applied transforms that will be lost:\n\n{tabs}\n\nAre you sure you want to close?",
+    "dialog.confirm_close.dont_ask": "Do not ask again",
+    "dialog.confirm_close.close_anyway": "Close anyway",
+    "dialog.confirm_close.setting_saved": "Setting Saved",
+    "dialog.confirm_close.setting_saved_msg": "You can re-enable this warning in Settings → General.",
 
     # Unique Values Dialog
     "unique.found": "Found {count} unique values (select multiple)",

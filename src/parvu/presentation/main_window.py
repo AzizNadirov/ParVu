@@ -45,6 +45,8 @@ from parvu.presentation.dialogs.expression_dialog import ExpressionDialog
 from parvu.presentation.dialogs.join_dialog import JoinDialog
 from parvu.presentation.dialogs.append_dialog import AppendDialog
 from parvu.presentation.dialogs.drop_duplicates_dialog import DropDuplicatesDialog
+from parvu.presentation.dialogs.replace_dialog import ReplaceDialog
+from parvu.presentation.dialogs.confirm_close_dialog import ConfirmCloseDialog
 from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
 
 
@@ -136,6 +138,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._data_table.column_removed.connect(self._on_column_removed)
         self._data_table.column_type_changed.connect(self._on_column_type_changed)
         self._data_table.column_duplicated.connect(self._on_column_duplicated)
+        self._data_table.replace_values_requested.connect(self._on_column_replace_values)
         layout.addWidget(self._data_table)
 
         # Pagination
@@ -232,6 +235,11 @@ class MainWindow(QMainWindow, ThemeableMixin):
         drop_dup_action.triggered.connect(self._on_op_drop_duplicates)
         operations_menu.addAction(drop_dup_action)
 
+        replace_action = QAction(self._t("menu.operations.replace"), self)
+        replace_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton))
+        replace_action.triggered.connect(self._on_op_replace)
+        operations_menu.addAction(replace_action)
+
         # ── Help Menu ──
         help_menu = menubar.addMenu(self._t("menu.help"))
 
@@ -285,6 +293,14 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         try:
             name = slugify_name(file_path.stem)
+
+            # Deduplicate tab/view name if the same file is opened again
+            existing_names = {t.name for t in self._tabs}
+            if name in existing_names:
+                counter = 2
+                while f"{name}_{counter}" in existing_names:
+                    counter += 1
+                name = f"{name}_{counter}"
 
             # Register file as a named view in the shared connection
             adapter = self._container.file_adapter_registry.get_adapter(file_path)
@@ -603,38 +619,42 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._query_editor.set_query(query)
         self._execute_query()
 
-    def _export_results(self) -> None:
+    def _export_results(self) -> bool:
         tab = self._active_tab()
         if not tab:
             QMessageBox.warning(self, self._t("warning.no_data"), self._t("warning.no_data_msg"))
-            return
+            return False
 
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export Results", "",
             self._container.file_service.get_export_dialog_filter()
         )
-        if file_path:
-            logger.info(f"Exporting results from '{tab.name}' to {file_path}")
-            try:
-                success = tab.engine.export_results(Path(file_path))
-                if success:
-                    logger.info(f"Export complete: {file_path}")
-                    QMessageBox.information(
-                        self, self._t("success.export_complete"),
-                        self._t("success.export_complete_msg", path=file_path)
-                    )
-                else:
-                    logger.error(f"Export failed: {file_path}")
-                    QMessageBox.critical(
-                        self, self._t("success.export_failed"),
-                        self._t("success.export_failed_msg")
-                    )
-            except Exception as e:
-                logger.error(f"Export error: {e}")
-                QMessageBox.critical(
-                    self, self._t("error.export_error"),
-                    self._t("error.export_error_msg", error=str(e))
+        if not file_path:
+            return False
+        logger.info(f"Exporting results from '{tab.name}' to {file_path}")
+        try:
+            success = tab.engine.export_results(Path(file_path))
+            if success:
+                logger.info(f"Export complete: {file_path}")
+                QMessageBox.information(
+                    self, self._t("success.export_complete"),
+                    self._t("success.export_complete_msg", path=file_path)
                 )
+                return True
+            else:
+                logger.error(f"Export failed: {file_path}")
+                QMessageBox.critical(
+                    self, self._t("success.export_failed"),
+                    self._t("success.export_failed_msg")
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Export error: {e}")
+            QMessageBox.critical(
+                self, self._t("error.export_error"),
+                self._t("error.export_error_msg", error=str(e))
+            )
+            return False
 
     def _show_table_info(self) -> None:
         tab = self._active_tab()
@@ -948,6 +968,9 @@ class MainWindow(QMainWindow, ThemeableMixin):
             return
         name, sql = result
         logger.info(f"Math op '{name}' on '{tab.name}': {sql[:60]}...")
+        # Strip table qualifier because we are selecting from a subquery
+        import re as _re
+        sql = _re.sub(rf'\b{_re.escape(tab.name)}\.', '', sql)
         self._apply_transform(
             tab,
             f'SELECT *, {sql} AS "{name}" FROM ({tab.engine.current_query})',
@@ -1065,6 +1088,59 @@ class MainWindow(QMainWindow, ThemeableMixin):
         step = self._t("step.drop_duplicates", keep=keep, columns=col_names)
         self._apply_transform(tab, query, step)
 
+    def _on_op_replace(self) -> None:
+        """Open replace dialog from Operations menu and apply the transform."""
+        self._run_replace_dialog()
+
+    def _on_column_replace_values(self, column_name: str) -> None:
+        """Open replace dialog from column context menu and apply the transform."""
+        self._run_replace_dialog(selected_column=column_name)
+
+    def _run_replace_dialog(self, selected_column: str | None = None) -> None:
+        """Shared helper to run ReplaceDialog and apply the transform."""
+        tab = self._active_tab()
+        if not tab:
+            return
+        cols = tab.engine.get_columns()
+        if not cols:
+            return
+        dialog = ReplaceDialog(tab.name, cols, selected_column=selected_column, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.get_result()
+        if not result:
+            return
+        col, pattern, replacement, output_col, case_sensitive, regex = result
+        from parvu.core.dsl.ir import Replace, Literal, ColumnRef
+        from parvu.core.dsl.compiler import Compiler
+        from parvu.core.dsl.registry import FunctionRegistry
+        from parvu.core.dsl.types import LogicalType
+        expr = Replace(
+            text=ColumnRef(table=tab.name, column=col, logical_type=LogicalType.TEXT),
+            pattern=Literal(value=pattern, logical_type=LogicalType.TEXT),
+            with_value=Literal(value=replacement, logical_type=LogicalType.TEXT),
+            case_sensitive=case_sensitive,
+            regex=regex,
+        )
+        sql = Compiler(FunctionRegistry()).compile(expr)
+        # Strip table qualifier because we are selecting from a subquery
+        import re as _re
+        sql = _re.sub(rf'\b{_re.escape(tab.name)}\.', '', sql)
+        # Build SELECT that overwrites the column if it already exists
+        cols = tab.engine.get_columns()
+        select_parts: list[str] = []
+        for c in cols:
+            if c == output_col:
+                select_parts.append(f'{sql} AS "{c}"')
+            else:
+                select_parts.append(f'"{c}"')
+        if output_col not in cols:
+            select_parts.append(f'{sql} AS "{output_col}"')
+        select_list = ", ".join(select_parts)
+        query = f'SELECT {select_list} FROM ({tab.engine.current_query})'
+        step = self._t("step.replace", column=col, pattern=pattern)
+        self._apply_transform(tab, query, step)
+
     def _apply_transform(self, tab: TableTab, query: str, description: str = "") -> None:
         """Apply a SQL transformation to the given tab's engine."""
         success, error = tab.engine.apply_transform(query)
@@ -1091,6 +1167,34 @@ class MainWindow(QMainWindow, ThemeableMixin):
                 if not self._confirm_discard_unsaved():
                     event.ignore()
                     return
+
+        # Check for applied transforms
+        if self._container.settings.warn_on_exit_with_transforms:
+            tabs_with_transforms = [t for t in self._tabs if t.applied_steps]
+            if tabs_with_transforms:
+                names = ", ".join(t.name for t in tabs_with_transforms)
+                dialog = ConfirmCloseDialog(
+                    f"The following tabs have applied transforms that will be lost:\n\n{names}\n\n"
+                    "Are you sure you want to close?",
+                    parent=self,
+                )
+                dialog.exec()
+                result = dialog.get_result()
+                if result == ConfirmCloseDialog.CANCEL:
+                    event.ignore()
+                    return
+                if result == ConfirmCloseDialog.SAVE_AND_CLOSE:
+                    if not self._export_results():
+                        event.ignore()
+                        return
+                if dialog.dont_ask_again():
+                    self._container.settings.warn_on_exit_with_transforms = False
+                    self._container.settings_manager.save()
+                    QMessageBox.information(
+                        self,
+                        "Setting Saved",
+                        "You can re-enable this warning in Settings → General.",
+                    )
 
         for tab in self._tabs:
             tab.engine.close()

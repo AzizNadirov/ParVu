@@ -13,7 +13,7 @@ from __future__ import annotations
 from loguru import logger
 from lark import Tree, Token
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates, Replace
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.catalog import Catalog
 from parvu.core.dsl.types import LogicalType, duckdb_type_to_logical
@@ -60,7 +60,7 @@ class Resolver:
         if rule == "func_call":
             return self._resolve_func_call(children)
 
-        # Method call: expr.method
+        # Method call: expr.method or expr.method(args...)
         if rule == "method_call":
             return self._resolve_method_call(children)
 
@@ -189,6 +189,10 @@ class Resolver:
         if func_name.upper() == "DROP_DUPLICATES":
             return self._resolve_drop_duplicates(args)
 
+        # Special-case: REPLACE(text, pattern, with_value, case_sensitive, regex)
+        if func_name.upper() == "REPLACE":
+            return self._resolve_replace(args)
+
         func_def = self._registry.lookup(func_name)
         if func_def is None:
             logger.warning(f"Resolution error: unknown function '{func_name}'")
@@ -242,10 +246,16 @@ class Resolver:
         return DropDuplicates(table=table, columns=subset_cols, keep=keep, logical_type=LogicalType.QUERY)
 
     def _resolve_method_call(self, children: list) -> Expr:
-        """Resolve expr.method(args...) call."""
+        """Resolve expr.method or expr.method(args...) call."""
         receiver = self._resolve_node(children[0])
         method_name = children[1].value
         args = []
+        if len(children) > 2 and isinstance(children[2], Tree):
+            args = [self._resolve_node(c) for c in children[2].children]
+
+        # Special-case: replace method
+        if method_name.lower() == "replace":
+            return self._resolve_replace([receiver] + args)
 
         func_def = self._registry.lookup_method(method_name)
         if func_def is None:
@@ -262,6 +272,36 @@ class Resolver:
             method_name=method_name,
             args=args,
             logical_type=func_def.return_type,
+        )
+
+    def _resolve_replace(self, args: list[Expr]) -> Expr:
+        """Resolve REPLACE(text, pattern, with_value, case_sensitive, regex)."""
+        if len(args) < 3:
+            raise ResolutionError(
+                "REPLACE requires at least 3 arguments: text, pattern, with_value"
+            )
+        text = args[0]
+        pattern = args[1]
+        with_value = args[2]
+        case_sensitive = True
+        regex = False
+        if len(args) > 3:
+            cs = args[3]
+            if not isinstance(cs, Literal) or not isinstance(cs.value, bool):
+                raise ResolutionError("REPLACE case_sensitive must be TRUE or FALSE")
+            case_sensitive = cs.value
+        if len(args) > 4:
+            rx = args[4]
+            if not isinstance(rx, Literal) or not isinstance(rx.value, bool):
+                raise ResolutionError("REPLACE regex must be TRUE or FALSE")
+            regex = rx.value
+        return Replace(
+            text=text,
+            pattern=pattern,
+            with_value=with_value,
+            case_sensitive=case_sensitive,
+            regex=regex,
+            logical_type=LogicalType.TEXT,
         )
 
     def _check_args(self, func_def, args: list[Expr]) -> None:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment
+from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment, Replace
 from parvu.core.dsl.compiler import Compiler
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.types import LogicalType
@@ -152,3 +152,62 @@ class TestCompiler:
         )
         sql = compiler.compile(expr)
         assert sql == 'SELECT *, 42 AS "new col" FROM sales'
+
+    def test_replace_literal_case_sensitive(self, compiler: Compiler) -> None:
+        expr = Replace(
+            text=ColumnRef(table="products", column="name"),
+            pattern=Literal(value="old"),
+            with_value=Literal(value="new"),
+            case_sensitive=True,
+            regex=False,
+        )
+        sql = compiler.compile(expr)
+        assert sql == "REPLACE(products.name, 'old', 'new')"
+
+    def test_replace_literal_case_insensitive(self, compiler: Compiler) -> None:
+        expr = Replace(
+            text=ColumnRef(table="products", column="name"),
+            pattern=Literal(value="old"),
+            with_value=Literal(value="new"),
+            case_sensitive=False,
+            regex=False,
+        )
+        sql = compiler.compile(expr)
+        # Pattern is escaped for literal matching, flags='gi' for global + case-insensitive
+        assert "REGEXP_REPLACE" in sql
+        assert "'old'" in sql
+        assert "'gi'" in sql
+
+    def test_replace_regex(self, compiler: Compiler) -> None:
+        expr = Replace(
+            text=ColumnRef(table="products", column="name"),
+            pattern=Literal(value="[0-9]+"),
+            with_value=Literal(value="#"),
+            case_sensitive=True,
+            regex=True,
+        )
+        sql = compiler.compile(expr)
+        assert sql == "REGEXP_REPLACE(products.name, '[0-9]+', '#', 'g')"
+
+    def test_replace_regex_case_insensitive(self, compiler: Compiler) -> None:
+        expr = Replace(
+            text=ColumnRef(table="products", column="name"),
+            pattern=Literal(value="[a-z]+"),
+            with_value=Literal(value="#"),
+            case_sensitive=False,
+            regex=True,
+        )
+        sql = compiler.compile(expr)
+        assert sql == "REGEXP_REPLACE(products.name, '[a-z]+', '#', 'gi')"
+
+    def test_replace_escapes_regex_metacharacters(self, compiler: Compiler) -> None:
+        expr = Replace(
+            text=ColumnRef(table="products", column="name"),
+            pattern=Literal(value="a.b"),
+            with_value=Literal(value="x"),
+            case_sensitive=False,
+            regex=False,
+        )
+        sql = compiler.compile(expr)
+        # '.' should be escaped to '\.' so it matches literal '.'
+        assert r"'a\.b'" in sql

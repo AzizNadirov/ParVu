@@ -60,7 +60,7 @@ arg_list: expr ("," expr)*
 
 column_ref: IDENT "[" (IDENT | STRING) "]"
 
-method_call: primary "." IDENT
+method_call: primary "." IDENT ["(" [arg_list] ")"]
 
 literal: NUMBER  -> number
        | STRING  -> string

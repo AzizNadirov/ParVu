@@ -25,9 +25,11 @@ TRANSLATIONS_RU = {
     "menu.operations.math": "Математическая операция",
     "menu.operations.join": "Соединение",
     "menu.operations.append": "Добавить строки",
+    "menu.operations.replace": "Заменить значения...",
 
     "step.cell_edit": "Редактирование '{column}' в строке {row}",
     "step.drop_duplicates": "Удаление дубликатов ({keep}) по {columns}",
+    "step.replace": "Замена '{pattern}' в '{column}'",
 
     "menu.help": "Справка",
     "menu.help.about": "О программе ParVu",
@@ -209,6 +211,14 @@ TRANSLATIONS_RU = {
     "context.sort_desc": "Сортировать по убыванию",
     "context.copy_values": "Копировать значения как кортеж",
     "context.unique_values": "Показать уникальные значения...",
+
+    # Exit Warning Dialog
+    "dialog.confirm_close.title": "Подтвердить закрытие",
+    "dialog.confirm_close.message": "Следующие вкладки содержат применённые преобразования, которые будут утеряны:\n\n{tabs}\n\nВы уверены, что хотите закрыть?",
+    "dialog.confirm_close.dont_ask": "Больше не спрашивать",
+    "dialog.confirm_close.close_anyway": "Всё равно закрыть",
+    "dialog.confirm_close.setting_saved": "Настройка сохранена",
+    "dialog.confirm_close.setting_saved_msg": "Вы можете снова включить это предупреждение в Настройки → Основные.",
 
     # Unique Values Dialog
     "unique.found": "Найдено {count} уникальных значений (множественный выбор)",

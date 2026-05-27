@@ -25,9 +25,11 @@ TRANSLATIONS_AZ = {
     "menu.operations.math": "Riyazi əməliyyat",
     "menu.operations.join": "Birləşdirmə",
     "menu.operations.append": "Əlavə et",
+    "menu.operations.replace": "Dəyərləri dəyiş...",
 
     "step.cell_edit": "'{column}' sətir {row} də redaktə et",
     "step.drop_duplicates": "Təkrarları sil ({keep}) — {columns}",
+    "step.replace": "'{column}' sütununda '{pattern}' dəyişdirildi",
 
     "menu.help": "Kömək",
     "menu.help.about": "ParVu haqqında",
@@ -209,6 +211,14 @@ TRANSLATIONS_AZ = {
     "context.sort_desc": "Azalan sıra ilə çeşidlə",
     "context.copy_values": "Dəyərləri tuple kimi kopyala",
     "context.unique_values": "Unikal dəyərləri göstər...",
+
+    # Exit Warning Dialog
+    "dialog.confirm_close.title": "Bağlamağı təsdiqləyin",
+    "dialog.confirm_close.message": "Aşağıdakı vərəqlərdə tətbiq edilmiş dəyişikliklər var ki, onlar itiriləcək:\n\n{tabs}\n\nBağlamaq istədiyinizə əminsiniz?",
+    "dialog.confirm_close.dont_ask": "Bir daha soruşma",
+    "dialog.confirm_close.close_anyway": "Yenə də bağla",
+    "dialog.confirm_close.setting_saved": "Parametr saxlanıldı",
+    "dialog.confirm_close.setting_saved_msg": "Bu xəbərdarlığı Parametrlər → Ümumi bölməsindən yenidən aktivləşdirə bilərsiniz.",
 
     # Unique Values Dialog
     "unique.found": "{count} unikal dəyər tapıldı (çoxlu seçim)",

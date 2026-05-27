@@ -42,6 +42,7 @@ class DataTableView(QTableWidget):
     column_removed = pyqtSignal(str)           # column_name
     column_type_changed = pyqtSignal(str, str) # column_name, new_type
     column_duplicated = pyqtSignal(str)        # column_name
+    replace_values_requested = pyqtSignal(str) # column_name
 
     def __init__(self, parent=None, theme: Theme | None = None):
         super().__init__(parent)
@@ -201,6 +202,11 @@ class DataTableView(QTableWidget):
         unique = QAction("Show Unique Values...", self)
         unique.triggered.connect(lambda: self.unique_values_requested.emit(column_name))
         menu.addAction(unique)
+        menu.addSeparator()
+
+        replace = QAction("Replace Values...", self)
+        replace.triggered.connect(lambda: self.replace_values_requested.emit(column_name))
+        menu.addAction(replace)
 
         menu.exec(self.horizontalHeader().mapToGlobal(pos))
 

@@ -87,9 +87,9 @@ class LayoutConfig(BaseModel):
     alternate_row_colors: bool = True
 
     # Button settings
-    button_min_width: int = 80
-    button_height: int = 30
-    button_border_radius: int = 4
+    button_min_width: int = 64
+    button_height: int = 28
+    button_border_radius: int = 8
 
     # Toolbar visibility
     show_file_path_label: bool = True

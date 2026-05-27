@@ -29,9 +29,10 @@ def generate_stylesheet(theme: Theme) -> str:
         color: {c.button_foreground};
         border: 1px solid {c.table_grid};
         border-radius: {l.button_border_radius}px;
-        padding: 5px 15px;
+        padding: 4px 12px;
         min-width: {l.button_min_width}px;
         min-height: {l.button_height}px;
+        margin: 2px;
     }}
     QPushButton:hover {{
         background-color: {c.button_hover};

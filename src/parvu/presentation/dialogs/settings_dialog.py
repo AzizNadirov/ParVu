@@ -92,6 +92,13 @@ class SettingsDialog(QDialog):
         history_group.setLayout(history_layout)
         layout.addWidget(history_group)
 
+        exit_group = QGroupBox("Exit Behavior")
+        exit_layout = QFormLayout()
+        self._warn_transforms_check = QCheckBox("Warn when closing with applied transforms")
+        exit_layout.addRow(self._warn_transforms_check)
+        exit_group.setLayout(exit_layout)
+        layout.addWidget(exit_group)
+
         lang_group = QGroupBox("Language")
         lang_layout = QVBoxLayout()
         self._lang_selector = LanguageSelector(self._i18n)
@@ -261,6 +268,8 @@ class SettingsDialog(QDialog):
         self._default_query_edit.setText(s.default_sql_query)
         self._default_limit_spin.setValue(int(s.default_limit))
 
+        self._warn_transforms_check.setChecked(s.warn_on_exit_with_transforms)
+
         self._enable_warning_check.setChecked(s.enable_large_dataset_warning)
         self._rows_threshold.setValue(s.warning_threshold_rows)
         self._cells_threshold.setValue(s.warning_threshold_cells)
@@ -358,6 +367,8 @@ class SettingsDialog(QDialog):
         self._settings.default_result_font_size = str(self._table_font_size_spin.value())
         self._settings.default_sql_query = self._default_query_edit.text().strip()
         self._settings.default_limit = str(self._default_limit_spin.value())
+
+        self._settings.warn_on_exit_with_transforms = self._warn_transforms_check.isChecked()
 
         self._settings.enable_large_dataset_warning = self._enable_warning_check.isChecked()
         self._settings.warning_threshold_rows = self._rows_threshold.value()

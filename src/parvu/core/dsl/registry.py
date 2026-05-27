@@ -254,6 +254,18 @@ class FunctionRegistry:
             ], LT.UNKNOWN,
             "Cast value, returning NULL on failure.", "TRY_CAST(sales[id], 'INTEGER')", sqlglot_name="TRY_CAST"
         ))
+        self.register(FunctionDef(
+            "REPLACE", [
+                ParamDef("text", LT.TEXT),
+                ParamDef("pattern", LT.TEXT),
+                ParamDef("with_value", LT.TEXT),
+                ParamDef("case_sensitive", LT.BOOLEAN, required=False),
+                ParamDef("regex", LT.BOOLEAN, required=False),
+            ], LT.TEXT,
+            "Replace occurrences of pattern in text with another value.",
+            "REPLACE(products[name], 'old', 'new')",
+            sqlglot_name="REPLACE"
+        ))
 
         # Table-level operations
         self.register(FunctionDef(

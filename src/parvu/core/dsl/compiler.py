@@ -11,7 +11,7 @@ import sqlglot
 from sqlglot import exp
 from loguru import logger
 
-from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates
+from parvu.core.dsl.ir import Expr, ColumnRef, Literal, Call, BinaryOp, UnaryOp, MethodCall, Assignment, DropDuplicates, Replace
 from parvu.core.dsl.registry import FunctionRegistry
 from parvu.core.dsl.types import LogicalType
 
@@ -65,6 +65,31 @@ class Compiler:
                 expressions=[star],
                 qualify=exp.Qualify(this=qualify_expr),
             ).from_(table_id)
+
+        if isinstance(expr, Replace):
+            text = self._to_sqlglot(expr.text)
+            replacement = self._to_sqlglot(expr.with_value)
+            # Simple literal replacement (case-sensitive, no regex)
+            if not expr.regex and expr.case_sensitive:
+                pattern = self._to_sqlglot(expr.pattern)
+                return exp.Anonymous(this="REPLACE", expressions=[text, pattern, replacement])
+            # Regex or case-insensitive: use REGEXP_REPLACE with flags
+            flags = "g"
+            if not expr.case_sensitive:
+                flags += "i"
+            if not expr.regex:
+                # Escape literal pattern so metacharacters are treated literally
+                if isinstance(expr.pattern, Literal) and isinstance(expr.pattern.value, str):
+                    import re as _re
+                    pattern = exp.Literal.string(_re.escape(expr.pattern.value))
+                else:
+                    pattern = self._to_sqlglot(expr.pattern)
+            else:
+                pattern = self._to_sqlglot(expr.pattern)
+            return exp.Anonymous(
+                this="REGEXP_REPLACE",
+                expressions=[text, pattern, replacement, exp.Literal.string(flags)],
+            )
 
         if isinstance(expr, ColumnRef):
             # table.col

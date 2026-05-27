@@ -174,9 +174,12 @@ class QueryEditor(QWidget):
                 tree = self._parser.parse(expr_text)
                 expr = self._resolver.resolve(tree)
                 compiled = self._compiler.compile(expr)
-                # Assignments and table-level ops already emit a full SELECT query
-                if isinstance(expr, (Assignment, DropDuplicates)):
+                # Table-level ops already emit a full SELECT query
+                if isinstance(expr, DropDuplicates):
                     return compiled
+                # Assignments: overwrite existing column or add new one
+                if isinstance(expr, Assignment):
+                    return self._build_assignment_query(expr)
                 # Scalar expressions — wrap them in a SELECT
                 if self._catalog and self._catalog.tables():
                     table = self._catalog.tables()[0]
@@ -186,6 +189,27 @@ class QueryEditor(QWidget):
                 logger.warning(f"Expression compilation failed: {e}")
                 return ""
         return self._sql_editor.get_query()
+
+    def _build_assignment_query(self, expr: Assignment) -> str:
+        """Build SELECT that overwrites or appends a column."""
+        table = expr.table
+        column = expr.column
+        value_sql = self._compiler.compile(expr.value)
+        all_cols: list[str] = []
+        if self._catalog and table in self._catalog.tables():
+            all_cols = list(self._catalog.columns(table))
+        if not all_cols:
+            # Fallback: let DuckDB handle it (may create column_1)
+            return f'SELECT *, {value_sql} AS "{column}" FROM {table}'
+        select_parts: list[str] = []
+        for c in all_cols:
+            if c == column:
+                select_parts.append(f'{value_sql} AS "{c}"')
+            else:
+                select_parts.append(f'"{c}"')
+        if column not in all_cols:
+            select_parts.append(f'{value_sql} AS "{column}"')
+        return f"SELECT {', '.join(select_parts)} FROM {table}"
 
     def set_query(self, query: str) -> None:
         """Set the query text."""

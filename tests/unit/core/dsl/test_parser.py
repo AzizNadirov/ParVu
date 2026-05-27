@@ -92,3 +92,15 @@ class TestParser:
     def test_drop_duplicates(self, parser: DSLParser) -> None:
         tree = parser.parse('drop_duplicates(sales[id], sales[name], "first")')
         assert tree.data == "func_call"
+
+    def test_method_call_no_args(self, parser: DSLParser) -> None:
+        tree = parser.parse("sales[name].upper")
+        assert tree.data == "method_call"
+
+    def test_method_call_with_args(self, parser: DSLParser) -> None:
+        tree = parser.parse("sales[name].replace('old', 'new')")
+        assert tree.data == "method_call"
+
+    def test_method_call_with_empty_parens(self, parser: DSLParser) -> None:
+        tree = parser.parse("sales[name].upper()")
+        assert tree.data == "method_call"

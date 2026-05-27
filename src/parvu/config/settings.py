@@ -40,6 +40,9 @@ class Settings(BaseModel):
     # Large dataset warning settings
     enable_large_dataset_warning: bool = True
     warning_criteria: Literal["rows", "cells", "filesize"] = "rows"
+
+    # Exit warning
+    warn_on_exit_with_transforms: bool = True
     warning_threshold_rows: int = 1_000_000
     warning_threshold_cells: int = 10_000_000
     warning_threshold_filesize_mb: int = 100

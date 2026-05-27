@@ -75,3 +75,13 @@ class DropDuplicates(Expr):
     table: str
     columns: list[str]
     keep: str  # "first" or "last"
+
+
+@dataclass(kw_only=True)
+class Replace(Expr):
+    """String replacement: REPLACE(text, pattern, with_value, case_sensitive, regex)."""
+    text: Expr
+    pattern: Expr
+    with_value: Expr
+    case_sensitive: bool = True
+    regex: bool = False

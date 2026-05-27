@@ -10,7 +10,7 @@ from parvu.core.dsl.resolver import Resolver, ResolutionError
 from parvu.core.dsl.compiler import Compiler
 from parvu.core.dsl.catalog import Catalog
 from parvu.core.dsl.registry import FunctionRegistry
-from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment, DropDuplicates
+from parvu.core.dsl.ir import ColumnRef, Literal, Call, BinaryOp, MethodCall, Assignment, DropDuplicates, Replace
 from parvu.core.dsl.types import LogicalType
 
 
@@ -167,3 +167,37 @@ class TestResolver:
         assert "QUALIFY" in sql
         assert "ROW_NUMBER()" in sql
         assert "PARTITION BY id, name" in sql
+
+    def test_resolve_replace_function(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("REPLACE(sales[name], 'old', 'new')")
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, Replace)
+        assert expr.case_sensitive is True
+        assert expr.regex is False
+        assert expr.logical_type == LogicalType.TEXT
+
+    def test_resolve_replace_method(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("sales[name].replace('old', 'new')")
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, Replace)
+        assert isinstance(expr.text, ColumnRef)
+        assert expr.case_sensitive is True
+        assert expr.regex is False
+
+    def test_resolve_replace_with_flags(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("REPLACE(sales[name], 'old', 'new', FALSE, TRUE)")
+        expr = resolver.resolve(tree)
+        assert isinstance(expr, Replace)
+        assert expr.case_sensitive is False
+        assert expr.regex is True
+
+    def test_resolve_replace_too_few_args_raises(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("REPLACE(sales[name], 'old')")
+        with pytest.raises(ResolutionError, match="at least 3 arguments"):
+            resolver.resolve(tree)
+
+    def test_end_to_end_replace_compile(self, parser: DSLParser, resolver: Resolver) -> None:
+        tree = parser.parse("REPLACE(sales[name], 'old', 'new')")
+        expr = resolver.resolve(tree)
+        sql = Compiler().compile(expr)
+        assert sql == "REPLACE(sales.name, 'old', 'new')"
