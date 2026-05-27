@@ -117,7 +117,8 @@ TRANSLATIONS_AZ = {
     "warning.large_dataset_size": "Bu faylın ölçüsü {size:.1f} MB-dır (hədd: {threshold} MB).\nUnikal dəyərlərin hesablanması vaxt ala bilər.\n\nDavam edək?",
     "warning.file_not_found_recent": "Fayl tapılmadı:\n{path}\n\nSon fayllardan silinsin?",
     "warning.unsaved_changes": "Yadda saxlanılmamış dəyişikliklər",
-    "warning.unsaved_changes_msg": "{count} yadda saxlanılmamış redaktə(lər)iniz var.\n\nBağlamazdan əvvəl saxlayın?",
+    "warning.unsaved_changes_msg": "{count} yadda saxlanılmamış redaktəniz var.\n\nBağlamazdan əvvəl saxlayın?",
+    "warning.unsaved_changes_msg_single": "1 yadda saxlanılmamış redaktəniz var.\n\nBağlamazdan əvvəl saxlayın?",
 
     # Success Messages
     "success.export_complete": "İxrac tamamlandı",

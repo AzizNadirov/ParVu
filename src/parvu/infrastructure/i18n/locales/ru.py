@@ -117,7 +117,8 @@ TRANSLATIONS_RU = {
     "warning.large_dataset_size": "Размер этого файла {size:.1f} МБ (порог: {threshold} МБ).\nРасчёт уникальных значений может занять время.\n\nПродолжить?",
     "warning.file_not_found_recent": "Файл не найден:\n{path}\n\nУдалить из последних?",
     "warning.unsaved_changes": "Несохранённые изменения",
-    "warning.unsaved_changes_msg": "У вас {count} несохранённых изменений(я).\n\nСохранить перед закрытием?",
+    "warning.unsaved_changes_msg": "У вас {count} несохранённых изменений.\n\nСохранить перед закрытием?",
+    "warning.unsaved_changes_msg_single": "У вас 1 несохранённое изменение.\n\nСохранить перед закрытием?",
 
     # Success Messages
     "success.export_complete": "Экспорт завершён",

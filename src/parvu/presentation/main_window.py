@@ -47,6 +47,7 @@ from parvu.presentation.dialogs.append_dialog import AppendDialog
 from parvu.presentation.dialogs.drop_duplicates_dialog import DropDuplicatesDialog
 from parvu.presentation.dialogs.replace_dialog import ReplaceDialog
 from parvu.presentation.dialogs.confirm_close_dialog import ConfirmCloseDialog
+from parvu.presentation.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from parvu.presentation.dialogs.copy_tuple_dialog import CopyTupleDialog
 from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
 from parvu.presentation.widgets.collapsible_panel import CollapsiblePanel
@@ -857,18 +858,23 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
         count = tab.edit_queue.edited_cells_count()
         logger.debug(f"Confirm discard: {count} unsaved edits on '{tab.name}'")
-        reply = QMessageBox.question(
-            self,
-            self._t("warning.unsaved_changes"),
-            self._t("warning.unsaved_changes_msg", count=count),
-            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Save,
-        )
 
-        if reply == QMessageBox.StandardButton.Save:
+        msg_key = (
+            "warning.unsaved_changes_msg_single"
+            if count == 1
+            else "warning.unsaved_changes_msg"
+        )
+        dialog = UnsavedChangesDialog(
+            self._t("warning.unsaved_changes"),
+            self._t(msg_key, count=count),
+            self,
+        )
+        dialog.exec()
+
+        if dialog.get_result() == UnsavedChangesDialog.SAVE:
             self._save_file()
             return not tab.edit_queue.is_dirty()
-        elif reply == QMessageBox.StandardButton.Discard:
+        elif dialog.get_result() == UnsavedChangesDialog.DISCARD:
             logger.info(f"User discarded {count} unsaved edits on '{tab.name}'")
             return True
         else:

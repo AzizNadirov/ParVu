@@ -117,7 +117,8 @@ TRANSLATIONS_EN = {
     "warning.large_dataset_size": "This file is {size:.1f} MB (threshold: {threshold} MB).\nCalculating unique values may take some time.\n\nContinue?",
     "warning.file_not_found_recent": "File not found:\n{path}\n\nRemove from recents?",
     "warning.unsaved_changes": "Unsaved Changes",
-    "warning.unsaved_changes_msg": "You have {count} unsaved cell edit(s).\n\nSave before closing?",
+    "warning.unsaved_changes_msg": "You have {count} unsaved cell edits.\n\nSave before closing?",
+    "warning.unsaved_changes_msg_single": "You have 1 unsaved cell edit.\n\nSave before closing?",
 
     # Success Messages
     "success.export_complete": "Export Complete",
