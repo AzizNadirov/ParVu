@@ -213,6 +213,16 @@ TRANSLATIONS_EN = {
     "dialog.confirm_close.setting_saved": "Setting Saved",
     "dialog.confirm_close.setting_saved_msg": "You can re-enable this warning in Settings → General.",
 
+    # Copy Tuple Dialog
+    "dialog.copy_tuple.title": "Copy Values as Tuple",
+    "dialog.copy_tuple.column": "Column: {column}",
+    "dialog.copy_tuple.total_rows": "Total rows: {total_rows}",
+    "dialog.copy_tuple.page_only": "Only this page ({page_size} rows)",
+    "dialog.copy_tuple.first_n": "First N rows",
+    "dialog.copy_tuple.random_n": "Random N rows",
+    "dialog.copy_tuple.label": "Label (optional):",
+    "dialog.copy_tuple.copy": "Copy",
+
     # Unique Values Dialog
     "unique.found": "Found {count} unique values (select multiple)",
 

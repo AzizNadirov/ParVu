@@ -247,6 +247,21 @@ class QueryEngine(IQueryEngine):
             logger.error(f"Error getting unique values for {column}: {e}")
             return []
 
+    def get_column_sample(self, column: str, mode: str, n: int) -> list:
+        """Return a sample of column values: 'first' or 'random'."""
+        try:
+            if mode == "first":
+                sql = f'SELECT "{column}" FROM ({self._current_query}) LIMIT {n}'
+            elif mode == "random":
+                sql = f'SELECT "{column}" FROM ({self._current_query}) ORDER BY RANDOM() LIMIT {n}'
+            else:
+                raise ValueError(f"Unknown sample mode: {mode}")
+            result = self._conn.execute(sql).fetchall()
+            return [row[0] for row in result]
+        except Exception as e:
+            logger.error(f"Error getting column sample for '{column}' ({mode}, {n}): {e}")
+            return []
+
     def apply_transform(self, query: str) -> tuple[bool, str]:
         """Apply a transformation query that wraps the current query."""
         try:

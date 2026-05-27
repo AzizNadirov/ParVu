@@ -99,6 +99,15 @@ class SettingsDialog(QDialog):
         exit_group.setLayout(exit_layout)
         layout.addWidget(exit_group)
 
+        copy_group = QGroupBox("Copy Values")
+        copy_layout = QFormLayout()
+        self._copy_tuple_spin = QSpinBox()
+        self._copy_tuple_spin.setRange(1, 1000)
+        self._copy_tuple_spin.setSuffix(" rows")
+        copy_layout.addRow("Copy tuple sample size:", self._copy_tuple_spin)
+        copy_group.setLayout(copy_layout)
+        layout.addWidget(copy_group)
+
         lang_group = QGroupBox("Language")
         lang_layout = QVBoxLayout()
         self._lang_selector = LanguageSelector(self._i18n)
@@ -269,6 +278,7 @@ class SettingsDialog(QDialog):
         self._default_limit_spin.setValue(int(s.default_limit))
 
         self._warn_transforms_check.setChecked(s.warn_on_exit_with_transforms)
+        self._copy_tuple_spin.setValue(s.copy_tuple_sample_size)
 
         self._enable_warning_check.setChecked(s.enable_large_dataset_warning)
         self._rows_threshold.setValue(s.warning_threshold_rows)
@@ -369,6 +379,7 @@ class SettingsDialog(QDialog):
         self._settings.default_limit = str(self._default_limit_spin.value())
 
         self._settings.warn_on_exit_with_transforms = self._warn_transforms_check.isChecked()
+        self._settings.copy_tuple_sample_size = self._copy_tuple_spin.value()
 
         self._settings.enable_large_dataset_warning = self._enable_warning_check.isChecked()
         self._settings.warning_threshold_rows = self._rows_threshold.value()

@@ -220,6 +220,16 @@ TRANSLATIONS_RU = {
     "dialog.confirm_close.setting_saved": "Настройка сохранена",
     "dialog.confirm_close.setting_saved_msg": "Вы можете снова включить это предупреждение в Настройки → Основные.",
 
+    # Copy Tuple Dialog
+    "dialog.copy_tuple.title": "Копировать значения как кортеж",
+    "dialog.copy_tuple.column": "Столбец: {column}",
+    "dialog.copy_tuple.total_rows": "Всего строк: {total_rows}",
+    "dialog.copy_tuple.page_only": "Только эта страница ({page_size} строк)",
+    "dialog.copy_tuple.first_n": "Первые N строк",
+    "dialog.copy_tuple.random_n": "Случайные N строк",
+    "dialog.copy_tuple.label": "Метка (необязательно):",
+    "dialog.copy_tuple.copy": "Копировать",
+
     # Unique Values Dialog
     "unique.found": "Найдено {count} уникальных значений (множественный выбор)",
 

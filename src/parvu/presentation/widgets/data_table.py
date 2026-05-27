@@ -43,6 +43,7 @@ class DataTableView(QTableWidget):
     column_type_changed = pyqtSignal(str, str) # column_name, new_type
     column_duplicated = pyqtSignal(str)        # column_name
     replace_values_requested = pyqtSignal(str) # column_name
+    copy_column_tuple_requested = pyqtSignal(str) # column_name
 
     def __init__(self, parent=None, theme: Theme | None = None):
         super().__init__(parent)
@@ -196,7 +197,7 @@ class DataTableView(QTableWidget):
         menu.addSeparator()
 
         copy_tuple = QAction("Copy Values as Tuple", self)
-        copy_tuple.triggered.connect(lambda: self._copy_column_as_tuple(column))
+        copy_tuple.triggered.connect(lambda: self.copy_column_tuple_requested.emit(column_name))
         menu.addAction(copy_tuple)
 
         unique = QAction("Show Unique Values...", self)
@@ -224,11 +225,17 @@ class DataTableView(QTableWidget):
         QApplication.clipboard().setText(column_name)
         logger.info(f"Copied column name: {column_name}")
 
+    def get_column_values(self, column_name: str) -> list:
+        """Return values for the given column from the current page."""
+        if self._current_data.empty or column_name not in self._current_data.columns:
+            return []
+        return self._current_data[column_name].tolist()
+
     def _copy_column_as_tuple(self, column: int) -> None:
         if self._current_data.empty:
             return
         column_name = self.horizontalHeaderItem(column).text()
-        values = self._current_data[column_name].tolist()
+        values = self.get_column_values(column_name)
         tuple_str = "(" + ", ".join(repr(v) for v in values) + ")"
         QApplication.clipboard().setText(tuple_str)
         logger.info(f"Copied {len(values)} values as tuple")

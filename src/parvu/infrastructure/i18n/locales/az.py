@@ -220,6 +220,16 @@ TRANSLATIONS_AZ = {
     "dialog.confirm_close.setting_saved": "Parametr saxlanıldı",
     "dialog.confirm_close.setting_saved_msg": "Bu xəbərdarlığı Parametrlər → Ümumi bölməsindən yenidən aktivləşdirə bilərsiniz.",
 
+    # Copy Tuple Dialog
+    "dialog.copy_tuple.title": "Dəyərləri kortej kimi kopyala",
+    "dialog.copy_tuple.column": "Sütun: {column}",
+    "dialog.copy_tuple.total_rows": "Cəmi sətir: {total_rows}",
+    "dialog.copy_tuple.page_only": "Yalnız bu səhifə ({page_size} sətir)",
+    "dialog.copy_tuple.first_n": "İlk N sətir",
+    "dialog.copy_tuple.random_n": "Təsadüfi N sətir",
+    "dialog.copy_tuple.label": "Etiket (istəyə bağlı):",
+    "dialog.copy_tuple.copy": "Kopyala",
+
     # Unique Values Dialog
     "unique.found": "{count} unikal dəyər tapıldı (çoxlu seçim)",
 

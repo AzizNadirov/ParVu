@@ -43,6 +43,9 @@ class Settings(BaseModel):
 
     # Exit warning
     warn_on_exit_with_transforms: bool = True
+
+    # Copy tuple sample size
+    copy_tuple_sample_size: int = 500
     warning_threshold_rows: int = 1_000_000
     warning_threshold_cells: int = 10_000_000
     warning_threshold_filesize_mb: int = 100

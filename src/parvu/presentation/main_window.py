@@ -47,6 +47,7 @@ from parvu.presentation.dialogs.append_dialog import AppendDialog
 from parvu.presentation.dialogs.drop_duplicates_dialog import DropDuplicatesDialog
 from parvu.presentation.dialogs.replace_dialog import ReplaceDialog
 from parvu.presentation.dialogs.confirm_close_dialog import ConfirmCloseDialog
+from parvu.presentation.dialogs.copy_tuple_dialog import CopyTupleDialog
 from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
 
 
@@ -139,6 +140,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._data_table.column_type_changed.connect(self._on_column_type_changed)
         self._data_table.column_duplicated.connect(self._on_column_duplicated)
         self._data_table.replace_values_requested.connect(self._on_column_replace_values)
+        self._data_table.copy_column_tuple_requested.connect(self._on_copy_column_tuple)
         layout.addWidget(self._data_table)
 
         # Pagination
@@ -934,6 +936,50 @@ class MainWindow(QMainWindow, ThemeableMixin):
             tab,
             f'SELECT {select_list} FROM ({tab.engine.current_query})',
             f'Duplicate "{column_name}"',
+        )
+
+    def _on_copy_column_tuple(self, column_name: str) -> None:
+        tab = self._active_tab()
+        if not tab:
+            return
+        total_rows = tab.engine.total_rows
+        page_size = tab.engine.page_size
+        # For small tables (single page), copy directly without dialog
+        if total_rows <= page_size:
+            values = self._data_table.get_column_values(column_name)
+            tuple_str = "(" + ", ".join(repr(v) for v in values) + ")"
+            QApplication.clipboard().setText(tuple_str)
+            self.statusBar().showMessage(f"Copied {len(values)} values as tuple", 3000)
+            return
+
+        # Large table: show dialog with options
+        dialog = CopyTupleDialog(
+            column_name,
+            total_rows,
+            page_size,
+            default_sample_size=self._container.settings.copy_tuple_sample_size,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.get_result()
+        if not result:
+            return
+        mode, n, label = result
+        if mode == "page":
+            values = self._data_table.get_column_values(column_name)
+        elif mode == "first":
+            values = tab.engine.get_column_sample(column_name, "first", n)
+        elif mode == "random":
+            values = tab.engine.get_column_sample(column_name, "random", n)
+        else:
+            values = []
+        tuple_str = "(" + ", ".join(repr(v) for v in values) + ")"
+        if label:
+            tuple_str = f"{label} = {tuple_str}"
+        QApplication.clipboard().setText(tuple_str)
+        self.statusBar().showMessage(
+            f"Copied {len(values)} values ({mode}) as tuple", 3000
         )
 
     def _on_op_math(self) -> None:
