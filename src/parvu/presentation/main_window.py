@@ -712,7 +712,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
 
     def _show_expression_help(self) -> None:
         logger.debug("Opening expression help dialog")
-        dialog = ExpressionHelpDialog(self._container.translator, self)
+        dialog = ExpressionHelpDialog(self._container.translator, parent=self)
         dialog.exec()
 
     def _show_about(self) -> None:
