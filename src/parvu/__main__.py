@@ -6,6 +6,7 @@ Usage: python -m parvu [file_path]
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
@@ -35,7 +36,7 @@ def main() -> int:
     window_service = WindowService(container)
 
     # Check for file path in command line args
-    file_path = sys.argv[1] if len(sys.argv) > 1 else None
+    file_path = Path(sys.argv[1]) if len(sys.argv) > 1 else None
 
     window = window_service.create_window(file_path)
     window.set_window_service(window_service)

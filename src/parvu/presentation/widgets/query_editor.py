@@ -51,8 +51,8 @@ class QueryEditor(QWidget):
 
     def _setup_ui(self) -> None:
         from PyQt6.QtWidgets import QSizePolicy
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        self.setMaximumHeight(85)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setMinimumHeight(120)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -87,20 +87,19 @@ class QueryEditor(QWidget):
 
         layout.addLayout(header_row)
 
-        # Stacked editor — compact height
+        # Stacked editor
         self._stack = QStackedWidget()
-        self._stack.setMaximumHeight(55)
-        self._stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # SQL editor
         self._sql_editor = SQLEditor(theme=self._theme)
-        self._sql_editor.setMaximumHeight(50)
-        self._sql_editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._sql_editor.setMinimumHeight(60)
+        self._sql_editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._stack.addWidget(self._sql_editor)
 
         # Expression editor container
         expr_container = QWidget()
-        expr_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        expr_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         expr_layout = QVBoxLayout(expr_container)
         expr_layout.setContentsMargins(0, 0, 0, 0)
         expr_layout.setSpacing(2)
@@ -110,6 +109,7 @@ class QueryEditor(QWidget):
             self._registry,
             theme=self._theme,
         )
+        self._expr_editor.setMinimumHeight(60)
         self._expr_editor.setPlaceholderText(
             "Type a DSL expression, e.g. SUM(sales[revenue]) / COUNT(sales[id])"
         )
@@ -165,7 +165,7 @@ class QueryEditor(QWidget):
     # ------------------------------------------------------------------
 
     def _update_preview(self) -> None:
-        text = self._expr_editor.text().strip()
+        text = self._expr_editor.toPlainText().strip()
         if not text or self._resolver is None:
             self._preview_label.setText("Preview: (enter an expression)")
             return
@@ -184,7 +184,7 @@ class QueryEditor(QWidget):
     def get_query(self) -> str:
         """Return the current query text."""
         if self._is_expression_mode:
-            expr_text = self._expr_editor.text().strip()
+            expr_text = self._expr_editor.toPlainText().strip()
             if not expr_text or self._resolver is None:
                 return ""
             try:
@@ -231,7 +231,7 @@ class QueryEditor(QWidget):
     def set_query(self, query: str) -> None:
         """Set the query text."""
         if self._is_expression_mode:
-            self._expr_editor.setText(query)
+            self._expr_editor.setPlainText(query)
         else:
             self._sql_editor.set_query(query)
 
@@ -277,7 +277,7 @@ class QueryEditor(QWidget):
         """
         if not self._is_expression_mode:
             return {}
-        expr_text = self._expr_editor.text().strip()
+        expr_text = self._expr_editor.toPlainText().strip()
         if not expr_text or self._resolver is None:
             return {}
         try:

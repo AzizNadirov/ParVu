@@ -1,5 +1,5 @@
 """
-Expression Editor Widget — QLineEdit with DSL-aware auto-completion.
+Expression Editor Widget — QPlainTextEdit with DSL-aware auto-completion.
 
 Provides context-sensitive suggestions based on the ParVu DSL grammar:
 - table[… → column names for that table
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from PyQt6.QtWidgets import QLineEdit, QCompleter
+from PyQt6.QtWidgets import QPlainTextEdit, QCompleter
 from PyQt6.QtCore import Qt, QStringListModel, QPoint
 from loguru import logger
 
@@ -23,8 +23,8 @@ from parvu.infrastructure.themes.models import Theme
 from parvu.presentation.widgets.function_doc_popup import FunctionDocPopup
 
 
-class ExpressionEditor(QLineEdit):
-    """Single-line expression editor with context-aware auto-completion."""
+class ExpressionEditor(QPlainTextEdit):
+    """Multi-line expression editor with context-aware auto-completion."""
 
     def __init__(
         self,
@@ -34,6 +34,8 @@ class ExpressionEditor(QLineEdit):
         parent=None,
     ):
         super().__init__(parent)
+        self.setMinimumHeight(60)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self._catalog = catalog
         self._registry = registry
         self._theme = theme
@@ -50,6 +52,7 @@ class ExpressionEditor(QLineEdit):
         self._completer.highlighted[str].connect(self._on_completion_highlighted)
 
         self.textChanged.connect(self._on_text_changed)
+        self.setPlaceholderText("Enter expression...")
 
     # ------------------------------------------------------------------
     # Completion logic
@@ -57,8 +60,8 @@ class ExpressionEditor(QLineEdit):
 
     def _on_text_changed(self) -> None:
         """Update the completer model whenever text changes."""
-        text = self.text()
-        pos = self.cursorPosition()
+        text = self.toPlainText()
+        pos = self.textCursor().position()
         prefix, suggestions = self._get_suggestions(text, pos)
 
         if not suggestions or len(prefix) < 1:
@@ -128,7 +131,7 @@ class ExpressionEditor(QLineEdit):
         prefix = self._completer.completionPrefix()
         extra = len(completion) - len(prefix)
         if extra > 0:
-            self.insert(completion[-extra:])
+            self.insertPlainText(completion[-extra:])
             logger.debug(f"Autocomplete inserted: '{completion}'")
         self._doc_popup.hide_popup()
 
@@ -161,8 +164,8 @@ class ExpressionEditor(QLineEdit):
 
     def _show_doc_at_cursor(self) -> None:
         """Show documentation for the word under the text cursor, if any."""
-        text = self.text()
-        pos = self.cursorPosition()
+        text = self.toPlainText()
+        pos = self.textCursor().position()
 
         # Find word boundaries
         start = pos
