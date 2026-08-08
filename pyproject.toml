@@ -1,6 +1,6 @@
 [project]
 name = "ParVu"
-version = "0.3.1"
+version = "0.4.0"
 description = "ParVu - Parquet/CSV/JSON File Viewer"
 readme = "README.md"
 requires-python = ">=3.13"

@@ -1,5 +1,25 @@
 # ParVu Changelog
 
+## [0.4.0]
+
+### Added
+- **Export dialog** (**File → Export...**, `Ctrl+Shift+S`) — replaces the old "Save As..." and the plain "Export Results..." item with one configurable export:
+  - Target file + format (CSV / Parquet / JSON); switching the format rewrites the suffix.
+  - Per-column include/exclude and type casting (`Keep`, `VARCHAR`, `BIGINT`, `INTEGER`, `DOUBLE`, `DECIMAL(18,4)`, `BOOLEAN`, `DATE`, `TIMESTAMP`), applied as SQL `CAST`.
+  - `strftime` patterns for DATE and TIMESTAMP/TIME columns (presets + free text). Disabled for Parquet, which stores temporal types natively, and when the result has no date columns.
+  - Format-specific options: CSV delimiter / header / quoting, Parquet compression (snappy, zstd, gzip, brotli, none), JSON array vs newline-delimited (JSONL).
+  - Pending cell edits are materialized into the export, and the dialog says how many.
+- **Export progress bar** — determinate `QProgressDialog` ("Exporting 150,000 of 300,000 rows...") with a working Cancel. The export streams Arrow record batches (50k rows) out of DuckDB on a dedicated cursor in a background thread, so memory stays flat on huge files; cancelling removes the partial file. Closing the window waits for a running export before releasing the DuckDB connection.
+
+### Fixed
+- **"Save As" silently did nothing** on an unmodified file. It routed through the save path, which returns early when there are no pending cell edits and no applied transforms — picking a name and format in the dialog produced no file. Exporting is now its own path and always writes.
+
+### Changed
+- `File → Save` (`Ctrl+S`) is unchanged: it still commits edits and transforms to the original file. Everything else is now **Export**.
+
+### i18n
+- New keys `export.progress`, `export.progress_rows`, `export.cancelled` in English, Russian, Azerbaijani; `menu.file.export` shortened to "Export..."; `shortcuts.action.save_as` replaced by `shortcuts.action.export` (still `Ctrl+Shift+S`); `menu.file.save_as` / `dialog.save_as` removed.
+
 ## [0.3.1]
 
 ### Added

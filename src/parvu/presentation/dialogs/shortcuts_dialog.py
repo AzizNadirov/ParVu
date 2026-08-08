@@ -28,7 +28,7 @@ SHORTCUT_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
             ("shortcuts.action.new_window", "Ctrl+N"),
             ("shortcuts.action.open_file", "Ctrl+O"),
             ("shortcuts.action.save", "Ctrl+S"),
-            ("shortcuts.action.save_as", "Ctrl+Shift+S"),
+            ("shortcuts.action.export", "Ctrl+Shift+S"),
             ("shortcuts.action.drag_drop", "shortcuts.value.drag_drop"),
         ],
     ),

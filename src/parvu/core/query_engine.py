@@ -454,6 +454,14 @@ class QueryEngine(IQueryEngine):
         new_query = f"SELECT * FROM ({self._current_query}) ORDER BY {column} {order}"
         return self.apply_transform(new_query)
 
+    def new_cursor(self) -> duckdb.DuckDBPyConnection:
+        """Return a cursor over the same database, usable from another thread."""
+        return self._conn.cursor()
+
+    def fetch_dataframe(self) -> pd.DataFrame:
+        """Materialize the full current result (needed to apply pending edits)."""
+        return self._conn.execute(self._wrap_query(self._current_query)).df()
+
     def export_results(self, output_path: Path) -> bool:
         """Export current query results to file."""
         try:

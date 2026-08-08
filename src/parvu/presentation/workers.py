@@ -13,6 +13,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from parvu.core.interfaces import IQueryEngine
 from parvu.core.edit_queue import CellEdit, apply_edits_to_dataframe, read_source_file, write_source_file
+from parvu.core.exporter import ExportCancelled, ExportOptions, export_dataset
 
 
 class QueryWorker(QThread):
@@ -48,22 +49,58 @@ class QueryWorker(QThread):
 
 
 class ExportWorker(QThread):
-    """Background thread for exporting data."""
+    """Background thread streaming the current result to a file.
 
-    finished = pyqtSignal(bool, str)
+    ``conn`` must be a dedicated DuckDB cursor (``connection.cursor()``)
+    created by the caller — the worker owns it for its lifetime.
+    ``source_df`` short-circuits the query when pending cell edits have
+    already been materialized on the main thread.
+    """
 
-    def __init__(self, engine: IQueryEngine, output_path: str):
+    progress = pyqtSignal(int)  # rows written so far
+    done = pyqtSignal(int)  # total rows written
+    cancelled = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(
+        self,
+        conn,
+        source_query: str,
+        options: ExportOptions,
+        source_df=None,
+    ):
         super().__init__()
-        self._engine = engine
-        self._output_path = output_path
+        self._conn = conn
+        self._source_query = source_query
+        self._options = options
+        self._source_df = source_df
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
 
     def run(self) -> None:
-        """Export data in background."""
         try:
-            success = self._engine.export_results(self._output_path)
-            self.finished.emit(success, "")
+            query = self._source_query
+            if self._source_df is not None:
+                self._conn.register("_parvu_export_src", self._source_df)
+                query = "SELECT * FROM _parvu_export_src"
+            rows = export_dataset(
+                self._conn,
+                query,
+                self._options,
+                on_progress=self.progress.emit,
+                is_cancelled=lambda: self._cancelled,
+            )
+            self.done.emit(rows)
+        except ExportCancelled:
+            self.cancelled.emit()
         except Exception as e:
-            self.finished.emit(False, str(e))
+            self.error.emit(str(e))
+        finally:
+            self._source_df = None
+            self._conn.close()
+            gc.collect()
 
 
 class SaveWorker(QThread):

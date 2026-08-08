@@ -25,9 +25,9 @@ from parvu.services.file_service import FileService
 from parvu.infrastructure.themes.manager import ThemeManager
 from parvu.infrastructure.i18n.translator import _Translator
 from parvu.core.query_engine import QueryEngine
-from parvu.core.edit_queue import EditQueue
+from parvu.core.edit_queue import EditQueue, apply_edits_to_dataframe
 from parvu.presentation.themeable import ThemeableMixin
-from parvu.presentation.workers import QueryWorker, SaveWorker, UniqueValuesWorker
+from parvu.presentation.workers import ExportWorker, QueryWorker, SaveWorker, UniqueValuesWorker
 from parvu.presentation.widgets.file_toolbar import FileToolbar
 from parvu.presentation.widgets.query_toolbar import QueryToolbar
 from parvu.presentation.widgets.query_editor import QueryEditor
@@ -51,6 +51,7 @@ from parvu.presentation.dialogs.replace_dialog import ReplaceDialog
 from parvu.presentation.dialogs.confirm_close_dialog import ConfirmCloseDialog
 from parvu.presentation.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from parvu.presentation.dialogs.copy_tuple_dialog import CopyTupleDialog
+from parvu.presentation.dialogs.export_dialog import ExportDialog
 from parvu.presentation.widgets.applied_steps import AppliedStepsPanel
 from parvu.presentation.widgets.collapsible_panel import CollapsiblePanel
 from parvu.presentation.widgets.find_bar import FindBar
@@ -245,23 +246,17 @@ class MainWindow(QMainWindow, ThemeableMixin):
         file_menu.addAction(open_action)
         file_menu.addSeparator()
 
-        export_action = QAction(self._t("menu.file.export"), self)
-        export_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileLinkIcon))
-        export_action.triggered.connect(self._export_results)
-        file_menu.addAction(export_action)
-        file_menu.addSeparator()
-
         save_action = QAction(self._t("menu.file.save"), self)
         save_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
         save_action.setShortcut("Ctrl+S")
         save_action.triggered.connect(self._save_file)
         file_menu.addAction(save_action)
 
-        save_as_action = QAction(self._t("menu.file.save_as"), self)
-        save_as_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
-        save_as_action.setShortcut("Ctrl+Shift+S")
-        save_as_action.triggered.connect(self._save_file_as)
-        file_menu.addAction(save_as_action)
+        export_action = QAction(self._t("menu.file.export"), self)
+        export_action.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileLinkIcon))
+        export_action.setShortcut("Ctrl+Shift+S")
+        export_action.triggered.connect(self._export_results)
+        file_menu.addAction(export_action)
         file_menu.addSeparator()
 
         settings_action = QAction(self._t("menu.file.settings"), self)
@@ -743,41 +738,93 @@ class MainWindow(QMainWindow, ThemeableMixin):
         self._execute_query()
 
     def _export_results(self) -> bool:
+        """Export the current result: options dialog, then a background write."""
         tab = self._active_tab()
         if not tab:
             QMessageBox.warning(self, self._t("warning.no_data"), self._t("warning.no_data_msg"))
             return False
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Results", "",
-            self._container.file_service.get_export_dialog_filter()
+        default_path = (
+            tab.file_path.with_suffix(".csv") if tab.file_path else Path("export.csv")
         )
-        if not file_path:
+        dialog = ExportDialog(
+            default_path,
+            tab.engine.get_column_types(),
+            self,
+            pending_edits=tab.edit_queue.edited_cells_count(),
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
-        logger.info(f"Exporting results from '{tab.name}' to {file_path}")
-        try:
-            success = tab.engine.export_results(Path(file_path))
-            if success:
-                logger.info(f"Export complete: {file_path}")
-                QMessageBox.information(
-                    self, self._t("success.export_complete"),
-                    self._t("success.export_complete_msg", path=file_path)
-                )
-                return True
-            else:
-                logger.error(f"Export failed: {file_path}")
-                QMessageBox.critical(
-                    self, self._t("success.export_failed"),
-                    self._t("success.export_failed_msg")
-                )
-                return False
-        except Exception as e:
-            logger.error(f"Export error: {e}")
-            QMessageBox.critical(
-                self, self._t("error.export_error"),
-                self._t("error.export_error_msg", error=str(e))
+        options = dialog.get_options()
+
+        # Pending cell edits only exist in memory — materialize them so the
+        # export reflects what the user sees.
+        source_df = None
+        edits = tab.edit_queue.all_edits()
+        if edits:
+            source_df = apply_edits_to_dataframe(tab.engine.fetch_dataframe(), edits)
+
+        total_rows = max(tab.engine.total_rows, 1)
+        logger.info(f"Exporting '{tab.name}' -> {options.path} ({options.format})")
+
+        self._export_progress = QProgressDialog(
+            self._t("export.progress", path=options.path.name), self._t("btn.cancel"),
+            0, 100, self,
+        )
+        self._export_progress.setWindowTitle(self._t("dialog.export_results"))
+        self._export_progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._export_progress.setMinimumDuration(0)
+        self._export_progress.setAutoClose(False)
+        self._export_progress.setAutoReset(False)
+        self._export_progress.setValue(0)
+
+        self._export_worker = ExportWorker(
+            tab.engine.new_cursor(), tab.engine.current_query, options, source_df
+        )
+        self._export_worker.progress.connect(
+            lambda rows: self._on_export_progress(rows, total_rows)
+        )
+        self._export_worker.done.connect(lambda rows: self._on_export_done(options.path, rows))
+        self._export_worker.cancelled.connect(self._on_export_cancelled)
+        self._export_worker.error.connect(self._on_export_error)
+        self._export_progress.canceled.connect(self._export_worker.cancel)
+        self._export_worker.start()
+        return True
+
+    def _on_export_progress(self, rows: int, total_rows: int) -> None:
+        if getattr(self, "_export_progress", None) is not None:
+            self._export_progress.setLabelText(
+                self._t("export.progress_rows", rows=f"{rows:,}", total=f"{total_rows:,}")
             )
-            return False
+            self._export_progress.setValue(min(100, rows * 100 // total_rows))
+
+    def _close_export_progress(self) -> None:
+        if getattr(self, "_export_progress", None) is not None:
+            # QProgressDialog.close() emits canceled() — don't let it reach the worker.
+            self._export_progress.blockSignals(True)
+            self._export_progress.close()
+            self._export_progress = None
+
+    def _on_export_done(self, path: Path, rows: int) -> None:
+        self._close_export_progress()
+        logger.info(f"Export complete: {rows} rows -> {path}")
+        QMessageBox.information(
+            self, self._t("success.export_complete"),
+            self._t("success.export_complete_msg", path=path) + f"\n\n{rows:,} rows",
+        )
+
+    def _on_export_cancelled(self) -> None:
+        self._close_export_progress()
+        logger.info("Export cancelled by user")
+        self.statusBar().showMessage(self._t("export.cancelled"), 5000)
+
+    def _on_export_error(self, error_msg: str) -> None:
+        self._close_export_progress()
+        logger.error(f"Export failed: {error_msg}")
+        QMessageBox.critical(
+            self, self._t("error.export_error"),
+            self._t("error.export_error_msg", error=error_msg),
+        )
 
     def _show_table_info(self) -> None:
         tab = self._active_tab()
@@ -1098,7 +1145,7 @@ class MainWindow(QMainWindow, ThemeableMixin):
             logger.debug("Save file: no unsaved changes (no edits and no transforms)")
             return
         if not tab.file_path or not tab.file_path.exists():
-            self._save_file_as()
+            self._export_results()
             return
         logger.info(
             f"Saving to original file: {tab.file_path} "
@@ -1106,22 +1153,6 @@ class MainWindow(QMainWindow, ThemeableMixin):
             f"transforms={len(tab.applied_steps)})"
         )
         self._do_save(tab.file_path)
-
-    def _save_file_as(self) -> None:
-        """Save edits to a new file (Save As)."""
-        tab = self._active_tab()
-        if not tab:
-            QMessageBox.warning(self, self._t("warning.no_data"), self._t("warning.no_data_msg"))
-            return
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            self._t("dialog.save_as"),
-            str(tab.file_path) if tab.file_path else "",
-            self._container.file_service.get_export_dialog_filter(),
-        )
-        if file_path:
-            logger.info(f"Save As selected: {file_path}")
-            self._do_save(Path(file_path))
 
     def _do_save(self, output_path: Path) -> None:
         """Save the active tab's state (transforms + edits) to ``output_path``.
@@ -1747,6 +1778,13 @@ class MainWindow(QMainWindow, ThemeableMixin):
                         self._t("dialog.confirm_close.setting_saved"),
                         self._t("dialog.confirm_close.setting_saved_msg"),
                     )
+
+        # An export holds a cursor on the shared connection — let it finish
+        # before tearing the connection down.
+        worker = getattr(self, "_export_worker", None)
+        while worker is not None and worker.isRunning():
+            QApplication.processEvents()
+            worker.wait(50)
 
         for tab in self._tabs:
             tab.engine.close()
