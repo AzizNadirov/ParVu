@@ -44,6 +44,12 @@ Opening `sales.parquet` creates:
 
 Every applied step (query, operation or cell edit) goes into one list in the tab, so undo always reverts the most recent step. Saving exports the current query to a temporary file next to the target, renames it into place, and reopens the tab from the result.
 
+### Memory
+
+Each window's DuckDB connection is limited to 8 threads and to the **query memory limit** setting (1 GB by default, `PARVU_MEMORY_LIMIT_MB` overrides it). Above the limit DuckDB spills to `~/.cache/ParVu/duckdb`. Freed memory is returned to the system after large queries. Pages are fetched with `LIMIT/OFFSET`, so the first pages of a sorted result only need a top-N, while jumping deep into a sorted big file needs a full sort. A sort applied right after another sort replaces it rather than wrapping it, so the data is sorted once. A tab's column list is cached until its query changes.
+
+In the UI, the grid reads theme colours once per theme, reuses its style objects, and only re-renders when the page, sort or theme changes. Dialogs are loaded on first use.
+
 ### Rules
 
 - All identifiers and literals go through `sql::quote_ident` and `sql::quote_literal`.

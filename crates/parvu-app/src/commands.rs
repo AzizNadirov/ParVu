@@ -133,9 +133,15 @@ pub fn update_settings(
         tracing::warn!("rejected settings: {rejected:?}");
     }
     let page_size = cfg.settings.settings().rows_per_page();
+    let memory_mb = cfg.settings.settings().query_memory_limit_mb.max(0) as u64;
     drop(cfg);
+    let env_limit = std::env::var_os("PARVU_MEMORY_LIMIT_MB").is_some();
     for ws in lock(&state.workspaces).values() {
-        lock(ws).set_page_size(page_size);
+        let mut ws = lock(ws);
+        ws.set_page_size(page_size);
+        if !env_limit {
+            ws.set_memory_limit_mb(memory_mb)?;
+        }
     }
     Ok(lock(&state.config).settings.settings().clone())
 }

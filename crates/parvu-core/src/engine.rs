@@ -23,6 +23,9 @@ pub struct QueryEngine {
     current: String,
     history: Vec<String>,
     paginator: Paginator,
+    /// Columns of `current`, cached because every page fetch needs them.
+    /// Cleared whenever the query or the underlying view changes.
+    columns: std::cell::RefCell<Option<Vec<ColumnMeta>>>,
 }
 
 /// Fetch every batch of `sql`.
@@ -60,6 +63,7 @@ impl QueryEngine {
             base_query,
             history: Vec::new(),
             paginator: Paginator::new(total, page_size),
+            columns: std::cell::RefCell::new(None),
         })
     }
 
@@ -77,6 +81,10 @@ impl QueryEngine {
     }
     pub fn can_undo(&self) -> bool {
         !self.history.is_empty()
+    }
+    /// The query before the most recent change, if any.
+    pub fn previous_query(&self) -> Option<&str> {
+        self.history.last().map(String::as_str)
     }
     pub fn total_rows(&self) -> u64 {
         self.paginator.total_rows()
@@ -96,7 +104,16 @@ impl QueryEngine {
     }
 
     pub fn columns(&self, conn: &Connection) -> Result<Vec<ColumnMeta>> {
-        describe(conn, &self.current)
+        if let Some(cols) = self.columns.borrow().as_ref() {
+            return Ok(cols.clone());
+        }
+        let cols = describe(conn, &self.current)?;
+        *self.columns.borrow_mut() = Some(cols.clone());
+        Ok(cols)
+    }
+
+    fn invalidate_columns(&self) {
+        self.columns.borrow_mut().take();
     }
 
     /// Replace the current query (user SQL or a transform). On error nothing changes.
@@ -109,6 +126,7 @@ impl QueryEngine {
         let total = count_rows(conn, query)?;
         self.history.push(std::mem::replace(&mut self.current, query.to_string()));
         self.paginator.recalculate(total);
+        self.invalidate_columns();
         Ok(())
     }
 
@@ -120,6 +138,7 @@ impl QueryEngine {
         self.history.pop();
         self.current = previous;
         self.paginator.recalculate(total);
+        self.invalidate_columns();
         Ok(())
     }
 
@@ -132,6 +151,7 @@ impl QueryEngine {
 
     /// Recount rows, e.g. after the underlying view changed.
     pub fn refresh(&mut self, conn: &Connection) -> Result<()> {
+        self.invalidate_columns();
         let total = count_rows(conn, &self.current)?;
         self.paginator.recalculate(total);
         Ok(())

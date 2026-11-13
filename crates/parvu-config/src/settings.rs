@@ -167,6 +167,8 @@ pub struct Settings {
     pub warn_on_exit_with_transforms: bool,
 
     pub copy_tuple_sample_size: i64,
+    /// Working memory DuckDB may use, in MB; larger queries spill to disk.
+    pub query_memory_limit_mb: i64,
     pub warning_threshold_rows: i64,
     pub warning_threshold_cells: i64,
     pub warning_threshold_filesize_mb: i64,
@@ -214,6 +216,7 @@ impl Default for Settings {
             warning_criteria: WarningCriteria::Rows,
             warn_on_exit_with_transforms: true,
             copy_tuple_sample_size: 500,
+            query_memory_limit_mb: 1024,
             warning_threshold_rows: 1_000_000,
             warning_threshold_cells: 10_000_000,
             warning_threshold_filesize_mb: 100,
@@ -533,6 +536,7 @@ fn known_keys() -> Vec<&'static str> {
         "warning_criteria",
         "warn_on_exit_with_transforms",
         "copy_tuple_sample_size",
+        "query_memory_limit_mb",
         "warning_threshold_rows",
         "warning_threshold_cells",
         "warning_threshold_filesize_mb",

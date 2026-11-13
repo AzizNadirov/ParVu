@@ -8,6 +8,8 @@ ParVu is rewritten in Rust (Tauri window, React UI, DuckDB). It reads the same `
 - **Much smaller and faster.** 82 MB installed instead of 483 MB; files open in about 400 ms instead of 620–760 ms; switching a 1,000-row page takes about 8 ms instead of 190 ms.
 - **Pending cell edits are visible to queries.** Edits are overlaid on the file view, so SQL, joins and saves see them before saving.
 - **Every query is an applied step**, so undo always reverts the most recent change.
+- **Bounded memory.** Queries use at most 8 threads and 1 GB of working memory by default (new **Performance** setting); larger operations spill to disk. Sorting and jumping to the last page of a 5-million-row file peaks around 800 MB instead of 1.3 GB, and memory is returned afterwards.
+- **A new sort replaces the previous sort** instead of sorting the already sorted result again.
 - **Languages and themes switch instantly**, without a restart.
 - **Windows ships an NSIS `setup.exe` only**; the portable zip is gone.
 

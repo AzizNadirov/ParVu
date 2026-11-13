@@ -26,6 +26,7 @@ export interface SettingsForm {
   saveHistory: boolean;
   warnTransforms: boolean;
   copySample: string;
+  memoryLimit: string;
   language: string;
   theme: string;
   sqlFont: string;
@@ -47,6 +48,7 @@ export const NUMERIC_RANGES: [keyof SettingsForm, number, number][] = [
   ["rowsPerPage", 10, 10000],
   ["maxRows", 100, 100000],
   ["copySample", 1, 1000],
+  ["memoryLimit", 256, 65536],
   ["sqlFontSize", 8, 24],
   ["tableFontSize", 7, 20],
   ["defaultLimit", 1, 10000],
@@ -63,6 +65,7 @@ export function settingsToForm(s: Settings, language: string, theme: string): Se
     saveHistory: isTruthySetting(s.save_file_history),
     warnTransforms: !!s.warn_on_exit_with_transforms,
     copySample: String(toInt(s.copy_tuple_sample_size, 500)),
+    memoryLimit: String(toInt(s.query_memory_limit_mb, 1024)),
     language: s.current_language || language,
     theme: s.current_theme || theme,
     sqlFont: s.default_sql_font,
@@ -105,6 +108,7 @@ export function formToValues(f: SettingsForm): Partial<Settings> {
     default_limit: String(n("defaultLimit")),
     warn_on_exit_with_transforms: f.warnTransforms,
     copy_tuple_sample_size: n("copySample"),
+    query_memory_limit_mb: n("memoryLimit"),
     enable_crash_reporting: f.crashReporting,
     bug_report_email: f.bugEmail.trim(),
     enable_large_dataset_warning: f.warningEnabled,
@@ -268,6 +272,13 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
         <div className="form-grid">
           {field(t("settings.label.copy_sample"), num("copySample", t("settings.suffix.rows")))}
         </div>
+      </fieldset>
+      <fieldset>
+        <legend>{t("settings.group.performance")}</legend>
+        <div className="form-grid">
+          {field(t("settings.label.memory_limit"), num("memoryLimit", t("settings.suffix.mb")))}
+        </div>
+        <div className="muted small">{t("settings.hint.memory_limit")}</div>
       </fieldset>
       <fieldset>
         <legend>{t("settings.group.language")}</legend>

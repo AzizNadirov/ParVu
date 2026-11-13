@@ -186,6 +186,8 @@ SELECT * FROM sales JOIN customers USING (customer_id)
 
 Settings are stored in `~/.ParVu/settings/settings.json` and can be changed in File → Settings. Logs are in `~/.ParVu/logs`.
 
+**Memory.** Queries may use up to 1 GB of working memory by default (File → Settings → Performance). Larger sorts, joins and groupings spill to a temporary folder on disk instead of using more RAM, so even multi-gigabyte files stay within that budget. The `PARVU_MEMORY_LIMIT_MB` environment variable overrides the setting.
+
 ### Themes
 
 - **ParVu Light** - default light theme

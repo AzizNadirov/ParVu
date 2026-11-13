@@ -1,7 +1,7 @@
 // The main window. Owns per-window UI state and turns user actions into
 // backend commands. All data work happens in Rust; this file only decides
 // what to call and what to show.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -51,7 +51,8 @@ import {
   openThemeSelector,
   openUniqueValues,
   openUnsavedChanges,
-} from "./dialogs";
+  preloadDialogs,
+} from "./dialogs/lazy";
 
 /** Per-tab UI state that lives only in the window. */
 interface TabUi {
@@ -949,6 +950,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    window.setTimeout(preloadDialogs, 1500);
     if (boot.crash_report && settings.enable_crash_reporting) void openCrashReport(ui, { report: boot.crash_report });
     void (async () => {
       for (const f of boot.initial_files) await openPath(f);
@@ -1120,6 +1122,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         </footer>
       </div>
       {search && activeTab && (
+        <Suspense fallback={null}>
         <SearchPanel
           key={activeTab.id}
           tabId={activeTab.id}
@@ -1134,6 +1137,7 @@ export function App({ boot }: { boot: Bootstrap }) {
           }}
           registerKeys={(k) => (searchKeys.current = k)}
         />
+        </Suspense>
       )}
       {menu && <PopupMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {dialogs.map((d) => (

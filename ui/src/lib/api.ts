@@ -158,6 +158,7 @@ export interface Settings {
   warning_criteria: WarningCriteria;
   warn_on_exit_with_transforms: boolean;
   copy_tuple_sample_size: number;
+  query_memory_limit_mb: number;
   warning_threshold_rows: number;
   warning_threshold_cells: number;
   warning_threshold_filesize_mb: number;

@@ -62,11 +62,16 @@ impl AppState {
         if let Some(ws) = map.get(label) {
             return Ok(ws.clone());
         }
-        let (page_size, temp) = {
+        let (page_size, memory_mb, temp) = {
             let cfg = lock(&self.config);
-            (cfg.settings.settings().rows_per_page(), parvu_config::paths::user_cache_dir().join("duckdb"))
+            let s = cfg.settings.settings();
+            (s.rows_per_page(), s.query_memory_limit_mb, parvu_config::paths::user_cache_dir().join("duckdb"))
         };
         let ws = Workspace::new(page_size, Some(&temp)).map_err(ApiError::from)?;
+        // The PARVU_MEMORY_LIMIT_MB environment variable, if set, wins.
+        if std::env::var_os("PARVU_MEMORY_LIMIT_MB").is_none() {
+            ws.set_memory_limit_mb(memory_mb.max(0) as u64).map_err(ApiError::from)?;
+        }
         let ws = Arc::new(Mutex::new(ws));
         map.insert(label.to_string(), ws.clone());
         Ok(ws)

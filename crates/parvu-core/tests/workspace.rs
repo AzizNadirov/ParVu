@@ -390,3 +390,33 @@ fn excel_dates_and_timestamps_are_real_dates() {
     assert_eq!(cell(&ws, ix, 1, 1, 1).as_deref(), Some("2024-05-06 08:08:09"));
     assert_eq!(cell(&ws, ix, 1, 0, 2).as_deref(), Some("1850-01-01"));
 }
+
+#[test]
+fn consecutive_sorts_replace_each_other_and_undo_back() {
+    let (_d, _p, mut ws, id) = setup(50, "parquet");
+    ws.apply(id, &Operation::Sort { column: "id".into(), ascending: true }).unwrap();
+    let first_sort = ws.current_query(id).unwrap();
+    ws.apply(id, &Operation::Sort { column: "score".into(), ascending: false }).unwrap();
+    let q = ws.current_query(id).unwrap();
+    assert_eq!(q.matches("ORDER BY").count(), 1, "{q}");
+    assert_eq!(cell(&ws, id, 1, 0, 0).as_deref(), Some("49"));
+    ws.undo(id).unwrap();
+    assert_eq!(ws.current_query(id).unwrap(), first_sort);
+    assert_eq!(cell(&ws, id, 1, 0, 0).as_deref(), Some("0"));
+    // A sort after another kind of step still builds on it.
+    ws.apply(id, &Operation::FilterValues { column: "name".into(), values: vec![Some("name_1".into())] }).unwrap();
+    ws.apply(id, &Operation::Sort { column: "id".into(), ascending: false }).unwrap();
+    assert_eq!(ws.summary(id).unwrap().total_rows, 7);
+}
+
+#[test]
+fn resource_limits_are_applied() {
+    let ws = Workspace::new(100, None).unwrap();
+    let threads: i64 = ws.connection().query_row("SELECT current_setting('threads')", [], |r| r.get(0)).unwrap();
+    assert!((1..=8).contains(&threads), "threads = {threads}");
+    ws.set_memory_limit_mb(300).unwrap();
+    // DuckDB reports the limit in its own units, e.g. "286.1 MiB".
+    let limit: String = ws.connection().query_row("SELECT current_setting('memory_limit')", [], |r| r.get(0)).unwrap();
+    let amount: f64 = limit.split_whitespace().next().unwrap_or("0").parse().unwrap_or(0.0);
+    assert!((250.0..=320.0).contains(&amount), "memory_limit = {limit}");
+}

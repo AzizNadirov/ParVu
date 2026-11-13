@@ -83,6 +83,35 @@ pub struct TabSummary {
     pub pending_edits: usize,
 }
 
+/// Default cap on DuckDB's working memory. Larger sorts, joins and
+/// aggregations spill to the temp directory instead of growing the process.
+pub const DEFAULT_MEMORY_LIMIT_MB: u64 = 1024;
+
+/// Most threads DuckDB may use. More threads speed up large scans only a
+/// little but each one holds its own buffers.
+pub const MAX_THREADS: usize = 8;
+
+/// DuckDB settings that keep memory use bounded and predictable.
+///
+/// DuckDB's own defaults (80% of RAM, one thread per core) suit a database
+/// server; a desktop viewer shares the machine with other programs. The
+/// memory limit can be changed with the `PARVU_MEMORY_LIMIT_MB` environment
+/// variable.
+fn resource_settings() -> String {
+    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, MAX_THREADS);
+    let limit = std::env::var("PARVU_MEMORY_LIMIT_MB")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|v| *v >= 128)
+        .unwrap_or(DEFAULT_MEMORY_LIMIT_MB);
+    // Return freed memory to the system quickly instead of keeping it
+    // cached in the allocator after a large query.
+    format!(
+        "SET threads = {threads}; SET memory_limit = '{limit}MB'; \
+         SET allocator_flush_threshold = '32MB'; SET allocator_background_threads = true;"
+    )
+}
+
 pub struct Workspace {
     conn: Connection,
     tabs: Vec<Tab>,
@@ -95,6 +124,7 @@ impl Workspace {
     /// needs more memory than is available.
     pub fn new(page_size: u64, temp_dir: Option<&Path>) -> Result<Self> {
         let conn = Connection::open_in_memory()?;
+        conn.execute_batch(&resource_settings())?;
         if let Some(dir) = temp_dir {
             std::fs::create_dir_all(dir)?;
             conn.execute_batch(&format!(
@@ -103,6 +133,12 @@ impl Workspace {
             ))?;
         }
         Ok(Self { conn, tabs: Vec::new(), next_id: 1, page_size: page_size.max(1) })
+    }
+
+    /// Change DuckDB's working-memory limit (MB, at least 128).
+    pub fn set_memory_limit_mb(&self, mb: u64) -> Result<()> {
+        self.conn.execute_batch(&format!("SET memory_limit = '{}MB'", mb.max(128)))?;
+        Ok(())
     }
 
     pub fn connection(&self) -> &Connection {
@@ -304,9 +340,18 @@ impl Workspace {
             let t = self.tab(id)?;
             let columns = t.engine.columns(&self.conn)?;
             let other = |name: &str| self.current_query_of(name);
+            // A sort right after another sort replaces it instead of wrapping
+            // it: stacked ORDER BYs make DuckDB sort the whole result twice.
+            // The earlier sort stays in the history, so undo still returns to it.
+            let last_was_sort =
+                t.steps.last().is_some_and(|s| s.kind == StepKind::Sql && s.label.key == "step.sort");
+            let source = match (op, last_was_sort, t.engine.previous_query()) {
+                (Operation::Sort { .. }, true, Some(before_sort)) => before_sort,
+                _ => t.engine.current_query(),
+            };
             op.build(&OpContext {
                 table: &t.name,
-                current_query: t.engine.current_query(),
+                current_query: source,
                 columns: &columns,
                 other_query: &other,
             })?

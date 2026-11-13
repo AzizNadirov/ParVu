@@ -1,7 +1,7 @@
 // The data table: one page of results drawn by Glide Data Grid (canvas,
 // virtualised). Pages come pre-formatted from Rust; this component only
 // displays them, reports edits, and raises menu events.
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   CompactSelection,
   DataEditor,
@@ -55,8 +55,16 @@ function estimateWidth(meta: ColumnMeta, rows: Cell[][], col: number, charPx: nu
   return Math.max(60, Math.min(420, Math.round(longest * charPx + 24)));
 }
 
-export const DataGrid = forwardRef<GridHandle, DataGridProps>(function DataGrid(props, ref) {
+/** Highlight for cells with a pending edit; readable on light and dark themes. */
+const EDITED_OVERRIDE: Partial<Theme> = { bgCell: "rgba(255, 213, 79, 0.45)" };
+
+const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(props, ref) {
   const { page, sort, themeKey, nullText } = props;
+  // Event handlers from the parent change identity on every render. Keep the
+  // latest ones in a ref so the callbacks passed to the grid stay stable and
+  // the canvas is not redrawn for unrelated parent updates.
+  const handlers = useRef(props);
+  handlers.current = props;
   const editor = useRef<DataEditorRef>(null);
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [selection, setSelection] = useState<GridSelection>({
@@ -92,8 +100,21 @@ export const DataGrid = forwardRef<GridHandle, DataGridProps>(function DataGrid(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeKey]);
 
-  const altRow = cssVar("--pv-derived-table-alternate-row", "");
-  const editedBg = "rgba(255, 213, 79, 0.45)";
+  // Theme values read once per theme. Reading CSS variables forces a style
+  // recalculation, so it must never happen per cell while drawing.
+  const styling = useMemo(() => {
+    const px = (name: string, fallback: number) =>
+      Number(cssVar(name, `${fallback}px`).replace("px", "")) || fallback;
+    const alt = cssVar("--pv-derived-table-alternate-row", "");
+    return {
+      altOverride: alt ? ({ bgCell: alt } as Partial<Theme>) : undefined,
+      nullOverride: { textDark: cssVar("--pv-colors-editor-comment", "#999") } as Partial<Theme>,
+      rowHeight: px("--pv-layout-table-row-height", 26),
+      headerHeight: px("--pv-layout-table-header-height", 30),
+    };
+    // themeKey changes when the CSS variables change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeKey]);
 
   const editedSet = useMemo(() => new Set((page?.edited ?? []).map(([r, c]) => `${r}:${c}`)), [page]);
 
@@ -124,15 +145,15 @@ export const DataGrid = forwardRef<GridHandle, DataGridProps>(function DataGrid(
         allowOverlay: true,
         readonly: !page?.editable,
         contentAlign: numeric[col] ? "right" : "left",
-        themeOverride: edited
-          ? { bgCell: editedBg }
-          : isNull
-            ? { textDark: cssVar("--pv-colors-editor-comment", "#999") }
-            : undefined,
+        themeOverride: edited ? EDITED_OVERRIDE : isNull ? styling.nullOverride : undefined,
       };
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [page, editedSet, numeric, nullText, editedBg, themeKey],
+    [page, editedSet, numeric, nullText, styling],
+  );
+
+  const getRowThemeOverride = useCallback(
+    (row: number) => (row % 2 === 1 ? styling.altOverride : undefined),
+    [styling],
   );
 
   const onCellEdited = useCallback(
@@ -140,9 +161,9 @@ export const DataGrid = forwardRef<GridHandle, DataGridProps>(function DataGrid(
       if (!page || value.kind !== GridCellKind.Text) return;
       const before = page.rows[row]?.[col] ?? null;
       if ((before ?? "") === value.data && before !== null) return;
-      props.onEdit(row, page.columns[col].name, value.data);
+      handlers.current.onEdit(row, page.columns[col].name, value.data);
     },
-    [page, props],
+    [page],
   );
 
   const getSelectionRows = useCallback(() => {
@@ -191,6 +212,23 @@ export const DataGrid = forwardRef<GridHandle, DataGridProps>(function DataGrid(
     [selection, getSelectionRows, selectCell],
   );
 
+  const onHeaderClicked = useCallback(
+    (col: number) => {
+      const name = page?.columns[col]?.name;
+      if (name) handlers.current.onHeaderClick(name);
+    },
+    [page],
+  );
+
+  const onHeaderContextMenu = useCallback(
+    (col: number, e: { preventDefault(): void; bounds: { x: number; y: number }; localEventX: number; localEventY: number }) => {
+      e.preventDefault();
+      const name = page?.columns[col]?.name;
+      if (name) handlers.current.onHeaderMenu(name, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY);
+    },
+    [page],
+  );
+
   if (!page) return <div className="grid-empty" />;
 
   return (
@@ -213,15 +251,12 @@ export const DataGrid = forwardRef<GridHandle, DataGridProps>(function DataGrid(
         width="100%"
         height="100%"
         theme={theme}
-        rowHeight={Number(cssVar("--pv-layout-table-row-height", "26px").replace("px", "")) || 26}
-        headerHeight={Number(cssVar("--pv-layout-table-header-height", "30px").replace("px", "")) || 30}
-        getRowThemeOverride={(row) => (row % 2 === 1 && altRow ? { bgCell: altRow } : undefined)}
+        rowHeight={styling.rowHeight}
+        headerHeight={styling.headerHeight}
+        getRowThemeOverride={getRowThemeOverride}
         onColumnResize={(col, w) => setWidths((prev) => ({ ...prev, [col.id as string]: w }))}
-        onHeaderClicked={(col) => props.onHeaderClick(page.columns[col].name)}
-        onHeaderContextMenu={(col, e) => {
-          e.preventDefault();
-          props.onHeaderMenu(page.columns[col].name, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY);
-        }}
+        onHeaderClicked={onHeaderClicked}
+        onHeaderContextMenu={onHeaderContextMenu}
         onCellContextMenu={([col, row], e) => {
           e.preventDefault();
           if (col < 0) return;
@@ -239,9 +274,21 @@ export const DataGrid = forwardRef<GridHandle, DataGridProps>(function DataGrid(
               current: { cell: [col, row], range: { x: col, y: row, width: 1, height: 1 }, rangeStack: [] },
             });
           }
-          props.onCellMenu(row, col, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY);
+          handlers.current.onCellMenu(row, col, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY);
         }}
       />
     </div>
   );
 });
+
+/** Re-render only when the data, sort, theme or a selection request changes. */
+export const DataGrid = memo(
+  DataGridInner,
+  (a, b) =>
+    a.page === b.page &&
+    a.sort?.column === b.sort?.column &&
+    a.sort?.ascending === b.sort?.ascending &&
+    a.themeKey === b.themeKey &&
+    a.nullText === b.nullText &&
+    a.select?.seq === b.select?.seq,
+);
