@@ -315,7 +315,7 @@ The Rust beta was checked end to end on a headless X display: opening files from
 | 2. DSL | `crates/parvu-dsl`: pest grammar, resolver, compiler, registry, golden tests against the Python implementation (`scripts/dsl_golden.py`). |
 | 3. Config | `crates/parvu-config`: settings, recents, app state, translations, themes. Reads existing `~/.ParVu` folders unchanged. |
 | 4–5. App and UI | `crates/parvu-app` (Tauri commands) and `ui/` (React): every window feature and dialog from the parity checklist in §7. |
-| 6. Packaging | `build-rust.sh` builds a `parvu-next` beta package by default and the final `parvu` package with `--final`. CI in `.github/workflows/rust.yml`, including the clean-home smoke test. |
+| 6. Packaging | `build-rust.sh` builds a `parvu-next` beta package by default and the final `parvu` package with `--final`. CI (`.github/workflows/rust.yml`) passes on Linux and Windows: tests and clippy with a prebuilt DuckDB (about 4 minutes), Python tests, and on `main`, tags or manual runs the `.deb` (28 MB) and Windows `setup.exe` (14 MB) installers plus a clean-home smoke test on Linux. Windows ships an NSIS installer only, because MSI rejects pre-release versions. |
 
 ### Changes from the plan
 
@@ -335,6 +335,6 @@ The Rust beta was checked end to end on a headless X display: opening files from
 
 ### Remaining work
 
-1. Test on Windows; CI builds the installer but nothing has been run on Windows yet.
+1. Run the Windows installer on a real Windows machine. CI builds it and runs the tests on Windows, but nobody has opened the app there yet.
 2. Phase 7: ship `parvu-next` to users, collect feedback, then cut over with `./build-rust.sh --final` and remove the Python code.
 3. Decide the open questions in §11. Plugins were dropped; settings stay in `~/.ParVu`.
