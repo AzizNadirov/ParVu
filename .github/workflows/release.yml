@@ -1,0 +1,88 @@
+name: Release
+
+# Pushing a tag such as v1.0.0 or v1.0.0-alpha.1 tests, builds both
+# installers and publishes them as a GitHub release. Versions with a "-"
+# are marked as pre-releases. The notes come from that version's section in
+# CHANGELOG.md, followed by SHA-256 checksums.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the app version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          tauri_version=$(jq -r .version crates/parvu-app/tauri.conf.json)
+          ui_version=$(jq -r .version ui/package.json)
+          echo "tag $tag, Cargo.toml $cargo_version, tauri.conf.json $tauri_version, ui/package.json $ui_version"
+          for v in "$cargo_version" "$tauri_version" "$ui_version"; do
+            if [ "$v" != "$tag" ]; then
+              echo "::error::Tag v$tag does not match the version $v in the repository. Update the versions, commit, and tag that commit."
+              exit 1
+            fi
+          done
+
+  test:
+    needs: check-version
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    needs: test
+    uses: ./.github/workflows/package.yml
+
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # The section "## [<version>]" up to the next "## [" heading.
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See [CHANGELOG.md](CHANGELOG.md)." > notes.md
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          {
+            echo
+            echo "## Downloads"
+            echo
+            echo "Installation and troubleshooting: [RELEASES.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/RELEASES.md)."
+            echo
+            echo "| File | SHA-256 |"
+            echo "|---|---|"
+            while read -r sum file; do echo "| \`$file\` | \`$sum\` |"; done < SHA256SUMS.txt
+          } >> ../notes.md
+          ls -l
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          flags=()
+          [[ "$tag" == *-* ]] && flags+=(--prerelease)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # A re-run replaces the files of the existing release.
+            gh release upload "$tag" dist/* --clobber
+            gh release edit "$tag" --notes-file notes.md
+          else
+            gh release create "$tag" dist/* --verify-tag --title "ParVu ${tag#v}" --notes-file notes.md "${flags[@]}"
+          fi

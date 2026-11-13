@@ -56,7 +56,17 @@ Compare with the checksum in the release notes.
 
 ## Building a release
 
-See [docs/BUILDING.md](docs/BUILDING.md). Pushing a `v*` tag makes CI build both installers and attach them to the run.
+Releases are built and published by GitHub Actions (`.github/workflows/release.yml`):
+
+1. Set the new version in `Cargo.toml`, `crates/parvu-app/tauri.conf.json` and `ui/package.json`, and add a `## [<version>]` section to `CHANGELOG.md`.
+2. Merge that to `main`, then tag the commit and push the tag:
+   ```bash
+   git tag -a v1.0.0 -m "ParVu 1.0.0"
+   git push origin v1.0.0
+   ```
+3. The workflow checks that the tag matches the version, runs the tests, builds the deb and the Windows installer, and publishes a GitHub release with both files, `SHA256SUMS.txt`, and the changelog section as notes. Versions with a `-` (such as `1.0.0-alpha.1`) are marked as pre-releases. A tag that doesn't match the version fails before anything is built.
+
+Re-running a failed release workflow replaces the files of the existing release. To build installers locally, see [docs/BUILDING.md](docs/BUILDING.md).
 
 ## Support
 
