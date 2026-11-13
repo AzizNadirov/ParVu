@@ -9,8 +9,8 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QMenu, QApplication,
     QStyledItemDelegate, QWidget, QSizePolicy
 )
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QAction, QColor
+from PyQt6.QtCore import Qt, QPoint, pyqtSignal
+from PyQt6.QtGui import QFont, QAction, QColor, QWheelEvent
 
 import pandas as pd
 from loguru import logger
@@ -374,6 +374,36 @@ class DataTableView(QTableWidget):
 
         QApplication.clipboard().setText(text)
         logger.info(f"Copied {len(rows)}x{len(cols)} cells as {fmt}")
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        """Shift+wheel scrolls horizontally, as in spreadsheets and browsers.
+
+        Qt's default treats Shift as "scroll a page vertically". Some platforms
+        already deliver Shift+wheel as a horizontal delta, so both are handled.
+        """
+        mods = event.modifiers()
+        if not mods & Qt.KeyboardModifier.ShiftModifier:
+            super().wheelEvent(event)
+            return
+
+        angle, pixel = event.angleDelta(), event.pixelDelta()
+        # Use whichever axis carries the motion, mapped onto the horizontal axis.
+        angle_x = angle.y() if angle.y() else angle.x()
+        pixel_x = pixel.y() if pixel.y() else pixel.x()
+        swapped = QWheelEvent(
+            event.position(),
+            event.globalPosition(),
+            QPoint(pixel_x, 0),
+            QPoint(angle_x, 0),
+            event.buttons(),
+            mods & ~Qt.KeyboardModifier.ShiftModifier,
+            event.phase(),
+            event.inverted(),
+            Qt.MouseEventSource.MouseEventNotSynthesized,
+            event.pointingDevice(),
+        )
+        QApplication.sendEvent(self.horizontalScrollBar(), swapped)
+        event.setAccepted(swapped.isAccepted())
 
     def keyPressEvent(self, event) -> None:
         from PyQt6.QtGui import QKeySequence
