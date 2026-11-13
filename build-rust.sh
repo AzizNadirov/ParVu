@@ -29,7 +29,7 @@ cargo test -p parvu-core -p parvu-dsl -p parvu-config
 
 case "$(uname -s)" in
   Linux*) BUNDLES="deb" ;;
-  MINGW*|MSYS*|CYGWIN*) BUNDLES="nsis,msi" ;;
+  MINGW*|MSYS*|CYGWIN*) BUNDLES="nsis" ;;
   *) BUNDLES="" ;;
 esac
 

@@ -72,4 +72,3 @@ jobs:
           path: |
             target/release/bundle/deb/*.deb
             target/release/bundle/nsis/*.exe
-            target/release/bundle/msi/*.msi
