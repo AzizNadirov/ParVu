@@ -89,7 +89,8 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 | A translation or language | `crates/parvu-config/locales/`, see `docs/I18N.md` |
 | Keyboard shortcuts | the `onKey` handler in `ui/src/App.tsx`, `dialogs/ShortcutsDialog.tsx` |
 | Packaging | `crates/parvu-app/tauri*.conf.json`, `crates/parvu-app/packaging/`, `build.sh` |
-| CI | `.github/workflows/ci.yml` |
+| CI | `.github/workflows/ci.yml` (tests), `package.yml` (installers) |
+| Releases | `.github/workflows/release.yml`, triggered by a `v*` tag; steps in `RELEASES.md` |
 
 ## Known pitfalls
 
