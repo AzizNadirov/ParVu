@@ -1,0 +1,42 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/parvu-core",
+    "crates/parvu-dsl",
+    "crates/parvu-config",
+    "crates/parvu-app",
+]
+
+[workspace.package]
+version = "1.0.0-alpha.1"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/AzizNadirov/ParVu"
+
+[workspace.dependencies]
+parvu-core = { path = "crates/parvu-core" }
+parvu-dsl = { path = "crates/parvu-dsl" }
+parvu-config = { path = "crates/parvu-config" }
+duckdb = { version = "1.20000.1", features = ["bundled", "json", "parquet", "appender-arrow", "chrono"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+pest = "2.9"
+pest_derive = "2.9"
+calamine = { version = "0.38", features = ["dates"] }
+rust_xlsxwriter = { version = "0.102", features = ["constant_memory", "chrono"] }
+chrono = "0.4"
+dirs = "7"
+regex = "1"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true

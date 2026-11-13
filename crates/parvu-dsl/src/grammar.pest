@@ -1,0 +1,45 @@
+// ParVu expression language.
+//
+// Port of the Lark LALR grammar. Token-level behaviour of Lark's contextual
+// lexer is reproduced explicitly:
+//   * TRUE / FALSE / NULL win over IDENT wherever a literal may start, even
+//     when followed by identifier characters ("TRUEX" is an error);
+//   * NOT is a keyword only when the whole identifier is "NOT";
+//   * OR / AND need no word boundary in operator position;
+//   * NUMBER may carry a leading '-', so "-5" is a literal where a primary
+//     may start, while "a -5" is a subtraction.
+
+WHITESPACE = _{ " " | "\t" | "\x0C" | "\r" | "\n" }
+
+start      = { SOI ~ (assignment | expr) ~ EOI }
+assignment = { column_ref ~ "=" ~ expr }
+
+expr         = { or_expr }
+or_expr      = { and_expr ~ (or_op ~ and_expr)* }
+and_expr     = { compare_expr ~ (and_op ~ compare_expr)* }
+compare_expr = { add_expr ~ (cmp_op ~ add_expr)* }
+add_expr     = { mul_expr ~ (add_op ~ mul_expr)* }
+mul_expr     = { unary_expr ~ (mul_op ~ unary_expr)* }
+unary_expr   = { postfix | prefix_op ~ unary_expr }
+postfix      = { primary ~ method_suffix* }
+
+or_op     = { "||" | "OR" }
+and_op    = { "&&" | "AND" }
+cmp_op    = { "==" | "!=" | "<>" | ">=" | ">" | "<=" | "<" }
+add_op    = { "+" | "-" }
+mul_op    = { "*" | "/" }
+prefix_op = { "+" | "-" | "!" | not_kw }
+
+primary       = { number | string | boolean | null | column_ref | func_call | "(" ~ expr ~ ")" }
+method_suffix = { "." ~ ident ~ call_args? }
+func_call     = { prim_ident ~ call_args }
+call_args     = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
+column_ref    = { prim_ident ~ "[" ~ (ident | string) ~ "]" }
+
+number     = @{ "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+string     = @{ "'" ~ (!"'" ~ ANY)* ~ "'" | "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+boolean    = @{ "TRUE" | "FALSE" }
+null       = @{ "NULL" }
+ident      = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+prim_ident = @{ !not_kw ~ ident }
+not_kw     = @{ "NOT" ~ !(ASCII_ALPHANUMERIC | "_") }

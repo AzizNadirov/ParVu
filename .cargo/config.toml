@@ -1,0 +1,5 @@
+# DuckDB is compiled from C++ source (duckdb crate, "bundled" feature).
+# Each compiler process can use 1.5-2.5 GB of RAM, and by default cargo runs
+# one per CPU core, which runs out of memory on machines with 16 GB or less.
+[build]
+jobs = 4
