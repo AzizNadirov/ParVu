@@ -67,10 +67,15 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 
 ### For End Users
 
-- **Linux (Ubuntu/Debian)**: download the `.deb` package
+- **Linux (Ubuntu/Debian)**: download the `.deb` package from [Releases](https://github.com/AzizNadirov/ParVu/releases) and install it
   ```bash
-  sudo dpkg -i parvu_<version>_amd64.deb
+  sudo apt install ./parvu_<version>_amd64.deb
   parvu
+  ```
+  or let the installer script download it, or build it from source with every dependency:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --prebuilt   # latest release
+  curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash                    # build from source
   ```
 - **Windows**: download and run `parvu_<version>_x64-setup.exe`. It adds a Start menu entry and file associations.
 
@@ -84,6 +89,8 @@ Requirements: [Rust](https://rustup.rs/) and Node.js 20 or newer. On Debian/Ubun
 sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
      libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
 ```
+
+`./install.sh` installs all of these (Rust and Node.js only if missing or too old), builds the `.deb` and installs it; `./install.sh --beta` does the same for `parvu-next`.
 
 Run from source:
 
