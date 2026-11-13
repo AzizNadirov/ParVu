@@ -2,8 +2,9 @@ name: Rust app
 
 on:
   push:
-    branches: [main]
+    branches: [main, "rust-*"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
