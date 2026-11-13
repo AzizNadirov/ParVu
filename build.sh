@@ -54,6 +54,11 @@ ARGS=(build --features bundled-duckdb)
 echo "==> Building the app (${BUNDLES:-no installer})"
 (cd crates/parvu-app && npx --prefix ../../ui tauri "${ARGS[@]}")
 
+if [[ "$BUNDLES" == "deb" ]]; then
+  echo "==> Writing pre-release versions the Debian way (1.0.0~alpha.1)"
+  crates/parvu-app/packaging/fix-deb-version.sh target/release/bundle/deb/*.deb
+fi
+
 echo
 echo "Done. Installers are in target/release/bundle/"
 ls -1 target/release/bundle/*/* 2>/dev/null || true

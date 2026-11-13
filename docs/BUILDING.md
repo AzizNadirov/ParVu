@@ -27,6 +27,8 @@ The script installs the UI packages, runs the UI and Rust tests, and builds the 
 
 Windows builds only the NSIS installer, because MSI does not accept pre-release versions such as `1.0.0-alpha.1`.
 
+On Linux the pre-release version is written into the deb as `1.0.0~alpha.1`. With a tilde dpkg ranks it below `1.0.0`, so the stable release upgrades it; Tauri's own `1.0.0-alpha.1` would rank above it.
+
 ## Development
 
 Run the app with live UI reloading:

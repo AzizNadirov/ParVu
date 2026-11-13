@@ -97,4 +97,4 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 2. **Grid coordinates:** Glide Data Grid rows are page-relative; add `page.offset` for absolute rows (edits, search).
 3. **React StrictMode** runs effects twice in development; one-time startup work is guarded (`bootstrapOnce` in `main.tsx`, `started` ref in `App.tsx`).
 4. **Tauri build hooks** (`beforeDevCommand` / `beforeBuildCommand`) run from the `crates/` folder, not from `crates/parvu-app`.
-5. **Debian versions:** `1.0.0-alpha.1` sorts after `1.0.0` in dpkg; before the first stable release, check that the stable package upgrades the alpha.
+5. **Debian versions:** dpkg would rank `1.0.0-alpha.1` above `1.0.0`, so `build.sh` repacks pre-release debs as `1.0.0~alpha.1` (`crates/parvu-app/packaging/fix-deb-version.sh`). Keep that step if you change how the deb is built.
