@@ -15,10 +15,10 @@ license = "MIT"
 repository = "https://github.com/AzizNadirov/ParVu"
 
 [workspace.dependencies]
-parvu-core = { path = "crates/parvu-core" }
+parvu-core = { path = "crates/parvu-core", default-features = false }
 parvu-dsl = { path = "crates/parvu-dsl" }
 parvu-config = { path = "crates/parvu-config" }
-duckdb = { version = "1.20000.1", features = ["bundled", "json", "parquet", "appender-arrow", "chrono"] }
+duckdb = { version = "1.20000.1", features = ["appender-arrow", "chrono"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1"

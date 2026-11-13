@@ -5,6 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = ["bundled"]
+# Compile DuckDB from source and link it statically (release builds).
+# Without it, the DuckDB crate downloads the official prebuilt library,
+# which CI uses for fast test runs.
+bundled = ["duckdb/bundled", "duckdb/json", "duckdb/parquet"]
+
 [dependencies]
 duckdb.workspace = true
 serde.workspace = true

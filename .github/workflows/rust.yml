@@ -1,12 +1,27 @@
-name: Rust app
+name: CI
 
 on:
   push:
     branches: [main, "rust-*"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
 jobs:
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Python tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+          uv sync --extra dev
+          uv run pytest tests/unit/ -q
+
   test:
     runs-on: ubuntu-24.04
     steps:
@@ -30,13 +45,18 @@ jobs:
           npm --prefix ui run typecheck
           npm --prefix ui test
           npm --prefix ui run build
+      # The prebuilt DuckDB library avoids compiling DuckDB from C++ here.
+      # Installers below still link DuckDB statically.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
       - name: Tests
-        run: cargo test -p parvu-core -p parvu-dsl -p parvu-config
+        run: cargo test -p parvu-core -p parvu-dsl -p parvu-config --no-default-features
 
+  # Installers take the longest (DuckDB is compiled from source), so they
+  # are built only for main, version tags and manual runs.
   package:
-    needs: test
+    needs: [test, python]
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     strategy:
       matrix:
         os: [ubuntu-24.04, windows-latest]
