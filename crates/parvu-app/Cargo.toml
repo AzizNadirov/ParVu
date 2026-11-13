@@ -30,9 +30,10 @@ tracing-appender.workspace = true
 chrono.workspace = true
 
 [features]
-default = ["bundled-duckdb"]
-# Link DuckDB statically, compiled from source. Turn off with
-# --no-default-features to use the prebuilt library (fast CI checks).
+default = []
+# Link DuckDB statically, compiled from source (installers; see build.sh).
+# Without it the app links the official prebuilt DuckDB library, which is
+# fine for development but must not be shipped.
 bundled-duckdb = ["parvu-core/bundled"]
 # Set by the Tauri CLI for release builds (serve the embedded UI).
 custom-protocol = ["tauri/custom-protocol"]

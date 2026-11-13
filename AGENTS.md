@@ -30,15 +30,14 @@ Dependencies only point down: `ui → parvu-app → (parvu-core, parvu-dsl, parv
 ## Commands
 
 ```bash
-cargo test -p parvu-core -p parvu-dsl -p parvu-config      # Rust tests
-cargo test -p parvu-core --no-default-features             # same, with prebuilt DuckDB (fast)
+cargo test -p parvu-core -p parvu-dsl -p parvu-config      # Rust tests (prebuilt DuckDB, seconds)
 cargo clippy --workspace --all-targets -- -D warnings      # must stay clean
 npm --prefix ui run typecheck && npm --prefix ui test      # UI
 cd crates/parvu-app && npx --prefix ../../ui tauri dev     # run the app
 ./build.sh                                                 # installer
 ```
 
-**Memory warning:** the first build compiles DuckDB from C++, and each compiler process uses 2–3 GB of RAM. `.cargo/config.toml` caps cargo at 4 jobs; do not raise it, and never run two DuckDB builds at once on a machine with 16 GB or less. Use `--no-default-features` (prebuilt DuckDB) for quick checks.
+**Memory warning:** everyday builds link the prebuilt DuckDB library and compile no C++. Only installer builds (`--features bundled-duckdb`, set by `build.sh`) compile DuckDB from C++, at 2–3 GB of RAM per compiler process; `build.sh` sizes its job count from free memory. Never enable `bundled-duckdb` in ad-hoc commands on a busy machine, and never run two such builds at once.
 
 Building `parvu-app` on Linux needs `libwebkit2gtk-4.1-dev` and friends (see `docs/BUILDING.md`).
 
@@ -94,7 +93,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 
 ## Known pitfalls
 
-1. **Two DuckDB builds at once** can exhaust memory (see above).
+1. **Compiling DuckDB** (`bundled-duckdb`) can exhaust memory; it is only for installers (see above).
 2. **Grid coordinates:** Glide Data Grid rows are page-relative; add `page.offset` for absolute rows (edits, search).
 3. **React StrictMode** runs effects twice in development; one-time startup work is guarded (`bootstrapOnce` in `main.tsx`, `started` ref in `App.tsx`).
 4. **Tauri build hooks** (`beforeDevCommand` / `beforeBuildCommand`) run from the `crates/` folder, not from `crates/parvu-app`.

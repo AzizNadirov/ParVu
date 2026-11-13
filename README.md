@@ -108,7 +108,7 @@ cargo test -p parvu-core -p parvu-dsl -p parvu-config
 npm --prefix ui test
 ```
 
-The first build compiles DuckDB from C++ source, which takes several minutes. `.cargo/config.toml` limits cargo to 4 parallel jobs so the build fits in 16 GB of RAM.
+Tests and development builds use the prebuilt DuckDB library. Installer builds compile DuckDB in from C++ source, which takes several minutes the first time; `build.sh` limits parallel jobs to fit the free memory.
 
 | Path | Contents |
 |------|----------|

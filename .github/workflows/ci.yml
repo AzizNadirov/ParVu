@@ -31,12 +31,12 @@ jobs:
           npm --prefix ui run typecheck
           npm --prefix ui test
           npm --prefix ui run build
-      # The prebuilt DuckDB library avoids compiling DuckDB from C++ here.
-      # Installers below still link DuckDB statically.
+      # These use the prebuilt DuckDB library; installers below compile
+      # DuckDB in (build.sh enables the bundled-duckdb feature).
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
-        run: cargo test -p parvu-core -p parvu-dsl -p parvu-config --no-default-features
+        run: cargo test -p parvu-core -p parvu-dsl -p parvu-config
 
   # Installers take the longest (DuckDB is compiled from source), so they
   # are built only for main, version tags and manual runs.

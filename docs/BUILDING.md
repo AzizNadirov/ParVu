@@ -48,16 +48,11 @@ npm --prefix ui test
 
 ## DuckDB
 
-DuckDB is compiled from C++ source and linked statically, so the app is a single binary. The first build takes several minutes. Each compiler process can use 2–3 GB of RAM, so `.cargo/config.toml` limits cargo to 4 parallel jobs.
+Everyday builds, tests, clippy and `tauri dev` link the **official prebuilt DuckDB library**, which the `duckdb` crate downloads. No C++ is compiled, and a test run builds in seconds.
 
-For quick checks you can link the official prebuilt DuckDB library instead, which skips that compile:
+Installers link DuckDB **statically**, compiled from C++ source, so the app is a single binary. `build.sh` turns this on with the `bundled-duckdb` feature. Each compiler process needs up to 3 GB of RAM, so `build.sh` sets the number of parallel jobs from the memory available when it starts, between 1 and 4. Close other heavy programs for the first installer build, or set `CARGO_BUILD_JOBS=1` on a machine with 8 GB.
 
-```bash
-cargo test -p parvu-core --no-default-features
-cargo clippy --workspace --all-targets --no-default-features -- -D warnings
-```
-
-CI does this for tests and clippy. Installers are always built with DuckDB compiled in.
+Never ship a build made without `bundled-duckdb`: it depends on a DuckDB library that is not part of the package.
 
 ## CI
 

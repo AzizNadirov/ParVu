@@ -9,10 +9,24 @@
 #        libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
 # plus Rust (rustup) and Node.js 20+.
 #
-# DuckDB is compiled from source on the first build. .cargo/config.toml caps
-# cargo at 4 parallel jobs so this fits in 16 GB of RAM.
+# The installer links DuckDB statically, compiled from C++ on the first build.
+# Each compiler process needs up to 3 GB of RAM, so the job count is derived
+# from the memory available right now (override with CARGO_BUILD_JOBS).
 set -euo pipefail
 cd "$(dirname "$0")"
+
+if [[ -z "${CARGO_BUILD_JOBS:-}" ]]; then
+  avail_mb=$(awk '/MemAvailable/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null || echo 0)
+  if [[ "$avail_mb" -gt 0 ]]; then
+    jobs=$(( (avail_mb - 1500) / 3000 ))
+  else
+    jobs=2
+  fi
+  (( jobs < 1 )) && jobs=1
+  (( jobs > 4 )) && jobs=4
+  export CARGO_BUILD_JOBS=$jobs
+fi
+echo "==> Using $CARGO_BUILD_JOBS parallel build jobs"
 
 BETA=0
 [[ "${1:-}" == "--beta" ]] && BETA=1
@@ -33,7 +47,7 @@ case "$(uname -s)" in
   *) BUNDLES="" ;;
 esac
 
-ARGS=(build)
+ARGS=(build --features bundled-duckdb)
 [[ -n "$BUNDLES" ]] && ARGS+=(--bundles "$BUNDLES")
 [[ $BETA -eq 1 ]] && ARGS+=(--config tauri.next.conf.json)
 
