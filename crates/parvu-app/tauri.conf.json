@@ -20,7 +20,6 @@
     "active": true,
     "targets": [
       "deb",
-      "msi",
       "nsis"
     ],
     "category": "DeveloperTool",
