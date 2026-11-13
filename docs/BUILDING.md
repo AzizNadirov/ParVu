@@ -61,7 +61,8 @@ Never ship a build made without `bundled-duckdb`: it depends on a DuckDB library
 `.github/workflows/ci.yml`:
 
 - **Every push to `main` or `rust-*` branches, and pull requests:** UI checks, clippy and Rust tests, with the prebuilt DuckDB (a few minutes).
-- **`main`, `v*` tags and manual runs** (`gh workflow run CI --ref <branch>`): also builds the Linux and Windows installers, and on Linux installs the `.deb` and starts the app with an empty home directory. The installers are uploaded as run artifacts.
+- **`main` and manual runs** (`gh workflow run CI --ref <branch>`): also builds the Linux and Windows installers (`package.yml`), and on Linux installs the `.deb` and starts the app with an empty home directory. The installers are uploaded as run artifacts.
+- **`v*` tags** (`release.yml`): the same tests and installers, published as a GitHub release. See [RELEASES.md](../RELEASES.md#building-a-release).
 
 ## Packaging files
 
