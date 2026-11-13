@@ -1,0 +1,84 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ParVu",
+  "mainBinaryName": "parvu",
+  "version": "1.0.0-alpha.1",
+  "identifier": "io.github.aziznadirov.parvu",
+  "build": {
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm --prefix ../ui run dev",
+    "beforeBuildCommand": "npm --prefix ../ui run build"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "deb",
+      "nsis"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Parquet, CSV, JSON and Excel viewer",
+    "longDescription": "ParVu views and queries large Parquet, CSV, JSON and Excel files with DuckDB, without loading them into memory.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "parquet",
+          "pq"
+        ],
+        "mimeType": "application/vnd.apache.parquet",
+        "name": "Parquet file",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "csv",
+          "tsv"
+        ],
+        "mimeType": "text/csv",
+        "name": "CSV file",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "json",
+          "jsonl",
+          "ndjson"
+        ],
+        "mimeType": "application/json",
+        "name": "JSON file",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "xlsx",
+          "xls"
+        ],
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "name": "Excel file",
+        "role": "Viewer"
+      }
+    ],
+    "linux": {
+      "deb": {
+        "section": "utils",
+        "files": {
+          "/usr/share/mime/packages/parvu.xml": "packaging/parvu-mime.xml"
+        },
+        "depends": []
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+# Compiling DuckDB from C++ (the "bundled-duckdb" feature, used only for
+# installers) needs 2-3 GB of RAM per compiler process. build.sh sets the job
+# count from available memory; this cap protects manual bundled builds.
+# Everyday builds use the prebuilt DuckDB library and compile no C++.
+[build]
+jobs = 4

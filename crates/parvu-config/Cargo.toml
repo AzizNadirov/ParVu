@@ -1,0 +1,17 @@
+[package]
+name = "parvu-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "ParVu settings, recents, i18n and themes"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+dirs = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

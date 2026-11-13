@@ -1,0 +1,4972 @@
+{
+ "catalogs": {
+  "main": [
+   {
+    "name": "sales",
+    "columns": [
+     [
+      "id",
+      "INTEGER"
+     ],
+     [
+      "revenue",
+      "DOUBLE"
+     ],
+     [
+      "qty",
+      "BIGINT"
+     ],
+     [
+      "price",
+      "DECIMAL(10,2)"
+     ],
+     [
+      "name",
+      "VARCHAR"
+     ],
+     [
+      "note",
+      "TEXT"
+     ],
+     [
+      "flag",
+      "BOOLEAN"
+     ],
+     [
+      "active",
+      "BOOLEAN"
+     ],
+     [
+      "d",
+      "DATE"
+     ],
+     [
+      "ts",
+      "TIMESTAMP WITH TIME ZONE"
+     ],
+     [
+      "new col",
+      "VARCHAR"
+     ],
+     [
+      "select",
+      "INTEGER"
+     ],
+     [
+      "Mixed",
+      "INTEGER"
+     ],
+     [
+      "x\"y",
+      "INTEGER"
+     ],
+     [
+      "tags",
+      "INTEGER[]"
+     ],
+     [
+      "café",
+      "VARCHAR"
+     ],
+     [
+      "TRUE",
+      "INTEGER"
+     ],
+     [
+      "NOT",
+      "INTEGER"
+     ]
+    ]
+   },
+   {
+    "name": "products",
+    "columns": [
+     [
+      "id",
+      "INTEGER"
+     ],
+     [
+      "name",
+      "VARCHAR"
+     ],
+     [
+      "category",
+      "VARCHAR"
+     ]
+    ]
+   },
+   {
+    "name": "order",
+    "columns": [
+     [
+      "a",
+      "INTEGER"
+     ]
+    ]
+   }
+  ],
+  "empty": [],
+  "nocols": [
+   {
+    "name": "t",
+    "columns": []
+   }
+  ]
+ },
+ "cases": [
+  {
+   "source": "42",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 42 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "42"
+   }
+  },
+  {
+   "source": "0",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 0 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "0"
+   }
+  },
+  {
+   "source": "-0",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 0 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "0"
+   }
+  },
+  {
+   "source": "00012",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 12 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "12"
+   }
+  },
+  {
+   "source": "-7",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT -7 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "-7"
+   }
+  },
+  {
+   "source": "3.14",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 3.14 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "3.14"
+   }
+  },
+  {
+   "source": "1.50",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 1.5 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "1.5"
+   }
+  },
+  {
+   "source": "-0.0",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT -0.0 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "-0.0"
+   }
+  },
+  {
+   "source": "-2.5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT -2.5 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "-2.5"
+   }
+  },
+  {
+   "source": "0.00001",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 1e-05 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "1e-05"
+   }
+  },
+  {
+   "source": "0.0001",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 0.0001 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "0.0001"
+   }
+  },
+  {
+   "source": "10000000000000000.0",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 1e+16 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "1e+16"
+   }
+  },
+  {
+   "source": "1234567890123456.5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 1234567890123456.5 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "1234567890123456.5"
+   }
+  },
+  {
+   "source": "12345678901234567890123",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 12345678901234567890123 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "12345678901234567890123"
+   }
+  },
+  {
+   "source": "'hello'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'hello' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'hello'"
+   }
+  },
+  {
+   "source": "\"world\"",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'world' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'world'"
+   }
+  },
+  {
+   "source": "''",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT '' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "''"
+   }
+  },
+  {
+   "source": "\"\"",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT '' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "''"
+   }
+  },
+  {
+   "source": "\"it's\"",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'it''s' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'it''s'"
+   }
+  },
+  {
+   "source": "'a\"b'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'a\"b' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'a\"b'"
+   }
+  },
+  {
+   "source": "'back\\slash'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'back\\slash' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'back\\slash'"
+   }
+  },
+  {
+   "source": "'multi\nline'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'multi\nline' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'multi\nline'"
+   }
+  },
+  {
+   "source": "'tab\there'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'tab\there' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'tab\there'"
+   }
+  },
+  {
+   "source": "'ünïcode ✓'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 'ünïcode ✓' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'ünïcode ✓'"
+   }
+  },
+  {
+   "source": "TRUE",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT TRUE FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "TRUE"
+   }
+  },
+  {
+   "source": "FALSE",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT TRUE FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "TRUE"
+   }
+  },
+  {
+   "source": "NULL",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT NULL FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "NULL"
+   }
+  },
+  {
+   "source": "sales[id]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id"
+   }
+  },
+  {
+   "source": "sales[revenue]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.revenue FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.revenue"
+   }
+  },
+  {
+   "source": "sales[\"new col\"]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.\"new col\" FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.\"new col\""
+   }
+  },
+  {
+   "source": "sales[select]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.\"select\" FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.\"select\""
+   }
+  },
+  {
+   "source": "sales[Mixed]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.Mixed FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.Mixed"
+   }
+  },
+  {
+   "source": "sales[café]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[TRUE]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.TRUE FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.TRUE"
+   }
+  },
+  {
+   "source": "sales[NOT]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.\"NOT\" FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.\"NOT\""
+   }
+  },
+  {
+   "source": "products[name]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT products.name FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "products.name"
+   }
+  },
+  {
+   "source": "order[a]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"order\".a FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "\"order\".a"
+   }
+  },
+  {
+   "source": "sales [ id ]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id"
+   }
+  },
+  {
+   "source": "  sales[id]  ",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id"
+   }
+  },
+  {
+   "source": "sales['id']",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[\"id\"]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id"
+   }
+  },
+  {
+   "source": "sales[id] + 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + 1"
+   }
+  },
+  {
+   "source": "sales[id] - 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id - 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id - 1"
+   }
+  },
+  {
+   "source": "sales[id] * 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id * 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id * 2"
+   }
+  },
+  {
+   "source": "sales[id] / 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id / 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id / 2"
+   }
+  },
+  {
+   "source": "sales[id] + sales[revenue] * 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + sales.revenue * 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + sales.revenue * 2"
+   }
+  },
+  {
+   "source": "sales[id] * sales[revenue] + 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id * sales.revenue + 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id * sales.revenue + 2"
+   }
+  },
+  {
+   "source": "sales[id] - sales[qty] - 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id - sales.qty - 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id - sales.qty - 1"
+   }
+  },
+  {
+   "source": "sales[id] / sales[qty] / 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id / sales.qty / 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id / sales.qty / 2"
+   }
+  },
+  {
+   "source": "sales[id] + sales[qty] - 3",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + sales.qty - 3 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + sales.qty - 3"
+   }
+  },
+  {
+   "source": "1 + 2 * 3 - 4 / 5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT 1 + 2 * 3 - 4 / 5 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "1 + 2 * 3 - 4 / 5"
+   }
+  },
+  {
+   "source": "sales[id] -5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id - 5 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id - 5"
+   }
+  },
+  {
+   "source": "sales[id] - -5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id - -5 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id - -5"
+   }
+  },
+  {
+   "source": "sales[id] * -1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id * -1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id * -1"
+   }
+  },
+  {
+   "source": "(sales[id] * 2) + 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id * 2 + 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id * 2 + 1"
+   }
+  },
+  {
+   "source": "sales[id] + (1 * 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + 1 * 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + 1 * 2"
+   }
+  },
+  {
+   "source": "(sales[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id"
+   }
+  },
+  {
+   "source": "((sales[id]))",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id"
+   }
+  },
+  {
+   "source": "sales[id] + (sales[qty] + 1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + sales.qty + 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + sales.qty + 1"
+   }
+  },
+  {
+   "source": "sales[id] * (sales[qty] * 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id * sales.qty * 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id * sales.qty * 2"
+   }
+  },
+  {
+   "source": "-5.abs",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ABS(-5) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ABS(-5)"
+   }
+  },
+  {
+   "source": "(1 + 2).abs",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ABS(1 + 2) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ABS(1 + 2)"
+   }
+  },
+  {
+   "source": "sales[id]+sales[qty]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + sales.qty FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + sales.qty"
+   }
+  },
+  {
+   "source": "sales[id]\n+\tsales[qty]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + sales.qty FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + sales.qty"
+   }
+  },
+  {
+   "source": "sales[id] == 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id = 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id = 1"
+   }
+  },
+  {
+   "source": "sales[id] != 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id <> 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id <> 1"
+   }
+  },
+  {
+   "source": "sales[id] <> 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id <> 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id <> 1"
+   }
+  },
+  {
+   "source": "sales[id] > 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id > 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id > 1"
+   }
+  },
+  {
+   "source": "sales[id] >= 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id >= 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id >= 1"
+   }
+  },
+  {
+   "source": "sales[id] < 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id < 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id < 1"
+   }
+  },
+  {
+   "source": "sales[id] <= 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id <= 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id <= 1"
+   }
+  },
+  {
+   "source": "sales[name] == 'x'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.name = 'x' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.name = 'x'"
+   }
+  },
+  {
+   "source": "sales[id] + 1 > sales[qty] * 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + 1 > sales.qty * 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + 1 > sales.qty * 2"
+   }
+  },
+  {
+   "source": "sales[note] == NULL",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.note = NULL FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.note = NULL"
+   }
+  },
+  {
+   "source": "sales[flag] AND sales[active]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag AND sales.active FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag AND sales.active"
+   }
+  },
+  {
+   "source": "sales[flag] && sales[active]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag AND sales.active FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag AND sales.active"
+   }
+  },
+  {
+   "source": "sales[flag] OR sales[active]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag OR sales.active FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag OR sales.active"
+   }
+  },
+  {
+   "source": "sales[flag] || sales[active]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag OR sales.active FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag OR sales.active"
+   }
+  },
+  {
+   "source": "sales[flag] OR sales[active] AND sales[flag]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag OR sales.active AND sales.flag FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag OR sales.active AND sales.flag"
+   }
+  },
+  {
+   "source": "sales[flag] AND sales[active] OR sales[flag]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag AND sales.active OR sales.flag FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag AND sales.active OR sales.flag"
+   }
+  },
+  {
+   "source": "sales[id] > 1 AND sales[id] < 10",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id > 1 AND sales.id < 10 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id > 1 AND sales.id < 10"
+   }
+  },
+  {
+   "source": "sales[id] > 1 OR sales[name] == 'a' AND sales[flag]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id > 1 OR sales.name = 'a' AND sales.flag FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id > 1 OR sales.name = 'a' AND sales.flag"
+   }
+  },
+  {
+   "source": "sales[flag] ORsales[active]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag OR sales.active FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag OR sales.active"
+   }
+  },
+  {
+   "source": "sales[flag] ANDsales[active]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag AND sales.active FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag AND sales.active"
+   }
+  },
+  {
+   "source": "sales[flag] AND TRUE",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag AND TRUE FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag AND TRUE"
+   }
+  },
+  {
+   "source": "sales[flag] OR (sales[active] OR sales[flag])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag OR sales.active OR sales.flag FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag OR sales.active OR sales.flag"
+   }
+  },
+  {
+   "source": "sales[flag] AND (sales[active] AND sales[flag])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag AND sales.active AND sales.flag FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag AND sales.active AND sales.flag"
+   }
+  },
+  {
+   "source": "SUM(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SUM(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SUM(sales.revenue)"
+   }
+  },
+  {
+   "source": "sum(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SUM(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SUM(sales.revenue)"
+   }
+  },
+  {
+   "source": "Sum(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SUM(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SUM(sales.revenue)"
+   }
+  },
+  {
+   "source": "AVG(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT AVG(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "AVG(sales.revenue)"
+   }
+  },
+  {
+   "source": "COUNT(sales[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT COUNT(sales.id) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "COUNT(sales.id)"
+   }
+  },
+  {
+   "source": "COUNT()",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT COUNT() FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "COUNT()"
+   }
+  },
+  {
+   "source": "COUNTD(sales[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT COUNT_DISTINCT(sales.id) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "COUNT_DISTINCT(sales.id)"
+   }
+  },
+  {
+   "source": "MIN(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT MIN(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "MIN(sales.revenue)"
+   }
+  },
+  {
+   "source": "MAX(sales[d])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT MAX(sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "MAX(sales.d)"
+   }
+  },
+  {
+   "source": "IF(sales[revenue] > 100, 'high', 'low')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT IF(sales.revenue > 100, 'high', 'low') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "IF(sales.revenue > 100, 'high', 'low')"
+   }
+  },
+  {
+   "source": "COALESCE(sales[note], 'N/A')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT COALESCE(sales.note, 'N/A') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "COALESCE(sales.note, 'N/A')"
+   }
+  },
+  {
+   "source": "COALESCE(sales[note], sales[name], 'x')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT COALESCE(sales.note, sales.name, 'x') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "COALESCE(sales.note, sales.name, 'x')"
+   }
+  },
+  {
+   "source": "LEN(sales[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT LENGTH(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "LENGTH(sales.name)"
+   }
+  },
+  {
+   "source": "UPPER(sales[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.name)"
+   }
+  },
+  {
+   "source": "LOWER(sales[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT LOWER(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "LOWER(sales.name)"
+   }
+  },
+  {
+   "source": "TRIM(sales[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT TRIM(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "TRIM(sales.name)"
+   }
+  },
+  {
+   "source": "CONCAT(sales[name], ' - ', products[category])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CONCAT(sales.name, ' - ', products.category) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CONCAT(sales.name, ' - ', products.category)"
+   }
+  },
+  {
+   "source": "CONTAINS(sales[name], 'apple')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CONTAINS(sales.name, 'apple') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CONTAINS(sales.name, 'apple')"
+   }
+  },
+  {
+   "source": "STARTSWITH(sales[name], 'A')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT STARTS_WITH(sales.name, 'A') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "STARTS_WITH(sales.name, 'A')"
+   }
+  },
+  {
+   "source": "ENDSWITH(sales[name], 'Z')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ENDS_WITH(sales.name, 'Z') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ENDS_WITH(sales.name, 'Z')"
+   }
+  },
+  {
+   "source": "ABS(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ABS(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ABS(sales.revenue)"
+   }
+  },
+  {
+   "source": "ROUND(sales[revenue], 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ROUND(sales.revenue, 2) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ROUND(sales.revenue, 2)"
+   }
+  },
+  {
+   "source": "ROUND(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ROUND(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ROUND(sales.revenue)"
+   }
+  },
+  {
+   "source": "FLOOR(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT FLOOR(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "FLOOR(sales.revenue)"
+   }
+  },
+  {
+   "source": "CEIL(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CEIL(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CEIL(sales.revenue)"
+   }
+  },
+  {
+   "source": "POWER(2, 10)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT POWER(2, 10) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "POWER(2, 10)"
+   }
+  },
+  {
+   "source": "SQRT(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SQRT(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SQRT(sales.revenue)"
+   }
+  },
+  {
+   "source": "DATEDIFF('day', sales[d], sales[d])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT DATE_DIFF('day', sales.d, sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "DATE_DIFF('day', sales.d, sales.d)"
+   }
+  },
+  {
+   "source": "YEAR(sales[d])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT YEAR(sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "YEAR(sales.d)"
+   }
+  },
+  {
+   "source": "MONTH(sales[d])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT MONTH(sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "MONTH(sales.d)"
+   }
+  },
+  {
+   "source": "DAY(sales[d])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT DAY(sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "DAY(sales.d)"
+   }
+  },
+  {
+   "source": "TODAY()",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CURRENT_DATE() FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CURRENT_DATE()"
+   }
+  },
+  {
+   "source": "NOW()",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CURRENT_TIMESTAMP() FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CURRENT_TIMESTAMP()"
+   }
+  },
+  {
+   "source": "CAST(sales[id], 'INTEGER')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CAST(sales.id, 'INTEGER') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CAST(sales.id, 'INTEGER')"
+   }
+  },
+  {
+   "source": "TRY_CAST(sales[name], 'DOUBLE')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT TRY_CAST(sales.name, 'DOUBLE') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "TRY_CAST(sales.name, 'DOUBLE')"
+   }
+  },
+  {
+   "source": "UPPER(sales[name], 1, 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.name, 1, 2) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.name, 1, 2)"
+   }
+  },
+  {
+   "source": "TODAY(1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CURRENT_DATE(1) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CURRENT_DATE(1)"
+   }
+  },
+  {
+   "source": "SUM(sales[revenue]) / COUNT(sales[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SUM(sales.revenue) / COUNT(sales.id) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SUM(sales.revenue) / COUNT(sales.id)"
+   }
+  },
+  {
+   "source": "ROUND(SUM(sales[revenue]) / COUNT(sales[id]), 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ROUND(SUM(sales.revenue) / COUNT(sales.id), 2) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ROUND(SUM(sales.revenue) / COUNT(sales.id), 2)"
+   }
+  },
+  {
+   "source": "IF(CONTAINS(LOWER(sales[name]), 'a'), UPPER(sales[name]), sales[note])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT IF(CONTAINS(LOWER(sales.name), 'a'), UPPER(sales.name), sales.note) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "IF(CONTAINS(LOWER(sales.name), 'a'), UPPER(sales.name), sales.note)"
+   }
+  },
+  {
+   "source": "IF(sales[id] > 1 AND sales[flag], 1, 0)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT IF(sales.id > 1 AND sales.flag, 1, 0) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "IF(sales.id > 1 AND sales.flag, 1, 0)"
+   }
+  },
+  {
+   "source": "ABS(sales[id] - sales[qty]) * 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ABS(sales.id - sales.qty) * 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ABS(sales.id - sales.qty) * 2"
+   }
+  },
+  {
+   "source": "UPPER(sales[\"new col\"])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.\"new col\") FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.\"new col\")"
+   }
+  },
+  {
+   "source": "SUM(sales[select])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SUM(sales.\"select\") FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SUM(sales.\"select\")"
+   }
+  },
+  {
+   "source": "NOTE(1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "NOTsales[id]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "UPPER('x' )",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER('x') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER('x')"
+   }
+  },
+  {
+   "source": "CONCAT('a', \"b\")",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CONCAT('a', 'b') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CONCAT('a', 'b')"
+   }
+  },
+  {
+   "source": "sales[name].upper",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.name)"
+   }
+  },
+  {
+   "source": "sales[name].upper()",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.name)"
+   }
+  },
+  {
+   "source": "sales[name].UPPER",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.name)"
+   }
+  },
+  {
+   "source": "sales[name].lower",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT LOWER(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "LOWER(sales.name)"
+   }
+  },
+  {
+   "source": "sales[name].len",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT LENGTH(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "LENGTH(sales.name)"
+   }
+  },
+  {
+   "source": "sales[name].trim",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT TRIM(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "TRIM(sales.name)"
+   }
+  },
+  {
+   "source": "sales[name].contains('a')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CONTAINS(sales.name, 'a') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CONTAINS(sales.name, 'a')"
+   }
+  },
+  {
+   "source": "sales[name].startswith('a')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT STARTS_WITH(sales.name, 'a') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "STARTS_WITH(sales.name, 'a')"
+   }
+  },
+  {
+   "source": "sales[name].endswith('z')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ENDS_WITH(sales.name, 'z') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ENDS_WITH(sales.name, 'z')"
+   }
+  },
+  {
+   "source": "sales[revenue].abs",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ABS(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ABS(sales.revenue)"
+   }
+  },
+  {
+   "source": "sales[revenue].round(2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ROUND(sales.revenue, 2) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ROUND(sales.revenue, 2)"
+   }
+  },
+  {
+   "source": "sales[revenue].round",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ROUND(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ROUND(sales.revenue)"
+   }
+  },
+  {
+   "source": "sales[revenue].floor",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT FLOOR(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "FLOOR(sales.revenue)"
+   }
+  },
+  {
+   "source": "sales[revenue].ceil",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT CEIL(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CEIL(sales.revenue)"
+   }
+  },
+  {
+   "source": "sales[revenue].power(2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT POWER(sales.revenue, 2) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "POWER(sales.revenue, 2)"
+   }
+  },
+  {
+   "source": "sales[revenue].sqrt",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SQRT(sales.revenue) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SQRT(sales.revenue)"
+   }
+  },
+  {
+   "source": "sales[d].year",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT YEAR(sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "YEAR(sales.d)"
+   }
+  },
+  {
+   "source": "sales[d].month",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT MONTH(sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "MONTH(sales.d)"
+   }
+  },
+  {
+   "source": "sales[d].day",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT DAY(sales.d) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "DAY(sales.d)"
+   }
+  },
+  {
+   "source": "sales[revenue].abs.round(2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ROUND(ABS(sales.revenue), 2) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ROUND(ABS(sales.revenue), 2)"
+   }
+  },
+  {
+   "source": "'x'.upper",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER('x') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER('x')"
+   }
+  },
+  {
+   "source": "sales[name].upper.len",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT LENGTH(UPPER(sales.name)) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "LENGTH(UPPER(sales.name))"
+   }
+  },
+  {
+   "source": "UPPER(sales[name]).lower",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT LOWER(UPPER(sales.name)) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "LOWER(UPPER(sales.name))"
+   }
+  },
+  {
+   "source": "sales[id].upper",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.id) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.id)"
+   }
+  },
+  {
+   "source": "sales[name] . upper ( )",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.name) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.name)"
+   }
+  },
+  {
+   "source": "sales[name].upper + 'x'",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(sales.name) + 'x' FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(sales.name) + 'x'"
+   }
+  },
+  {
+   "source": "sales[revenue].round(1) > 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT ROUND(sales.revenue, 1) > 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "ROUND(sales.revenue, 1) > 2"
+   }
+  },
+  {
+   "source": "sales[new_col] = sales[revenue] + 100",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.revenue + 100 AS \"new_col\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "new_col"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, sales.revenue + 100 AS \"new_col\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[\"new col\"] = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", 1 AS \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "new col"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, 1 AS \"new col\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[id] = sales[id] * 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id * 2 AS \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "id"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, sales.id * 2 AS \"id\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[name] = UPPER(sales[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", UPPER(sales.name) AS \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "name"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, UPPER(sales.name) AS \"name\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[total] = sales[qty] * sales[price]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.qty * sales.price AS \"total\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "total"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, sales.qty * sales.price AS \"total\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[select] = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", 1 AS \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "select"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, 1 AS \"select\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[flag2] = sales[id] > 5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.id > 5 AS \"flag2\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "flag2"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, sales.id > 5 AS \"flag2\" FROM sales"
+   }
+  },
+  {
+   "source": "sales['q'] = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"'q'\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "'q'"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, 1 AS \"'q'\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[\"\"] = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": ""
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, 1 AS \"\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[x] = NULL",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", NULL AS \"x\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "x"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, NULL AS \"x\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[x]=1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"x\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "x"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, 1 AS \"x\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[x] =-5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", -5 AS \"x\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "x"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, -5 AS \"x\" FROM sales"
+   }
+  },
+  {
+   "source": "sales[x] = sales[name].replace('a', 'b')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", REPLACE(sales.name, 'a', 'b') AS \"x\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "x"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, REPLACE(sales.name, 'a', 'b') AS \"x\" FROM sales"
+   }
+  },
+  {
+   "source": "products[name] = LOWER(products[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", LOWER(products.name) AS \"name\", \"category\" FROM products",
+    "kind": {
+     "type": "assignment",
+     "column": "name"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, LOWER(products.name) AS \"name\" FROM products"
+   }
+  },
+  {
+   "source": "products[upper_name] = UPPER(products[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"name\", \"category\", UPPER(products.name) AS \"upper_name\" FROM products",
+    "kind": {
+     "type": "assignment",
+     "column": "upper_name"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, UPPER(products.name) AS \"upper_name\" FROM products"
+   }
+  },
+  {
+   "source": "order[b] = order[a] + 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"a\", \"order\".a + 1 AS \"b\" FROM order",
+    "kind": {
+     "type": "assignment",
+     "column": "b"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, \"order\".a + 1 AS \"b\" FROM \"order\""
+   }
+  },
+  {
+   "source": "t[x] = 1",
+   "table": "t",
+   "catalog": "nocols",
+   "expected": {
+    "sql": "SELECT *, 1 AS \"x\" FROM t",
+    "kind": {
+     "type": "assignment",
+     "column": "x"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, 1 AS \"x\" FROM t"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], 'last')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\" ORDER BY rowid DESC) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\" ORDER BY rowid DESC) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], \"first\")",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], sales[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], sales[name], 'first')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], sales[name], 'last')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name ORDER BY rowid DESC) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name ORDER BY rowid DESC) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], sales[name], 'LAST')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name ORDER BY rowid DESC) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name ORDER BY rowid DESC) = 1"
+   }
+  },
+  {
+   "source": "DROP_DUPLICATES(sales[id], sales[\"new col\"])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, \"new col\") = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, \"new col\") = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[select], sales[Mixed], 'last')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY \"select\", Mixed ORDER BY rowid DESC) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY \"select\", Mixed ORDER BY rowid DESC) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], sales[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, id) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, id) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(products[id], products[name])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM products QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM products QUALIFY ROW_NUMBER() OVER (PARTITION BY id, name) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates(order[a])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM \"order\" QUALIFY ROW_NUMBER() OVER (PARTITION BY a) = 1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM \"order\" QUALIFY ROW_NUMBER() OVER (PARTITION BY a) = 1"
+   }
+  },
+  {
+   "source": "drop_duplicates()",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_duplicates('first')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], products[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], 'middle')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_duplicates(sales[id], 1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_null(sales[note])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE NOT note IS NULL",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE NOT note IS NULL"
+   }
+  },
+  {
+   "source": "DROP_NULL(sales[note])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE NOT note IS NULL",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE NOT note IS NULL"
+   }
+  },
+  {
+   "source": "drop_null(sales[note], NULL)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE NOT note IS NULL",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE NOT note IS NULL"
+   }
+  },
+  {
+   "source": "drop_null(sales[id], -1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE id IS NULL OR id <> -1",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE id IS NULL OR id <> -1"
+   }
+  },
+  {
+   "source": "drop_null(sales[id], 0)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE id IS NULL OR id <> 0",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE id IS NULL OR id <> 0"
+   }
+  },
+  {
+   "source": "drop_null(sales[revenue], 1.5)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE revenue IS NULL OR revenue <> 1.5",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE revenue IS NULL OR revenue <> 1.5"
+   }
+  },
+  {
+   "source": "drop_null(sales[note], 'N/A')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE note IS NULL OR note <> 'N/A'",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE note IS NULL OR note <> 'N/A'"
+   }
+  },
+  {
+   "source": "drop_null(sales[note], '')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE note IS NULL OR note <> ''",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE note IS NULL OR note <> ''"
+   }
+  },
+  {
+   "source": "drop_null(sales[note], \"it's\")",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE note IS NULL OR note <> 'it''s'",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE note IS NULL OR note <> 'it''s'"
+   }
+  },
+  {
+   "source": "drop_null(sales[flag], TRUE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE flag IS NULL OR flag <> True",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE flag IS NULL OR flag <> True"
+   }
+  },
+  {
+   "source": "drop_null(sales[flag], FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE flag IS NULL OR flag <> False",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE flag IS NULL OR flag <> False"
+   }
+  },
+  {
+   "source": "drop_null(sales[select])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE NOT \"select\" IS NULL",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE NOT \"select\" IS NULL"
+   }
+  },
+  {
+   "source": "drop_null(sales[\"new col\"], 'x')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM sales WHERE \"new col\" IS NULL OR \"new col\" <> 'x'",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE \"new col\" IS NULL OR \"new col\" <> 'x'"
+   }
+  },
+  {
+   "source": "drop_null(order[a])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT * FROM \"order\" WHERE NOT a IS NULL",
+    "kind": {
+     "type": "table_query"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM \"order\" WHERE NOT a IS NULL"
+   }
+  },
+  {
+   "source": "drop_null()",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_null(1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_null(sales[id], sales[qty])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "drop_null(sales[id], 1, 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'old', 'new')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REPLACE(sales.name, 'old', 'new') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REPLACE(sales.name, 'old', 'new')"
+   }
+  },
+  {
+   "source": "replace(sales[name], 'old', 'new')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REPLACE(sales.name, 'old', 'new') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REPLACE(sales.name, 'old', 'new')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'old', 'new', TRUE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REPLACE(sales.name, 'old', 'new') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REPLACE(sales.name, 'old', 'new')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'old', 'new', FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 'old', 'new', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 'old', 'new', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'old', 'new', TRUE, FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REPLACE(sales.name, 'old', 'new') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REPLACE(sales.name, 'old', 'new')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'a.b', 'x', FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 'a\\.b', 'x', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 'a\\.b', 'x', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'a.b', 'x', TRUE, TRUE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 'a.b', 'x', 'g') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 'a.b', 'x', 'g')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], '[0-9]+', '#', FALSE, TRUE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, '[0-9]+', '#', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, '[0-9]+', '#', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], '(a|b)*?{1}', 'x', FALSE, FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, '\\(a\\|b\\)\\*\\?\\{1\\}', 'x', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, '\\(a\\|b\\)\\*\\?\\{1\\}', 'x', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'a b&c~d#e-f', 'x', FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 'a\\ b\\&c\\~d\\#e\\-f', 'x', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 'a\\ b\\&c\\~d\\#e\\-f', 'x', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], sales[note], 'x', FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, sales.note, 'x', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, sales.note, 'x', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 5, 'x', FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 5, 'x', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 5, 'x', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'a', sales[note])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REPLACE(sales.name, 'a', sales.note) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REPLACE(sales.name, 'a', sales.note)"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], \"it's\", 'x', FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 'it''s', 'x', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 'it''s', 'x', 'gi')"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'a', 'b', TRUE, FALSE, 99)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REPLACE(sales.name, 'a', 'b') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REPLACE(sales.name, 'a', 'b')"
+   }
+  },
+  {
+   "source": "sales[name].replace('old', 'new')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REPLACE(sales.name, 'old', 'new') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REPLACE(sales.name, 'old', 'new')"
+   }
+  },
+  {
+   "source": "sales[name].REPLACE('old', 'new', FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 'old', 'new', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 'old', 'new', 'gi')"
+   }
+  },
+  {
+   "source": "sales[name].replace('a.b', 'x', FALSE, FALSE)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT REGEXP_REPLACE(sales.name, 'a\\.b', 'x', 'gi') FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "REGEXP_REPLACE(sales.name, 'a\\.b', 'x', 'gi')"
+   }
+  },
+  {
+   "source": "sales[name].replace('x', 'y').upper",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(REPLACE(sales.name, 'x', 'y')) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(REPLACE(sales.name, 'x', 'y'))"
+   }
+  },
+  {
+   "source": "UPPER(REPLACE(sales[name], 'a', 'b'))",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(REPLACE(sales.name, 'a', 'b')) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(REPLACE(sales.name, 'a', 'b'))"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'old')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'a', 'b', 1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "REPLACE(sales[name], 'a', 'b', TRUE, 'yes')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[name].replace('a')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "1 + 1",
+   "table": "",
+   "catalog": "empty",
+   "expected": {
+    "sql": "1 + 1",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "1 + 1"
+   }
+  },
+  {
+   "source": "'x'",
+   "table": "",
+   "catalog": "empty",
+   "expected": {
+    "sql": "'x'",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "'x'"
+   }
+  },
+  {
+   "source": "TODAY()",
+   "table": "",
+   "catalog": "empty",
+   "expected": {
+    "sql": "CURRENT_DATE()",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "CURRENT_DATE()"
+   }
+  },
+  {
+   "source": "products[name]",
+   "table": "products",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT products.name FROM products",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "products.name"
+   }
+  },
+  {
+   "source": "",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "   ",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "@#$%^&*",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "SUM(",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] +",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "1 +* 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "TRUEX",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "NULLIF(1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "true",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "null",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "1e5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "5abc",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[1a]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] = = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] + sales[qty] = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "(sales[id] = 1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id].upper = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "f(1,)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "f(,)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] sales[qty]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] < > 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] === 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "a.b",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "'unterminated",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id]..upper",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] ! 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[a]b",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "UPPER(sales[name]))",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "#",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] | 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "sales[id] & 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "parse"
+   },
+   "preview": {
+    "error_kind": "parse"
+   }
+  },
+  {
+   "source": "unknown[col]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[unknown_col]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "UNKNOWN_FUNC(sales[revenue])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "unknown[x] = 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "POWER(2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "IF(1, 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "DATEDIFF('day')",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[d].add_days(1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[flag].if_true(1, 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[name].nosuch",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[revenue].power",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "UPPER(sales[nope])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "sales[x] = sales[nope]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "SUM()",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "products[revenue]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "resolve"
+   },
+   "preview": {
+    "error_kind": "resolve"
+   }
+  },
+  {
+   "source": "(sales[id] + sales[qty]) * 2",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id + sales.qty * 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id + sales.qty * 2"
+   }
+  },
+  {
+   "source": "sales[id] - (sales[qty] - 1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id - sales.qty - 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id - sales.qty - 1"
+   }
+  },
+  {
+   "source": "sales[id] / (sales[qty] / 2)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id / sales.qty / 2 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id / sales.qty / 2"
+   }
+  },
+  {
+   "source": "(sales[flag] OR sales[active]) AND sales[flag]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.flag OR sales.active AND sales.flag FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.flag OR sales.active AND sales.flag"
+   }
+  },
+  {
+   "source": "sales[id] > 1 == TRUE",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT sales.id > 1 = TRUE FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "sales.id > 1 = TRUE"
+   }
+  },
+  {
+   "source": "-sales[id]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "internal"
+   },
+   "preview": {
+    "error_kind": "internal"
+   }
+  },
+  {
+   "source": "- 5",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "internal"
+   },
+   "preview": {
+    "error_kind": "internal"
+   }
+  },
+  {
+   "source": "-(sales[id] + 1)",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "internal"
+   },
+   "preview": {
+    "error_kind": "internal"
+   }
+  },
+  {
+   "source": "NOT sales[flag]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "internal"
+   },
+   "preview": {
+    "error_kind": "internal"
+   }
+  },
+  {
+   "source": "!sales[flag]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "internal"
+   },
+   "preview": {
+    "error_kind": "internal"
+   }
+  },
+  {
+   "source": "NOT (sales[flag] AND sales[active])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "internal"
+   },
+   "preview": {
+    "error_kind": "internal"
+   }
+  },
+  {
+   "source": "+sales[id]",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "error_kind": "internal"
+   },
+   "preview": {
+    "error_kind": "internal"
+   }
+  },
+  {
+   "source": "UPPER(drop_null(sales[note]))",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT UPPER(SELECT * FROM sales WHERE NOT note IS NULL) FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "UPPER(SELECT * FROM sales WHERE NOT note IS NULL)"
+   }
+  },
+  {
+   "source": "sales[n] = drop_duplicates(sales[id])",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1 AS \"n\" FROM sales",
+    "kind": {
+     "type": "assignment",
+     "column": "n"
+    }
+   },
+   "preview": {
+    "sql": "SELECT *, SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1 AS \"n\" FROM sales"
+   }
+  },
+  {
+   "source": "drop_null(sales[note], 'x') + 1",
+   "table": "sales",
+   "catalog": "main",
+   "expected": {
+    "sql": "SELECT SELECT * FROM sales WHERE note IS NULL OR note <> 'x' + 1 FROM sales",
+    "kind": {
+     "type": "scalar"
+    }
+   },
+   "preview": {
+    "sql": "SELECT * FROM sales WHERE note IS NULL OR note <> 'x' + 1"
+   }
+  }
+ ],
+ "replace_cases": [
+  {
+   "table": "sales",
+   "column": "name",
+   "pattern": "old",
+   "replacement": "new",
+   "case_sensitive": true,
+   "regex": false,
+   "sql": "REPLACE(sales.name, 'old', 'new')",
+   "stripped": "REPLACE(name, 'old', 'new')"
+  },
+  {
+   "table": "sales",
+   "column": "name",
+   "pattern": "old",
+   "replacement": "new",
+   "case_sensitive": false,
+   "regex": false,
+   "sql": "REGEXP_REPLACE(sales.name, 'old', 'new', 'gi')",
+   "stripped": "REGEXP_REPLACE(name, 'old', 'new', 'gi')"
+  },
+  {
+   "table": "sales",
+   "column": "name",
+   "pattern": "a.b",
+   "replacement": "x",
+   "case_sensitive": false,
+   "regex": false,
+   "sql": "REGEXP_REPLACE(sales.name, 'a\\.b', 'x', 'gi')",
+   "stripped": "REGEXP_REPLACE(name, 'a\\.b', 'x', 'gi')"
+  },
+  {
+   "table": "sales",
+   "column": "name",
+   "pattern": "[0-9]+",
+   "replacement": "#",
+   "case_sensitive": true,
+   "regex": true,
+   "sql": "REGEXP_REPLACE(sales.name, '[0-9]+', '#', 'g')",
+   "stripped": "REGEXP_REPLACE(name, '[0-9]+', '#', 'g')"
+  },
+  {
+   "table": "sales",
+   "column": "name",
+   "pattern": "[a-z]+",
+   "replacement": "#",
+   "case_sensitive": false,
+   "regex": true,
+   "sql": "REGEXP_REPLACE(sales.name, '[a-z]+', '#', 'gi')",
+   "stripped": "REGEXP_REPLACE(name, '[a-z]+', '#', 'gi')"
+  },
+  {
+   "table": "sales",
+   "column": "new col",
+   "pattern": "it's",
+   "replacement": "it is",
+   "case_sensitive": true,
+   "regex": false,
+   "sql": "REPLACE(sales.\"new col\", 'it''s', 'it is')",
+   "stripped": "REPLACE(\"new col\", 'it''s', 'it is')"
+  },
+  {
+   "table": "sales",
+   "column": "select",
+   "pattern": "x",
+   "replacement": "y",
+   "case_sensitive": false,
+   "regex": false,
+   "sql": "REGEXP_REPLACE(sales.\"select\", 'x', 'y', 'gi')",
+   "stripped": "REGEXP_REPLACE(\"select\", 'x', 'y', 'gi')"
+  },
+  {
+   "table": "my_tab",
+   "column": "col",
+   "pattern": "(1+1)",
+   "replacement": "2",
+   "case_sensitive": false,
+   "regex": false,
+   "sql": "REGEXP_REPLACE(my_tab.col, '\\(1\\+1\\)', '2', 'gi')",
+   "stripped": "REGEXP_REPLACE(col, '\\(1\\+1\\)', '2', 'gi')"
+  },
+  {
+   "table": "data",
+   "column": "data",
+   "pattern": "data.x",
+   "replacement": "y",
+   "case_sensitive": true,
+   "regex": false,
+   "sql": "REPLACE(data.data, 'data.x', 'y')",
+   "stripped": "REPLACE(data, 'x', 'y')"
+  },
+  {
+   "table": "sales",
+   "column": "name",
+   "pattern": "a b\tc",
+   "replacement": "",
+   "case_sensitive": false,
+   "regex": false,
+   "sql": "REGEXP_REPLACE(sales.name, 'a\\ b\\\tc', '', 'gi')",
+   "stripped": "REGEXP_REPLACE(name, 'a\\ b\\\tc', '', 'gi')"
+  }
+ ],
+ "registry": {
+  "functions": [
+   {
+    "name": "SUM",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Sum of all values.",
+    "example": "SUM(sales[revenue])",
+    "sql_name": "SUM"
+   },
+   {
+    "name": "AVG",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Average of all values.",
+    "example": "AVG(sales[revenue])",
+    "sql_name": "AVG"
+   },
+   {
+    "name": "COUNT",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Count of rows.",
+    "example": "COUNT(sales[id])",
+    "sql_name": "COUNT"
+   },
+   {
+    "name": "COUNTD",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Count of distinct values.",
+    "example": "COUNTD(sales[id])",
+    "sql_name": "COUNT_DISTINCT"
+   },
+   {
+    "name": "MIN",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Minimum value.",
+    "example": "MIN(sales[revenue])",
+    "sql_name": "MIN"
+   },
+   {
+    "name": "MAX",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Maximum value.",
+    "example": "MAX(sales[revenue])",
+    "sql_name": "MAX"
+   },
+   {
+    "name": "IF",
+    "params": [
+     {
+      "name": "condition",
+      "logical_type": "BOOLEAN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "true_value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "false_value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Return true_value if condition is true, else false_value.",
+    "example": "IF(sales[revenue] > 100, 'high', 'low')",
+    "sql_name": "IF"
+   },
+   {
+    "name": "COALESCE",
+    "params": [
+     {
+      "name": "values",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Return first non-null value.",
+    "example": "COALESCE(sales[note], 'N/A')",
+    "sql_name": "COALESCE"
+   },
+   {
+    "name": "LEN",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Length of text.",
+    "example": "LEN(products[name])",
+    "sql_name": "LENGTH"
+   },
+   {
+    "name": "UPPER",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Convert text to uppercase.",
+    "example": "UPPER(products[name])",
+    "sql_name": "UPPER"
+   },
+   {
+    "name": "LOWER",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Convert text to lowercase.",
+    "example": "LOWER(products[name])",
+    "sql_name": "LOWER"
+   },
+   {
+    "name": "TRIM",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Remove leading and trailing whitespace.",
+    "example": "TRIM(products[name])",
+    "sql_name": "TRIM"
+   },
+   {
+    "name": "CONCAT",
+    "params": [
+     {
+      "name": "values",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Concatenate strings.",
+    "example": "CONCAT(products[name], ' - ', products[category])",
+    "sql_name": "CONCAT"
+   },
+   {
+    "name": "CONTAINS",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "substring",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "Check if text contains substring.",
+    "example": "CONTAINS(products[name], 'apple')",
+    "sql_name": "CONTAINS"
+   },
+   {
+    "name": "STARTSWITH",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "prefix",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "Check if text starts with prefix.",
+    "example": "STARTSWITH(products[name], 'A')",
+    "sql_name": "STARTS_WITH"
+   },
+   {
+    "name": "ENDSWITH",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "suffix",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "Check if text ends with suffix.",
+    "example": "ENDSWITH(products[name], 'Z')",
+    "sql_name": "ENDS_WITH"
+   },
+   {
+    "name": "ABS",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Absolute value.",
+    "example": "ABS(sales[discount])",
+    "sql_name": "ABS"
+   },
+   {
+    "name": "ROUND",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "decimals",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Round to given decimal places.",
+    "example": "ROUND(sales[revenue], 2)",
+    "sql_name": "ROUND"
+   },
+   {
+    "name": "FLOOR",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Round down to nearest integer.",
+    "example": "FLOOR(sales[revenue])",
+    "sql_name": "FLOOR"
+   },
+   {
+    "name": "CEIL",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Round up to nearest integer.",
+    "example": "CEIL(sales[revenue])",
+    "sql_name": "CEIL"
+   },
+   {
+    "name": "POWER",
+    "params": [
+     {
+      "name": "base",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "exponent",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Raise base to exponent power.",
+    "example": "POWER(2, 10)",
+    "sql_name": "POWER"
+   },
+   {
+    "name": "SQRT",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Square root.",
+    "example": "SQRT(sales[revenue])",
+    "sql_name": "SQRT"
+   },
+   {
+    "name": "DATEDIFF",
+    "params": [
+     {
+      "name": "unit",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "start",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "end",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Difference between two dates in given unit.",
+    "example": "DATEDIFF('day', orders[start], orders[end])",
+    "sql_name": "DATE_DIFF"
+   },
+   {
+    "name": "YEAR",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Extract year from date.",
+    "example": "YEAR(orders[date])",
+    "sql_name": "YEAR"
+   },
+   {
+    "name": "MONTH",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Extract month from date.",
+    "example": "MONTH(orders[date])",
+    "sql_name": "MONTH"
+   },
+   {
+    "name": "DAY",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Extract day from date.",
+    "example": "DAY(orders[date])",
+    "sql_name": "DAY"
+   },
+   {
+    "name": "TODAY",
+    "params": [],
+    "return_type": "DATE",
+    "description": "Current date.",
+    "example": "TODAY()",
+    "sql_name": "CURRENT_DATE"
+   },
+   {
+    "name": "NOW",
+    "params": [],
+    "return_type": "TIMESTAMP",
+    "description": "Current timestamp.",
+    "example": "NOW()",
+    "sql_name": "CURRENT_TIMESTAMP"
+   },
+   {
+    "name": "CAST",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "type",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Cast value to a different type.",
+    "example": "CAST(sales[id], 'INTEGER')",
+    "sql_name": "CAST"
+   },
+   {
+    "name": "TRY_CAST",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "type",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Cast value, returning NULL on failure.",
+    "example": "TRY_CAST(sales[id], 'INTEGER')",
+    "sql_name": "TRY_CAST"
+   },
+   {
+    "name": "REPLACE",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "pattern",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "with_value",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "case_sensitive",
+      "logical_type": "BOOLEAN",
+      "required": false,
+      "description": ""
+     },
+     {
+      "name": "regex",
+      "logical_type": "BOOLEAN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Replace occurrences of pattern in text with another value.",
+    "example": "REPLACE(products[name], 'old', 'new')",
+    "sql_name": "REPLACE"
+   },
+   {
+    "name": "DROP_DUPLICATES",
+    "params": [
+     {
+      "name": "table",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "columns",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     },
+     {
+      "name": "keep",
+      "logical_type": "TEXT",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "QUERY",
+    "description": "Remove duplicate rows based on column subset.",
+    "example": "DROP_DUPLICATES(sales[id], sales[name], 'first')",
+    "sql_name": null
+   },
+   {
+    "name": "DROP_NULL",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "null_value",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "QUERY",
+    "description": "Drop rows where a column equals the null sentinel. With no sentinel, drops SQL NULLs. With a sentinel value, drops only rows whose column equals that value (real NULLs are kept).",
+    "example": "DROP_NULL(sales[note])  or  DROP_NULL(sales[score], -1)",
+    "sql_name": null
+   }
+  ],
+  "methods": [
+   "abs",
+   "round",
+   "floor",
+   "ceil",
+   "power",
+   "sqrt",
+   "upper",
+   "lower",
+   "len",
+   "trim",
+   "contains",
+   "startswith",
+   "endswith",
+   "replace",
+   "if_true",
+   "year",
+   "month",
+   "day",
+   "add_days"
+  ],
+  "methods_for_type": {
+   "UNKNOWN": [],
+   "NUMERIC": [
+    "abs",
+    "round",
+    "floor",
+    "ceil",
+    "power",
+    "sqrt"
+   ],
+   "TEXT": [
+    "upper",
+    "lower",
+    "len",
+    "trim",
+    "contains",
+    "startswith",
+    "endswith",
+    "replace"
+   ],
+   "BOOLEAN": [
+    "if_true"
+   ],
+   "DATE": [
+    "year",
+    "month",
+    "day",
+    "add_days"
+   ],
+   "TIMESTAMP": [],
+   "LIST": [],
+   "STRUCT": [],
+   "QUERY": []
+  },
+  "method_targets": {
+   "abs": "ABS",
+   "round": "ROUND",
+   "floor": "FLOOR",
+   "ceil": "CEIL",
+   "power": "POWER",
+   "sqrt": "SQRT",
+   "upper": "UPPER",
+   "lower": "LOWER",
+   "len": "LEN",
+   "trim": "TRIM",
+   "contains": "CONTAINS",
+   "startswith": "STARTSWITH",
+   "endswith": "ENDSWITH",
+   "replace": "REPLACE",
+   "if_true": null,
+   "year": "YEAR",
+   "month": "MONTH",
+   "day": "DAY",
+   "add_days": null
+  }
+ }
+}

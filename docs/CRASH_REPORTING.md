@@ -1,169 +1,46 @@
-# ParVu Crash Reporting System
+# Crash Reporting and Logs
 
-## Overview
+## Logs
 
-ParVu includes a comprehensive crash reporting system that helps users report bugs and errors effectively. The system automatically logs all sessions and provides detailed error information when crashes occur.
+ParVu writes a log to `~/.ParVu/logs/parvu.log.<date>`, one file per day. It records files opened, queries run, errors and warnings.
 
-## Features
-
-### 1. Session-Based Logging
-
-Each time ParVu starts, a new session log file is created with a unique identifier:
-
-- **Log Location**: `~/.ParVu/logs/`
-- **File Format**: `parvu_session_YYYYMMDD_HHMMSS_<uuid>.log`
-- **Log Level**: DEBUG (captures detailed information)
-- **Retention**: 30 days
-- **Rotation**: 10 MB per file
-
-Example log file:
-```
-parvu_session_20251230_201739_dc1a1a3f.log
-```
-
-### 2. Crash Report Dialog
-
-When an unexpected error occurs, ParVu displays a user-friendly crash report dialog that includes:
-
-- **Error Type**: The type of exception that occurred
-- **Error Message**: Descriptive message about the error
-- **System Information**: OS, platform, Python version
-- **Full Traceback**: Complete stack trace for debugging
-- **Log File Location**: Path to the session log file
-
-### 3. User Actions
-
-The crash report dialog provides the following options:
-
-1. **Copy Error Details** - Copies all error information to clipboard
-2. **Open Logs Folder** - Opens the logs directory in file explorer
-3. **Close** - Dismisses the dialog
-
-## Configuration
-
-Crash reporting can be configured in settings:
-
-### Settings File Location
-`~/.ParVu/settings/settings.json`
-
-### Configuration Options
-
-```json
-{
-  "bug_report_email": "parvu.bugs@gmail.com",
-  "enable_crash_reporting": true
-}
-```
-
-- **bug_report_email**: Email address where bug reports should be sent
-- **enable_crash_reporting**: Enable/disable crash report dialog (default: true)
-
-## How to Report a Bug
-
-When ParVu crashes:
-
-1. The crash report dialog appears automatically
-2. Click **"Copy Error Details"** to copy all error information
-3. Click **"Open Logs Folder"** to access the session log file
-4. Send an email to: **parvu.bugs@gmail.com** with:
-   - The copied error details (paste from clipboard)
-   - The session log file as an attachment
-   - Description of what you were doing when the error occurred
-   - Steps to reproduce the issue (if known)
-
-## Log File Format
-
-Session logs include detailed information with timestamps, log levels, and source locations:
-
-```
-2025-12-30 20:17:39.271 | INFO     | __main__:main:79 - Starting ParVu application - Session ID: 20251230_201739_dc1a1a3f
-2025-12-30 20:17:39.272 | INFO     | __main__:main:80 - Session log file: /home/tengo/.ParVu/logs/parvu_session_20251230_201739_dc1a1a3f.log
-```
-
-Each log entry contains:
-- Timestamp (millisecond precision)
-- Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-- Source module:function:line
-- Log message
-
-## Implementation Details
-
-### Exception Handling
-
-ParVu implements multiple layers of exception handling:
-
-1. **Global Exception Hook** (`sys.excepthook`)
-   - Catches unhandled exceptions at the system level
-   - Logs the exception with full traceback
-   - Displays crash report dialog
-
-2. **Main Application Try-Except**
-   - Wraps the main application event loop
-   - Catches exceptions during runtime
-   - Ensures graceful error handling
-
-3. **Detailed Logging**
-   - `backtrace=True`: Includes variable values in tracebacks
-   - `diagnose=True`: Adds diagnostic information
-   - Rotating log files to prevent disk space issues
-
-### File Structure
-
-```
-~/.ParVu/
-├── logs/
-│   ├── parvu_session_20251230_201739_dc1a1a3f.log
-│   ├── parvu_session_20251230_183045_a7b2c1d4.log
-│   └── ...
-└── settings/
-    └── settings.json
-```
-
-## Testing Crash Reporting
-
-A test script is provided to verify crash reporting functionality:
+For more detail, start ParVu with a log level:
 
 ```bash
-python test_crash.py
+PARVU_LOG=debug parvu
 ```
 
-This script:
-- Creates a test window with a button
-- Clicking the button triggers a simulated crash
-- Displays the crash report dialog
-- Allows testing of all dialog features
+## When ParVu crashes
 
-## Privacy Considerations
+If the app hits an unrecoverable error (a Rust panic), it writes a crash report before exiting:
 
-- Logs are stored **locally only** on the user's machine
-- No automatic transmission of crash data
-- Users manually choose what to report and when
-- Log files can contain file paths and query data
-- Users should review logs before sharing
+- to the log, and
+- to `~/.ParVu/logs/last_crash.txt`.
 
-## Disabling Crash Reporting
+The report contains the ParVu version, the time, the operating system, the error message and a backtrace.
 
-To disable crash reporting:
+On the next start, ParVu shows the report in a dialog, then deletes `last_crash.txt`. The dialog can:
 
-1. Edit `~/.ParVu/settings/settings.json`
-2. Set `"enable_crash_reporting": false`
-3. Restart ParVu
+- **copy** the report to the clipboard,
+- **open the logs folder**,
+- **send by email**, which opens your mail app with the report addressed to `bug_report_email` from the settings.
 
-When disabled:
-- Errors are still logged to session files
-- Crash report dialog is not shown
-- Application exits silently on fatal errors
+Nothing is sent automatically. You decide what to share.
 
-## Best Practices
+Errors that are not crashes, such as an invalid query or a file that cannot be read, are shown in a message and logged; they never close the app.
 
-For users reporting bugs:
-- Include the complete session log file
-- Describe steps to reproduce the issue
-- Mention the file type and size you were working with
-- Note any recent changes to settings or themes
+## Turning the dialog off
 
-For developers:
-- Check session logs for detailed error context
-- Look for patterns in multiple crash reports
-- Verify system information matches testing environment
-- Use DEBUG level logs for troubleshooting
+Set `"enable_crash_reporting": false` in `~/.ParVu/settings/settings.json`, or untick it in File → Settings. Crashes are still logged.
+
+## Privacy
+
+Logs and crash reports stay on your machine. They can contain file paths and query text, so read them before sharing.
+
+## Reporting a bug
+
+Please [open an issue](https://github.com/AzizNadirov/ParVu/issues) with:
+
+- the crash report or the relevant part of the log,
+- the steps that lead to the problem,
+- the file type and roughly how large the file is.

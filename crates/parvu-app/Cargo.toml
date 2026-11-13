@@ -1,0 +1,39 @@
+[package]
+name = "parvu-app"
+description = "ParVu - Parquet, CSV, JSON and Excel viewer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "parvu"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+parvu-core.workspace = true
+parvu-dsl.workspace = true
+parvu-config.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-opener = "2"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+chrono.workspace = true
+
+[features]
+default = []
+# Link DuckDB statically, compiled from source (installers; see build.sh).
+# Without it the app links the official prebuilt DuckDB library, which is
+# fine for development but must not be shipped.
+bundled-duckdb = ["parvu-core/bundled"]
+# Set by the Tauri CLI for release builds (serve the embedded UI).
+custom-protocol = ["tauri/custom-protocol"]

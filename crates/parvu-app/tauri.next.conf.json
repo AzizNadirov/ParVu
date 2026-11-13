@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "parvu-next",
+  "mainBinaryName": "parvu-next",
+  "identifier": "io.github.aziznadirov.parvu.next",
+  "bundle": {
+    "linux": {
+      "deb": {
+        "desktopTemplate": "packaging/parvu-next.desktop",
+        "files": {
+          "/usr/share/mime/packages/parvu.xml": null,
+          "/usr/share/mime/packages/parvu-next.xml": "packaging/parvu-mime.xml"
+        }
+      }
+    }
+  }
+}

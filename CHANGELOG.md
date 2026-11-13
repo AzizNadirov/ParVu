@@ -1,5 +1,36 @@
 # ParVu Changelog
 
+## [1.0.0-alpha.1]
+
+ParVu is rewritten in Rust (Tauri window, React UI, DuckDB). It reads the same `~/.ParVu` settings, recent files and themes as 0.x, and the `.deb` replaces the Python package. The Python code has been removed. See `plans/RUST_REWRITE_PLAN.md`.
+
+### Changed
+- **Much smaller and faster.** 82 MB installed instead of 483 MB; files open in about 400 ms instead of 620–760 ms; switching a 1,000-row page takes about 8 ms instead of 190 ms.
+- **Pending cell edits are visible to queries.** Edits are overlaid on the file view, so SQL, joins and saves see them before saving.
+- **Every query is an applied step**, so undo always reverts the most recent change.
+- **Bounded memory.** Queries use at most 8 threads and 1 GB of working memory by default (new **Performance** setting); larger operations spill to disk. Sorting and jumping to the last page of a 5-million-row file peaks around 800 MB instead of 1.3 GB, and memory is returned afterwards.
+- **A new sort replaces the previous sort** instead of sorting the already sorted result again.
+- **Languages and themes switch instantly**, without a restart.
+- **Windows ships an NSIS `setup.exe` only**; the portable zip is gone.
+
+### Added
+- **Excel files** (`.xlsx`, `.xls`) open without an internet connection, and export and Save As write Excel with real date cells.
+- **Export** to TSV and JSON Lines, with progress and cancel.
+- **Live SQL preview** in expression mode, and autocomplete with function docs.
+- **Go to page** box and first/last page buttons.
+
+### Fixed
+- **Expressions:** parentheses were dropped (`(a + b) * 2` computed `a + b * 2`), `FALSE` compiled to `TRUE`, and `-x` / `NOT x` crashed.
+- **Join, append and filter by values** read the original file and discarded earlier steps; they now use each tab's current result.
+- **Drop duplicates, keep last** failed because it ordered by `rowid`, which does not exist on a view.
+- **An expression naming another tab** replaced the active tab's data; it is now refused with a message.
+- **Reset** filled the editor with `FROM data` even when the table had another name.
+- **Column names** are quoted everywhere in generated SQL.
+
+### Removed
+- The Python application, its tests and PyInstaller packaging.
+- The Python plugin API (no plugins existed).
+
 ## [0.3.1]
 
 ### Added

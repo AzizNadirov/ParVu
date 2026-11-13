@@ -8,259 +8,223 @@
 
 ## Overview
 
-A powerful desktop application for viewing and querying large Parquet, CSV, and JSON files. Built with [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) and [DuckDB](https://duckdb.org/) for efficient data handling.
+A fast desktop application for viewing and querying large Parquet, CSV, JSON and Excel files. Built with [Rust](https://www.rust-lang.org/), [Tauri](https://tauri.app/), [React](https://react.dev/) and [DuckDB](https://duckdb.org/).
+
+Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.ParVu` settings, recent files and themes, so upgrading needs no migration. The rewrite is described in [plans/RUST_REWRITE_PLAN.md](plans/RUST_REWRITE_PLAN.md).
 
 ## Features
 
 ### File Support
-- **Parquet** files (.parquet)
-- **CSV** files (.csv)
-- **JSON** files (.json)
-- **Lazy loading** - Files are queried directly without loading into memory
-- **Efficient handling** of huge files (8GB+) with pagination
+- **Parquet** (`.parquet`, `.pq`), **CSV** (`.csv`, `.tsv`), **JSON** (`.json`, `.jsonl`, `.ndjson`) and **Excel** (`.xlsx`, `.xls`)
+- **Lazy loading** - Parquet, CSV and JSON are queried in place, never loaded into memory
+- **Huge files** (8GB+) with pagination; only the visible page is fetched
 
 ### SQL Querying
-- Full SQL query support via DuckDB
-- Syntax highlighting for SQL keywords
-- Auto-completion for SQL keywords and column names
-- Smart query validation
+- Full DuckDB SQL
+- Syntax highlighting and auto-completion for keywords, tables and columns
+- Errors are reported before anything changes
 
 ### Expression Language (DSL)
-- **Dual-mode editor** — switch between raw SQL and expression mode
-- **Column assignment** — `data[new_col] = old_col * 2` adds computed columns
-- **Built-in functions** — `ABS`, `UPPER`, `LEN`, `ROUND`, `REPLACE`, `DROP_DUPLICATES`, `DROP_NULL`, etc.
-- **Auto-completion** for functions, columns, table names, and methods in expression mode
-- **Function documentation popup** — hover completer items or click function names to see signature, parameters, examples, and SQL mapping
-- Seamless compilation to DuckDB SQL behind the scenes
+- **Two editor modes** - switch between SQL and expression mode
+- **Column assignment** - `data[new_col] = data[old_col] * 2` adds or overwrites a column
+- **Built-in functions** - `ABS`, `UPPER`, `LEN`, `ROUND`, `REPLACE`, `DROP_DUPLICATES`, `DROP_NULL` and more
+- **Auto-completion** for tables, columns, functions and methods, with function documentation
+- **Live SQL preview** of what the expression compiles to
 
 ### Table Operations
-- **Pagination** - Browse large datasets efficiently (configurable rows per page)
-- **Double-click editing** - Edit cell values in the current view
-- **Applied steps** - Every transform, sort, filter, and cell edit is tracked
-- **Save commits transforms** - `Ctrl+S` writes applied transforms (sort, drop dup, drop null, replace, math) back to the file alongside cell edits; Applied Steps clears after save
-- **Undo** - Revert the last applied step (SQL transform or cell edit)
-- **Drop duplicates** - Remove duplicate rows via Operations menu or expression
-- **Drop null values** - Drop rows where a column IS NULL, or matches a user-supplied sentinel like `-1` / `''` / `N/A`
-- **Replace values** - Replace text/regex in columns via Operations menu or expression
-- **Column sorting** - Click any column header to sort (toggles asc/desc); sort indicator shown in header
-- **Column statistics** - Right-click a header → Column Statistics: rows, non-null, null %, distinct, min, max, mean, std
-- **Unique values filter** - Excel-like dropdown showing unique column values
-- **Copy operations** - Copy cell selection as TSV (Ctrl+C), CSV, or Markdown; copy column values as Python tuple
-- **Drag-and-drop** - Drop files onto the window to open each as a new tab
-- **Large file warnings** - Warns when calculating unique values on files >1M rows
+- **Pagination** with a configurable page size and a go-to-page box
+- **Cell editing** - type into any cell of the unmodified file; invalid values are rejected
+- **Applied steps** - every query, transform and cell edit is listed, and undo reverts the last one (`Ctrl+Z`)
+- **Save** (`Ctrl+S`) writes edits and transforms back to the file; **Save As** writes Parquet, CSV, JSON or Excel
+- **Sort** by clicking a column header (toggles ascending/descending)
+- **Drop duplicates**, **drop null values** (or a sentinel such as `-1`), **replace values** (text or regex)
+- **Join** and **append** with other open tabs, using each tab's current result
+- **Math operations** - add a column computed by an expression
+- **Column statistics** - rows, non-null, null %, distinct, min, max, mean, std
+- **Unique values filter** - pick values from a searchable list
+- **Copy** - selection as TSV (`Ctrl+C`), CSV, Markdown, or with headers; column values as a tuple
+- **Drag and drop** files onto the window to open them as tabs
+- **Large dataset warning** before expensive operations
 
 ### Search
-- **Search dialog** (`Ctrl+F`) — finds matches across **every page**, not just the visible one. Pick a specific column or search all. Match case / Whole cell / Regex options. Next/Prev step one match at a time and cache visited matches for instant re-navigation. Selecting a match paginates to the right page and selects the cell.
+- **Search** (`Ctrl+F`) finds matches across every page, not just the visible one. Search one column or all, with match case, whole cell and regex options. `F3` / `Shift+F3` step through matches, and the table jumps to the right page and cell.
 
-![alt text](src/static/image.png)
-
-### Export Options
-- Export query results to:
-  - CSV format
-  - Parquet format
-  - JSON format
+### Export
+- CSV, TSV, Parquet, JSON, JSON Lines and Excel
+- Pick columns, cast types, and format dates
+- CSV delimiter, header and quoting; Parquet compression
+- Progress bar and cancel for large exports
 
 ### User Interface
-- Clean, modern PyQt6 interface
-- **Theme System** - 3 built-in themes (Light, Excel, ParVu Black)
-- **Internationalization (i18n)** - 3 languages: English, Russian, Azerbaijani
-- **Operations menu** — Math, Join, Append, Drop Duplicates, Drop Null Values, and Replace Values
-- **Edit menu** — Find / Find Next / Find Previous
-- **Keyboard shortcut cheatsheet** — `Ctrl+/` shows every shortcut grouped by File / Table / Find / Help
-- **Collapsible applied steps** — Toggle the steps panel to save screen space
-- **Exit warning** — Warns about unsaved transforms with Save & Close option
-- Import/Export custom themes
-- Customizable colors, fonts, and layouts
-- Recent files history
-- Keyboard shortcuts and auto-complete
+- **Themes** - 3 built-in themes (ParVu Light, Excel, ParVu Black), plus custom themes you can import and export
+- **Languages** - English, Russian and Azerbaijani, switchable at any time
+- **Multiple tabs and windows** (`Ctrl+N` opens a new window)
+- **Shortcut cheatsheet** - `Ctrl+/`
+- **Exit warning** for unsaved edits and transforms
+- **Recent files** and a crash reporter
 
 ## Installation
 
 ### For End Users
 
-**Download pre-built packages:**
-- **Linux (Ubuntu/Debian)**: Download the `.deb` package
+- **Linux (Ubuntu/Debian)**: download the `.deb` package
   ```bash
-  sudo dpkg -i ParVu-<version>-amd64.deb
+  sudo dpkg -i parvu_<version>_amd64.deb
   parvu
   ```
-- **Windows**: Download `ParVu-<version>-setup.exe` (installer with desktop shortcut + .parquet/.csv/.json file associations) or `ParVu-<version>-portable.zip` (extract anywhere, run `parvu.exe`)
-- See [RELEASES.md](RELEASES.md) for installation guide and [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md) for Windows build details
+- **Windows**: download and run `parvu_<version>_x64-setup.exe`. It adds a Start menu entry and file associations.
+
+See [RELEASES.md](RELEASES.md) for details.
 
 ### For Developers
 
+Requirements: [Rust](https://rustup.rs/) and Node.js 20 or newer. On Debian/Ubuntu also:
+
 ```bash
-# Clone the repository
+sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+     libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
+```
+
+Run from source:
+
+```bash
 git clone https://github.com/AzizNadirov/ParVu.git
 cd ParVu
-
-# Install dependencies using uv (recommended)
-uv sync
-
-# Run from source
-uv run python src/app.py
+npm --prefix ui ci
+cd crates/parvu-app && npx --prefix ../../ui tauri dev
 ```
 
-**Build distributable packages:**
+Build the installer (`.deb` on Linux, `setup.exe` on Windows):
+
 ```bash
-# Linux
-./build.sh
-
-# Windows
-.\build.ps1
+./build.sh           # package "parvu"
+./build.sh --beta    # package "parvu-next", installs next to "parvu"
 ```
 
-See [BUILDING.md](BUILDING.md) for complete build guide.
+Run the tests:
+
+```bash
+cargo test -p parvu-core -p parvu-dsl -p parvu-config
+npm --prefix ui test
+```
+
+Tests and development builds use the prebuilt DuckDB library. Installer builds compile DuckDB in from C++ source, which takes several minutes the first time; `build.sh` limits parallel jobs to fit the free memory.
+
+| Path | Contents |
+|------|----------|
+| `crates/parvu-core` | DuckDB engine, tabs, cell edits, operations, export, statistics, search |
+| `crates/parvu-dsl` | Expression language parser and compiler |
+| `crates/parvu-config` | Settings, recent files, translations, themes |
+| `crates/parvu-app` | Tauri app: windows and commands |
+| `ui/` | React UI |
+
+See [docs/BUILDING.md](docs/BUILDING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for more.
 
 ## How to Use
 
-### Launch Application
+### Launch
 
 ```bash
-# Using uv
-uv run python src/app.py
-
-# Or directly with file
-uv run python src/app.py path/to/your/file.parquet
+parvu
+parvu path/to/file.parquet another.csv
 ```
 
 ### Basic Workflow
 
-1. **Load File** - Click 'Browse' to select a Parquet, CSV, or JSON file
-2. **View Data** - Table displays paginated results automatically
-3. **Run Queries** - Write SQL in the editor and click 'Execute'
-   - Auto-completion appears after typing 2+ characters
-   - Press Tab or Enter to accept suggestions
-4. **Navigate** - Use Previous/Next buttons to browse pages
-5. **Expression Mode** - Switch the editor to expression mode and write:
-   - `data[discount] = price * 0.1` to add a computed column
-   - `DROP_DUPLICATES(data[id], data[name], 'first')` to deduplicate
-   - Press Execute to compile and run
-6. **Column Operations** - Right-click column headers for:
-   - Copy column name
-   - Sort ascending/descending (or just click the header)
-   - Copy values as tuple
-   - Show unique values (with search and filter)
-   - **Column Statistics** — rows, non-null, null %, distinct, min, max, mean, std
-   - **Drop Null Values** — drop rows where this column is NULL (or matches a sentinel like `-1`)
-7. **Cell Operations** - Right-click selected cells for:
-   - Copy (TSV), Copy as CSV, Copy as Markdown, Copy with Headers
-8. **Search** - `Ctrl+F` opens a dialog that searches every row across all pages
-9. **Operations Menu** - Use Operations → Drop Duplicates / Drop Null Values / Math / Join / Append / Replace Values
-10. **Edit Cells** - Double-click any cell to edit (tracked as an applied step)
-11. **Save** - `Ctrl+S` commits cell edits **and** applied transforms back to the file; Applied Steps clears after save
-12. **Undo** - Press the ↩ Undo button in the Applied Steps panel to revert changes
-13. **Export** - File → Export Results to save query results
-14. **Change Theme** - File → Change Theme to switch between Light, Excel, and ParVu Black themes
-15. **Drag-and-drop** - Drop one or many files onto the window to open them as tabs
-16. **Shortcut cheatsheet** - Press `Ctrl+/` to see every keyboard shortcut
+1. **Open a file** - drop it onto the window, use File → Open (`Ctrl+O`), or paste a path
+2. **Browse** - use the pagination bar or type a page number
+3. **Query** - write SQL in the editor and press **Execute** or `Ctrl+Enter`. The table is named after the file (`sales.parquet` → `sales`)
+4. **Expression mode** - switch the editor to Expression and write, for example:
+   - `sales[discount] = sales[price] * 0.1` to add a computed column
+   - `DROP_DUPLICATES(sales[id], sales[name], 'first')` to deduplicate
+5. **Column menu** - right-click a header to sort, rename, change type, duplicate, remove, copy values, see unique values or statistics, replace values or drop nulls
+6. **Cell menu** - right-click cells to copy them as TSV, CSV or Markdown, filter by a value, or set it to NULL
+7. **Edit** - type into a cell; edits are highlighted and listed as steps
+8. **Undo** - `Ctrl+Z` or the Undo button in Applied Steps
+9. **Save** - `Ctrl+S` writes edits and transforms to the file; Applied Steps clears afterwards
+10. **Export** - File → Export (`Ctrl+E`)
+11. **Search** - `Ctrl+F` searches every row on every page
+12. **Theme and language** - View → Theme / Language
 
 ## Expression Language Examples
 
-```python
+```text
 -- Add a computed column
-data[total] = price * quantity
+sales[total] = sales[price] * sales[quantity]
 
 -- Remove duplicates keeping the first occurrence
-DROP_DUPLICATES(data[id], data[category], 'first')
+DROP_DUPLICATES(sales[id], sales[category], 'first')
 
 -- Drop rows where a column is NULL (or matches a sentinel)
-DROP_NULL(data[email])
-DROP_NULL(data[score], -1)
+DROP_NULL(sales[email])
+DROP_NULL(sales[score], -1)
 
 -- String and math functions
-data[full_name] = UPPER(first_name) || ' ' || UPPER(last_name)
-data[abs_diff] = ABS(price - avg_price)
-
--- Use in expression mode; compiled to DuckDB SQL automatically
+sales[full_name] = CONCAT(UPPER(sales[first_name]), ' ', UPPER(sales[last_name]))
+sales[abs_diff] = ABS(sales[price] - sales[avg_price])
 ```
+
+See [docs/DSL.md](docs/DSL.md) for the full language guide.
 
 ## Example SQL Queries
 
 ```sql
--- View all data (default)
-SELECT * FROM data
-
 -- Filter rows
-SELECT * FROM data WHERE age > 25
+SELECT * FROM sales WHERE age > 25
 
--- Aggregate data
-SELECT category, COUNT(*) as count, AVG(price) as avg_price
-FROM data
+-- Aggregate
+SELECT category, COUNT(*) AS count, AVG(price) AS avg_price
+FROM sales
 GROUP BY category
 ORDER BY count DESC
 
--- Limit results
-SELECT * FROM data LIMIT 100
-
--- Complex filtering
-SELECT * FROM data
-WHERE status = 'active' AND created_date > '2024-01-01'
-ORDER BY created_date DESC
+-- Join two open files
+SELECT * FROM sales JOIN customers USING (customer_id)
 ```
 
 ## Configuration
 
-Settings are stored in `~/.ParVu/settings/settings.json`:
+Settings are stored in `~/.ParVu/settings/settings.json` and can be changed in File → Settings. Logs are in `~/.ParVu/logs`.
 
-- `default_data_var_name` - Table name used in queries (default: "data")
-- `result_pagination_rows_per_page` - Rows per page (default: 100)
-- `current_theme` - Active theme name (default: "ParVu Light")
-- `sql_keywords` - Keywords for syntax highlighting
+**Memory.** Queries may use up to 1 GB of working memory by default (File → Settings → Performance). Larger sorts, joins and groupings spill to a temporary folder on disk instead of using more RAM, so even multi-gigabyte files stay within that budget. The `PARVU_MEMORY_LIMIT_MB` environment variable overrides the setting.
 
 ### Themes
 
-ParVu includes 3 professionally designed themes:
-- **ParVu Light** - Default light theme with blue/green accents
-- **Excel** - Microsoft Excel-inspired green theme
-- **ParVu Black** - Dark theme inspired by Visual Studio Code
+- **ParVu Light** - default light theme
+- **Excel** - Excel-inspired green theme
+- **ParVu Black** - dark theme
 
-Create custom themes or import community themes. See [docs/THEMES.md](docs/THEMES.md) for complete theme documentation.
+Custom themes live in `~/.ParVu/themes`. See [docs/THEMES.md](docs/THEMES.md).
 
 ### Languages
 
-ParVu supports multiple interface languages:
-- 🇬🇧 **English** - Default
-- 🇷🇺 **Russian** (Русский) - Full translation
-- 🇦🇿 **Azerbaijani** (Azərbaycan) - Full translation
+- 🇬🇧 **English** - default
+- 🇷🇺 **Russian** (Русский)
+- 🇦🇿 **Azerbaijani** (Azərbaycan)
 
-Change language in Settings → General tab. See [docs/I18N.md](docs/I18N.md) for i18n documentation.
+Change the language in View → Language. See [docs/I18N.md](docs/I18N.md) to add a translation.
 
 ## FAQ
 
-**Q: What SQL queries are supported?**
-A: ParVu supports full DuckDB SQL syntax including SELECT, WHERE, GROUP BY, ORDER BY, aggregations, and window functions. See [DuckDB SQL documentation](https://duckdb.org/docs/sql/query_syntax/select) for details.
+**Q: What SQL is supported?**
+A: All of DuckDB's SQL, including joins, aggregations and window functions. See the [DuckDB documentation](https://duckdb.org/docs/sql/query_syntax/select).
 
-**Q: Can I edit the actual file?**
-A: No, cell editing only modifies the current view. To save changes, export the results to a new file.
+**Q: Does editing change the file?**
+A: Only when you save. Edits are kept as pending steps until you press `Ctrl+S` or use Save As.
 
-**Q: How large files can it handle?**
-A: ParVu uses lazy loading with DuckDB, querying files directly without materializing them in memory. It can efficiently handle huge files (8GB+) with millions of rows. Only the current page is loaded into memory at any time.
+**Q: How large a file can it handle?**
+A: Parquet, CSV and JSON files are queried in place by DuckDB, and only the visible page is loaded, so files of 8GB and more work. Excel files are read into memory when opened.
 
-**Q: What's the difference from the old version?**
-A: This is a complete rewrite with:
-- PyQt6 (modern UI framework)
-- **Lazy loading** for huge files (8GB+) without memory issues
-- **Theme system with 3 built-in themes**
-- **Expression language (DSL)** with auto-completion
-- **Applied steps with undo** for every transform
-- Better SQL auto-completion
-- Excel-like unique value filters
-- Improved pagination performance
-- More export formats (JSON added)
-- Double-click cell editing
+**Q: What changed from the Python version?**
+A: The app is about six times smaller (82 MB installed instead of 483 MB), opens files faster, and switches pages in milliseconds. It also opens Excel files, writes Excel on export, and fixes several bugs in the expression language and in join and append.
 
 **Q: Can I create my own themes?**
-A: Yes! Export an existing theme as a template, edit the JSON file to customize colors and fonts, then import it back. See [docs/THEMES.md](docs/THEMES.md) for details.
-
-**Q: Can I add my own language translation?**
-A: Yes! The i18n system is fully extensible. See [docs/I18N.md](docs/I18N.md) for instructions on adding new languages.
+A: Yes. Export a theme as a template, edit the JSON, and import it back. See [docs/THEMES.md](docs/THEMES.md).
 
 ## Contact
-- [Telegram](https://t.me/aziz_nadirov);
-### Project:
-- [GitHub](https://github.com/AzizNadirov/ParVu);
-  
+- [Telegram](https://t.me/aziz_nadirov)
+- [GitHub](https://github.com/AzizNadirov/ParVu)
+
 ## It has bugs
 
-Yes, it has. Please [open an issue](https://github.com/AzizNadirov/ParVu/issues) and lets solve this
+Yes, it has. Please [open an issue](https://github.com/AzizNadirov/ParVu/issues) and let's solve it.

@@ -1,0 +1,43 @@
+// The dialogs are loaded on first use, so their code (and the Markdown
+// renderer the help dialogs need) is not parsed at start-up. Each export has
+// the same signature as the eager one in ./index.
+import { lazy } from "react";
+
+type Dialogs = typeof import("./index");
+type OpenFn = Exclude<keyof Dialogs, "SearchPanel">;
+
+let loading: Promise<Dialogs> | null = null;
+const load = () => (loading ??= import("./index"));
+
+function deferred<K extends OpenFn>(name: K): Dialogs[K] {
+  return ((...args: unknown[]) =>
+    load().then((m) => (m[name] as (...a: unknown[]) => unknown)(...args))) as Dialogs[K];
+}
+
+/** Start loading the dialogs in the background (after start-up). */
+export function preloadDialogs(): void {
+  void load();
+}
+
+export const openSettingsDialog = deferred("openSettingsDialog");
+export const openThemeSelector = deferred("openThemeSelector");
+export const openLanguageSelector = deferred("openLanguageSelector");
+export const openAboutDialog = deferred("openAboutDialog");
+export const openExpressionHelp = deferred("openExpressionHelp");
+export const openShortcutsDialog = deferred("openShortcutsDialog");
+export const openTableInfo = deferred("openTableInfo");
+export const openUniqueValues = deferred("openUniqueValues");
+export const openColumnStats = deferred("openColumnStats");
+export const openJoinDialog = deferred("openJoinDialog");
+export const openAppendDialog = deferred("openAppendDialog");
+export const openDropDuplicates = deferred("openDropDuplicates");
+export const openDropNull = deferred("openDropNull");
+export const openReplace = deferred("openReplace");
+export const openMathDialog = deferred("openMathDialog");
+export const openCopyTuple = deferred("openCopyTuple");
+export const openExportDialog = deferred("openExportDialog");
+export const openUnsavedChanges = deferred("openUnsavedChanges");
+export const openConfirmClose = deferred("openConfirmClose");
+export const openCrashReport = deferred("openCrashReport");
+
+export const SearchPanel = lazy(() => load().then((m) => ({ default: m.SearchPanel })));

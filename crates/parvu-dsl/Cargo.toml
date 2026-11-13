@@ -1,0 +1,17 @@
+[package]
+name = "parvu-dsl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "ParVu expression language: parser, resolver and DuckDB SQL compiler"
+
+[dependencies]
+pest = { workspace = true }
+pest_derive = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

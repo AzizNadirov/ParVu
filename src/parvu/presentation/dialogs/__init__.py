@@ -1,3 +1,0 @@
-"""
-Dialog windows for ParVu.
-"""

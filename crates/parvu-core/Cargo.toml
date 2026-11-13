@@ -1,0 +1,28 @@
+[package]
+name = "parvu-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Compile DuckDB from C++ source and link it statically. Only installer
+# builds use this (build.sh). Without it, the DuckDB crate downloads the
+# official prebuilt library, so everyday builds and tests compile no C++.
+bundled = ["duckdb/bundled", "duckdb/json", "duckdb/parquet"]
+
+[dependencies]
+duckdb.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+calamine.workspace = true
+rust_xlsxwriter.workspace = true
+chrono.workspace = true
+regex.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,217 +1,71 @@
-# ParVu Quick Start Guide
+# ParVu Quick Start
 
-## Language Selection
+## Open a file
 
-### How to Change Language
+- Drop one or more files onto the window, or
+- File → Open (`Ctrl+O`), or
+- paste a path on the start screen and press Enter, or
+- run `parvu file.parquet other.csv`.
 
-The language selector is now integrated into ParVu! Here's how to use it:
+Each file opens in its own tab at the bottom of the window. The table is named after the file: `sales 2024.csv` becomes `sales_2024`.
 
-1. **Open Settings**
-   - Click `File` → `Settings...` in the menu bar
-   - Or use the keyboard shortcut (if configured)
+## Look around
 
-2. **Go to General Tab**
-   - The Settings dialog has multiple tabs
-   - Select the `General` tab (should be the first tab)
+- Move between pages with the pagination bar, or type a page number.
+- Click a column header to sort; click again to reverse.
+- Right-click a header for column actions: statistics, unique values, rename, change type, and more.
+- `Ctrl+F` searches every row on every page.
 
-3. **Find Language Selector**
-   - Scroll down in the General tab
-   - Look for the **"Interface Language"** section
-   - It's located below "File History"
+## Query
 
-4. **Select Your Language**
-   - Click the dropdown menu
-   - You'll see three options:
-     - 🇬🇧 English (en)
-     - 🇷🇺 Русский (ru)
-     - 🇦🇿 Azərbaycan (az)
+Write SQL in the editor and press **Execute** or `Ctrl+Enter`:
 
-5. **Save Settings**
-   - Click the `Save` button at the bottom of the dialog
-   - Your language preference is saved
-
-6. **Restart ParVu**
-   - Close and reopen ParVu
-   - The interface will now display in your selected language
-
-## Settings Dialog Layout
-
-```
-┌─────────────────────────────────────────┐
-│ Settings                           [X]   │
-├─────────────────────────────────────────┤
-│ [General] [Theme] [Advanced] [Warnings] │
-├─────────────────────────────────────────┤
-│                                          │
-│ Data Settings                            │
-│ ┌──────────────────────────────────────┐ │
-│ │ Table Variable Name: [data         ]│ │
-│ │ Rows Per Page:       [100          ]│ │
-│ │ Max Rows (LIMIT):    [10000        ]│ │
-│ └──────────────────────────────────────┘ │
-│                                          │
-│ File History                             │
-│ ┌──────────────────────────────────────┐ │
-│ │ ☑ Save File History                 │ │
-│ └──────────────────────────────────────┘ │
-│                                          │
-│ Interface Language          ◄── HERE!   │
-│ ┌──────────────────────────────────────┐ │
-│ │ Language: [🇬🇧 English (en)    ▼]   │ │
-│ │                                      │ │
-│ │ Available languages:                 │ │
-│ │  • 🇬🇧 English (en)                 │ │
-│ │  • 🇷🇺 Русский (ru)                 │ │
-│ │  • 🇦🇿 Azərbaycan (az)              │ │
-│ └──────────────────────────────────────┘ │
-│                                          │
-├─────────────────────────────────────────┤
-│              [Save] [Cancel]             │
-└─────────────────────────────────────────┘
+```sql
+SELECT region, COUNT(*) AS orders
+FROM sales
+GROUP BY region
+ORDER BY orders DESC
 ```
 
-## What Gets Translated?
+Or switch the editor to **Expression** to add columns without writing SQL:
 
-Currently, the i18n infrastructure is in place. When you select a language:
-
-1. **Immediately**:
-   - Language preference is saved
-   - i18n system updates internally
-
-2. **After Restart** (Full UI translation - pending integration):
-   - Window titles
-   - Menu items (File, Help, etc.)
-   - Button labels (Save, Cancel, Browse, etc.)
-   - Dialog messages
-   - Error/warning messages
-   - Status bar messages
-   - Context menus
-   - Tooltips
-
-## Current Status
-
-### ✅ Implemented
-- Language selector in Settings → General
-- 3 fully translated languages (180+ keys each)
-- Language preference saving
-- i18n system initialization
-
-### ⏳ Pending (Future Updates)
-- Full UI integration in all windows
-- Real-time language switching (without restart)
-- More languages (community contributions welcome!)
-
-## Testing Your Language Selection
-
-To verify your language is saved:
-
-1. Open Settings
-2. Change language to Russian (Русский)
-3. Click Save
-4. Check `~/.ParVu/settings/settings.json`
-5. Look for: `"current_language": "ru"`
-
-## Available Languages
-
-| Flag | Language | Native Name | Code | Status |
-|------|----------|-------------|------|--------|
-| 🇬🇧 | English | English | en | ✅ Complete |
-| 🇷🇺 | Russian | Русский | ru | ✅ Complete |
-| 🇦🇿 | Azerbaijani | Azərbaycan | az | ✅ Complete |
-
-## Language Files Location
-
-Settings are stored in:
-```
-~/.ParVu/settings/settings.json
+```text
+sales[total] = sales[qty] * sales[price]
 ```
 
-Key field:
-```json
-{
-  "current_language": "en"
-}
-```
+Every query and operation is listed under **Applied Steps**. `Ctrl+Z` undoes the last one, and **Reset Query** returns to the original file.
 
-## Troubleshooting
+## Edit and save
 
-### Language selector not visible
-- Make sure you're in the **General** tab (first tab)
-- Scroll down - it's below "File History"
+While no transform is applied, you can type into any cell. Edited cells are highlighted, and values that don't fit the column type are rejected.
 
-### Language not changing
-- Make sure you clicked **Save** (not Cancel)
-- **Restart ParVu** - changes take effect on restart
-- Check logs: `~/.ParVu/logs/parvu_*.log`
+- `Ctrl+S` saves edits and transforms back into the file.
+- File → Save As (`Ctrl+Shift+S`) writes a new Parquet, CSV, JSON or Excel file.
+- File → Export (`Ctrl+E`) writes the current result with options: columns, types, date formats, delimiter, compression.
 
-### Want to add a new language?
-See [I18N.md](I18N.md#adding-a-new-language) for instructions.
+## Language and theme
 
-## Screenshots
+- View → Language: English, Russian or Azerbaijani.
+- View → Theme: ParVu Light, Excel, ParVu Black, or your own.
 
-### English Interface
-- Default language
-- Clean, professional UI
-- Comprehensive tooltips
+Both apply immediately.
 
-### Russian Interface (Русский)
-- Full Cyrillic support
-- 180+ translated strings
-- Professional terminology
+## Shortcuts
 
-### Azerbaijani Interface (Azərbaycan)
-- Latin script with special characters
-- Complete translation
-- Native language support
+Press `Ctrl+/` for the full list.
 
-## Using the Expression Language
+| Keys | Action |
+|---|---|
+| `Ctrl+O` | Open file |
+| `Ctrl+N` | New window |
+| `Ctrl+Enter` | Run the query |
+| `Ctrl+Z` | Undo the last step |
+| `Ctrl+S` / `Ctrl+Shift+S` | Save / Save As |
+| `Ctrl+E` | Export |
+| `Ctrl+F`, `F3`, `Shift+F3` | Search, next, previous |
+| `Ctrl+W` | Close tab |
+| `Shift+Wheel` | Scroll sideways |
 
-ParVu supports a Python-like expression language for quick data transformations.
+## Problems
 
-### Switch to Expression Mode
-
-1. Click the **Expr / SQL** toggle in the query toolbar to switch to expression mode
-2. The editor will now compile expressions to DuckDB SQL
-
-### Add a Computed Column
-
-Type in the expression editor:
-
-```python
-data[total] = price * quantity
-```
-
-Press **Execute** (or Ctrl+Enter). This adds a new column `total` computed from `price * quantity`.
-
-### Remove Duplicates
-
-Via the Operations menu:
-1. Click **Operations → Drop Duplicates**
-2. Select the columns to check for duplicates
-3. Choose **Keep First** or **Keep Last**
-4. Click **Apply**
-
-Or via expression:
-
-```python
-DROP_DUPLICATES(data[id], data[name], 'first')
-```
-
-### Undo a Step
-
-Every transform and cell edit is tracked in the **Applied Steps** panel:
-1. Look at the panel below the data table
-2. Click the **↩ Undo** button to revert the last step
-3. Works for both SQL transforms and cell edits
-
-## Need Help?
-
-- **Documentation**: [docs/I18N.md](I18N.md)
-- **Expression Language**: [docs/DSL.md](DSL.md)
-- **GitHub Issues**: https://github.com/AzizNadirov/ParVu/issues
-- **Telegram**: @aziz_nadirov
-
----
-
-**Version**: 0.2.0+
-**Last Updated**: 2026-05-26
+Logs are in `~/.ParVu/logs/`. See [CRASH_REPORTING.md](CRASH_REPORTING.md).
