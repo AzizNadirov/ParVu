@@ -25,104 +25,10 @@ rm -rf build dist ParVu*.deb
 echo -e "${BLUE}Installing build dependencies...${NC}"
 uv sync --extra build
 
-# Create spec file if it doesn't exist
+# The spec file is versioned in the repo; never generate a stand-in.
 if [ ! -f "parvu.spec" ]; then
-    echo -e "${BLUE}Creating parvu.spec file...${NC}"
-    cat > parvu.spec << 'SPECEOF'
-# -*- mode: python ; coding: utf-8 -*-
-"""
-PyInstaller spec file for ParVu - Parquet Viewer
-Builds a cross-platform application bundle
-"""
-
-import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-block_cipher = None
-
-# Collect all data files from important packages
-datas = []
-datas += collect_data_files('duckdb')
-datas += collect_data_files('pyarrow')
-
-# Add data directories from src
-datas += [('src/settings', 'settings')]
-datas += [('src/static', 'static')]
-datas += [('src/history', 'history')]
-
-# Collect hidden imports that PyInstaller might miss
-hiddenimports = [
-    'PyQt6.QtCore',
-    'PyQt6.QtGui',
-    'PyQt6.QtWidgets',
-    'duckdb',
-    'pyarrow',
-    'pandas',
-    'openpyxl',
-    'loguru',
-    'pydantic',
-    'dateutil',
-]
-
-# Add all submodules from key packages
-hiddenimports += collect_submodules('duckdb')
-hiddenimports += collect_submodules('pyarrow')
-hiddenimports += collect_submodules('pandas')
-
-a = Analysis(
-    ['src/app.py'],
-    pathex=['src'],
-    binaries=[],
-    datas=datas,
-    hiddenimports=hiddenimports,
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[
-        'matplotlib',
-        'tkinter',
-        'numpy.distutils',
-        'scipy',
-    ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='parvu',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon='assets/parvu.png' if sys.platform.startswith('linux') else 'assets/parvu.ico',
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='parvu',
-)
-SPECEOF
-    echo -e "${GREEN}✓ Created parvu.spec${NC}"
+    echo "ERROR: parvu.spec not found. Restore it from git." >&2
+    exit 1
 fi
 
 # Build with PyInstaller
@@ -137,6 +43,15 @@ else
     echo "ERROR: Build failed!"
     exit 1
 fi
+
+# Verify bundled resources sit where parvu.RESOURCES_DIR expects them
+for res in settings/settings.json settings/default_settings.json history/recents.json static; do
+    if [ ! -e "dist/parvu/_internal/parvu/resources/${res}" ]; then
+        echo "ERROR: missing bundled resource parvu/resources/${res}" >&2
+        exit 1
+    fi
+done
+echo -e "${GREEN}✓ Bundled resources verified${NC}"
 
 # Create .deb package structure
 echo -e "${BLUE}Creating .deb package...${NC}"

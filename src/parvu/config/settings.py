@@ -13,7 +13,12 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from loguru import logger
 
-from parvu.infrastructure.paths import get_legacy_app_dir, resolve_settings_path
+from parvu.infrastructure.paths import (
+    get_legacy_app_dir,
+    resolve_history_path,
+    resolve_settings_path,
+    resolve_static_path,
+)
 
 
 class Settings(BaseModel):
@@ -68,7 +73,7 @@ class Settings(BaseModel):
     usr_recents_file: Path = Field(default_factory=lambda: get_legacy_app_dir() / "history" / "recents.json")
     usr_settings_file: Path = Field(default_factory=lambda: get_legacy_app_dir() / "settings" / "settings.json")
     default_settings_file: Path = Field(default_factory=lambda: resolve_settings_path() / "default_settings.json")
-    static_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent / "resources" / "static")
+    static_dir: Path = Field(default_factory=resolve_static_path)
     user_logs_dir: Path = Field(default_factory=lambda: get_legacy_app_dir() / "logs")
 
     def model_post_init(self, __context) -> None:
@@ -127,12 +132,31 @@ class SettingsManager:
     def reset(cls) -> None:
         """Reset user settings to defaults."""
         user_dir = get_legacy_app_dir()
+        settings_dir = user_dir / "settings"
+        history_dir = user_dir / "history"
         bundled_settings = resolve_settings_path()
-        bundled_history = Path(__file__).parent.parent / "resources" / "history"
+        bundled_history = resolve_history_path()
 
-        # Copy defaults
-        shutil.copytree(bundled_settings, user_dir / "settings", dirs_exist_ok=True)
-        shutil.copytree(bundled_history, user_dir / "history", dirs_exist_ok=True)
+        # Copy bundled defaults. If the bundle is missing them (e.g. a broken
+        # PyInstaller build), fall back to the model defaults instead of crashing.
+        if bundled_settings.is_dir():
+            shutil.copytree(bundled_settings, settings_dir, dirs_exist_ok=True)
+        else:
+            logger.warning(f"Bundled settings not found at {bundled_settings}; using built-in defaults")
+            settings_dir.mkdir(parents=True, exist_ok=True)
+            defaults = Settings().model_dump_json(indent=2)
+            (settings_dir / "settings.json").write_text(defaults)
+            (settings_dir / "default_settings.json").write_text(defaults)
+
+        if bundled_history.is_dir():
+            shutil.copytree(bundled_history, history_dir, dirs_exist_ok=True)
+        else:
+            logger.warning(f"Bundled history not found at {bundled_history}; creating empty recents")
+            history_dir.mkdir(parents=True, exist_ok=True)
+            recents = history_dir / "recents.json"
+            if not recents.exists():
+                recents.write_text(json.dumps({"recents": []}))
+
         logger.info("User settings reset to defaults")
 
     def save(self) -> None:
