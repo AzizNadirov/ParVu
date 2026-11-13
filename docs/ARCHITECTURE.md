@@ -1,137 +1,83 @@
 # ParVu Architecture
 
-## Overview
-
-ParVu uses a **layered architecture** with clear separation of concerns:
+ParVu is a Tauri desktop app. A React UI runs in the system webview and calls Rust commands. All data work happens in Rust with DuckDB.
 
 ```
-┌─────────────────────────────────────────┐
-│  Presentation Layer (PyQt6 UI)          │
-│  - MainWindow, Widgets, Dialogs         │
-├─────────────────────────────────────────┤
-│  Service Layer (Orchestration)          │
-│  - DI Container, WindowService,         │
-│    QueryService, FileService            │
-├─────────────────────────────────────────┤
-│  Infrastructure Layer                   │
-│  - i18n, Themes, Logging, Paths         │
-├─────────────────────────────────────────┤
-│  Config Layer                           │
-│  - Settings, Recents, AppState          │
-├─────────────────────────────────────────┤
-│  Core Layer (Domain)                    │
-│  - QueryEngine, FileAdapters,           │
-│    Pagination, Models                   │
-├─────────────────────────────────────────┤
-│  DSL Layer (Expression Language)        │
-│  - Parser, Resolver, Compiler, Registry │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ ui/  (React, TypeScript)                     │
+│   App.tsx, grid, editor, dialogs             │
+│   lib/api.ts  → invoke("command", args)      │
+├──────────────────────────────────────────────┤
+│ crates/parvu-app  (Tauri)                    │
+│   commands.rs: one function per command      │
+│   state.rs: one Workspace per window         │
+├────────────────┬───────────────┬─────────────┤
+│ parvu-core     │ parvu-dsl     │ parvu-config│
+│ DuckDB engine  │ expressions   │ settings,   │
+│ tabs, edits,   │ → SQL         │ themes,     │
+│ ops, export    │               │ translations│
+└────────────────┴───────────────┴─────────────┘
 ```
 
-## Dependency Flow
+Dependencies only point down. `parvu-dsl` and `parvu-config` don't depend on DuckDB, and none of the three library crates know about Tauri.
 
-Dependencies flow **inward** - outer layers depend on inner layers, never the reverse:
+## parvu-core
 
-- **Presentation** → **Services** → **Infrastructure/Config/Core**
-- **Services** wire dependencies via **Dependency Injection**
-- **Core** has **zero** external dependencies (except pandas/duckdb)
+| Module | Purpose |
+|---|---|
+| `workspace.rs` | `Workspace`: one DuckDB connection and the open tabs of a window. Opening, steps, undo, edits, save |
+| `engine.rs` | `QueryEngine`: a tab's current SQL, undo history and paging |
+| `format.rs` | File formats; registering a file as a DuckDB view; reading Excel with `calamine` |
+| `edits.rs` | Pending cell edits and the overlay SQL that applies them |
+| `ops.rs` | `Operation`: every table operation (sort, rename, join, drop duplicates…), building its SQL and step label |
+| `page.rs` | A page of results, formatted to text with Arrow's formatter |
+| `export.rs` | Export via DuckDB `COPY`, or `rust_xlsxwriter` for Excel |
+| `stats.rs`, `search.rs` | Column statistics, distinct values, samples, full-table search |
 
-## Key Design Patterns
+### How a tab is stored
 
-### 1. Dependency Injection
-All components receive their dependencies rather than importing globals:
+Opening `sales.parquet` creates:
 
-```python
-container = ServiceContainer()
-# container.settings, container.theme_manager, container.translator
+- `__pv_src_sales`: a view reading the file (for Excel, reading the table `__pv_xlsx_sales` loaded from it);
+- `sales`: the view users query. Without edits it equals the source view. With pending cell edits it overlays them by row number, so queries, joins and saves see the edits without rewriting the file;
+- a `QueryEngine` whose current query starts as `SELECT * FROM "sales"`.
+
+Every applied step (query, operation or cell edit) goes into one list in the tab, so undo always reverts the most recent step. Saving exports the current query to a temporary file next to the target, renames it into place, and reopens the tab from the result.
+
+### Rules
+
+- All identifiers and literals go through `sql::quote_ident` and `sql::quote_literal`.
+- Type names used in `CAST` are checked with `sql::is_safe_type_name`.
+- New table operations are new `Operation` variants, so the UI, undo and step labels pick them up in one place.
+
+## parvu-dsl
+
+```
+text → parse (pest grammar) → resolve (AST + catalog → IR) → compile (IR → DuckDB SQL)
 ```
 
-### 2. Protocols (Structural Subtyping)
-Interfaces are defined as `typing.Protocol` for flexibility:
+`translate()` is what the editor runs: it returns the SQL and whether the expression is an assignment, a table-level query (`DROP_DUPLICATES`, `DROP_NULL`) or a scalar. `DROP_DUPLICATES`, `DROP_NULL` and `REPLACE` are handled in the resolver before the function registry; adding them to the registry only enables autocomplete. The golden file `tests/golden/dsl.json` pins the output for 306 expressions.
 
-```python
-class IQueryEngine(Protocol):
-    def execute_query(self, query: str) -> tuple[bool, str]: ...
-```
+## parvu-config
 
-### 3. Plugin System
-Hook-based extensibility:
+Settings, recent files, themes and translations, all stored in `~/.ParVu` in the same format the Python app used. Themes are turned into CSS variables (`--pv-<group>-<field>`), and the UI styles itself only through them. See [THEMES.md](THEMES.md) and [I18N.md](I18N.md).
 
-```python
-class MyPlugin(Plugin):
-    def activate(self, context: PluginContext) -> None:
-        context.container.hook_registry.register(HookType.PRE_QUERY, my_callback)
-```
+## parvu-app
 
-## Data Flow
+- `main.rs` sets up logging (`~/.ParVu/logs`), the crash hook, plugins and windows.
+- `commands.rs` holds every command the UI can call. Data commands run on the blocking thread pool so the window stays responsive.
+- Each window has its own `Workspace`, created on first use and dropped when the window closes.
+- Exports run on a second DuckDB connection in a background thread and report progress through `export-progress` and `export-finished` events; `cancel_export` interrupts DuckDB.
 
-### SQL Mode
-```
-User Action
-    ↓
-MainWindow (UI Event)
-    ↓
-Service Layer (QueryService/FileService)
-    ↓
-Core Layer (QueryEngine → DuckDB)
-    ↓
-Paginated Results (pd.DataFrame)
-    ↓
-DataTableView (Display)
-```
+## ui
 
-### Expression Mode
-```
-User types expression
-    ↓
-Parser (Lark grammar)
-    ↓
-Resolver (Tree → IR: Assignment, DropDuplicates, Call, etc.)
-    ↓
-Compiler (IR → sqlglot → DuckDB SQL)
-    ↓
-QueryEngine.execute_query()
-    ↓
-Paginated Results
-```
+| Path | Purpose |
+|---|---|
+| `src/App.tsx` | The main window: menus, shortcuts, tabs, and calls to the backend |
+| `src/lib/api.ts` | Typed wrappers for every command, and the shared types |
+| `src/components/DataGrid.tsx` | Glide Data Grid (canvas, virtualised) |
+| `src/components/QueryEditor.tsx` | CodeMirror SQL and expression editor |
+| `src/dialogs/` | One file per dialog, each opened with `openXxx(ui, args)` |
+| `src/lib/i18n.ts` | Translation lookup with Python-style `{name:,}` placeholders |
 
-## Undo & History
-
-The `QueryEngine` maintains a `_history` stack of previous queries. Every transform pushes the current query before applying the new one:
-
-```python
-engine.apply_transform(new_query)  # pushes old query to history
-engine.undo()                      # pops and restores previous query
-```
-
-Cell edits are tracked separately in `TableTab._undo_stack` (parallel to `applied_steps`). The `MainWindow._undo_last_step()` dispatcher routes undo to either:
-- **SQL transforms** → `QueryEngine.undo()`
-- **Cell edits** → `EditQueue.remove()`
-
-## DSL Architecture
-
-ParVu includes a small expression language (DSL) compiled to DuckDB SQL:
-
-1. **Parser** (`dsl/parser.py`) — Lark grammar parses text into AST
-2. **Resolver** (`dsl/resolver.py`) — Transforms AST into typed IR nodes (`ColumnRef`, `Call`, `Assignment`, `DropDuplicates`, `Replace`, etc.)
-3. **Compiler** (`dsl/compiler.py`) — Converts IR to sqlglot expressions, then to SQL string
-4. **Registry** (`dsl/registry.py`) — Function definitions for auto-completion and validation
-
-Example compilation chain:
-```
-data[total] = price * quantity
-  → Assignment(table="data", column="total", value=BinaryOp(...))
-  → SELECT *, price * quantity AS "total" FROM data
-```
-
-Special-case functions like `DROP_DUPLICATES` and `REPLACE` are handled in the resolver before registry lookup, producing dedicated IR nodes that the compiler translates to complex SQL patterns.
-
-## Testing Strategy
-
-| Layer | Test Type | Tools |
-|-------|-----------|-------|
-| Core | Unit | pytest (no Qt/DB) |
-| Core | Integration | pytest + DuckDB |
-| Services | Unit | pytest + mocks |
-| Presentation | UI | pytest-qt |
-| End-to-End | E2E | pytest-qt + fixtures |
+Strings shown to users always go through `t(key)`. Colours and fonts come only from the `--pv-*` theme variables.

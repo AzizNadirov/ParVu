@@ -1,7 +1,5 @@
 {
   "about.built_with": "Built with",
-  "about.built_with_text": "PyQt6 and DuckDB",
-  "about.description": "A powerful desktop application for viewing and querying large Parquet, CSV, and JSON files.\nBuilt with [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) and [DuckDB](https://duckdb.org/).",
   "about.feature.autocomplete": "**Auto-completion** - Smart suggestions for SQL keywords and column names",
   "about.feature.editing": "**Cell editing** - Double-click to edit (view only, not saved to file)",
   "about.feature.export": "**Export results** - Save to CSV, Parquet, or JSON",

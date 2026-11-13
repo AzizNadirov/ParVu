@@ -1,7 +1,5 @@
 {
   "about.built_with": "İlə yaradılıb",
-  "about.built_with_text": "PyQt6 və DuckDB",
-  "about.description": "Böyük Parquet, CSV və JSON fayllarını baxmaq və sorğulamaq üçün güclü masaüstü tətbiqi.\n[PyQt6](https://www.riverbankcomputing.com/software/pyqt/) və [DuckDB](https://duckdb.org/) ilə yaradılmışdır.",
   "about.feature.autocomplete": "**Avtomatik tamamlama** - SQL açar sözlər və sütun adları üçün ağıllı təkliflər",
   "about.feature.editing": "**Xana redaktəsi** - Redaktə etmək üçün iki dəfə klikləyin (yalnız baxış, fayla saxlanılmır)",
   "about.feature.export": "**Nəticələri ixrac et** - CSV, Parquet və ya JSON-a saxlayın",

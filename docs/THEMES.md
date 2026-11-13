@@ -36,7 +36,7 @@ ParVu comes with 3 professionally designed themes:
 
 **Via Menu:**
 1. Open ParVu
-2. Go to **File → Change Theme...**
+2. Go to **View → Theme...**
 3. Select a theme from the list
 4. Click **Apply**
 
@@ -57,7 +57,7 @@ The theme selector shows:
 
 ### Importing Themes
 
-1. **File → Change Theme...**
+1. **View → Theme...**
 2. Click **Import...**
 3. Select a `.json` theme file
 4. Theme appears in your list
@@ -69,7 +69,7 @@ The theme selector shows:
 
 ### Exporting Themes
 
-1. **File → Change Theme...**
+1. **View → Theme...**
 2. Select the theme to export
 3. Click **Export...**
 4. Choose save location
@@ -82,7 +82,7 @@ The theme selector shows:
 
 ### Deleting Themes
 
-1. **File → Change Theme...**
+1. **View → Theme...**
 2. Select a custom theme
 3. Click **Delete**
 4. Confirm deletion
@@ -204,7 +204,7 @@ All colors use hex format (#RRGGBB):
 
 1. **Export an existing theme as a template:**
    ```bash
-   File → Change Theme... → Select "ParVu Light" → Export...
+   View → Theme... → Select "ParVu Light" → Export...
    Save as: my_theme.json
    ```
 
@@ -261,7 +261,7 @@ All colors use hex format (#RRGGBB):
 
 3. **Import your theme:**
    ```bash
-   File → Change Theme... → Import... → Select my_theme.json
+   View → Theme... → Import... → Select my_theme.json
    ```
 
 4. **Apply and enjoy!**
@@ -335,7 +335,7 @@ All colors use hex format (#RRGGBB):
 1. Check JSON syntax (use a validator)
 2. Ensure all required fields are present
 3. Verify color values are valid hex codes
-4. Check logs: `~/.ParVu/logs/parvu_*.log`
+4. Check logs: `~/.ParVu/logs/`
 
 **Colors look wrong:**
 - Verify hex color format: `#RRGGBB`
@@ -370,42 +370,18 @@ All colors use hex format (#RRGGBB):
 ### Installing Community Themes
 
 1. Download `.json` file
-2. Import via **File → Change Theme... → Import...**
+2. Import via **View → Theme... → Import...**
 3. Apply the theme
 
 ## Advanced Topics
 
-### Programmatic Theme Creation
+### Generated Themes
 
-You can create themes programmatically using Python:
-
-```python
-from src.themes import Theme, ColorScheme, LayoutConfig
-
-# Create custom theme
-theme = Theme(
-    name="My Custom Theme",
-    description="Created programmatically",
-    author="Script",
-    colors=ColorScheme(
-        background="#1E1E1E",
-        foreground="#D4D4D4",
-        # ... other colors
-    ),
-    layout=LayoutConfig(
-        default_font_family="Arial",
-        # ... other settings
-    )
-)
-
-# Save to file
-from pathlib import Path
-theme.save_to_file(Path.home() / ".ParVu/themes/custom.json")
-```
+A theme is a plain JSON file, so you can generate one with any tool: export a built-in theme as a template, change the values, and save it in `~/.ParVu/themes/`. Fields you leave out take the default theme's values. ParVu lists the new theme the next time the theme selector opens.
 
 ### Dynamic Themes
 
-Themes are loaded at startup but can be changed at runtime via the theme selector.
+Switching themes in the theme selector applies immediately, without a restart.
 
 ## FAQ
 
@@ -443,7 +419,7 @@ Popular community themes may be included as built-ins in future releases!
 
 - **Documentation:** This file
 - **Issues:** https://github.com/AzizNadirov/ParVu/issues
-- **Logs:** `~/.ParVu/logs/parvu_*.log`
+- **Logs:** `~/.ParVu/logs/`
 - **Contact:** See README.md
 
 ---

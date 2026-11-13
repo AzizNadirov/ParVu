@@ -1,263 +1,45 @@
 #!/bin/bash
-# Build script for ParVu - Linux build
-# Creates both a standalone binary and a .deb package
+# Build ParVu and its installer.
+#
+#   ./build.sh          package "parvu" (.deb on Linux, setup.exe on Windows)
+#   ./build.sh --beta   package "parvu-next", which installs next to "parvu"
+#
+# Linux build dependencies (Debian/Ubuntu):
+#   sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+#        libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
+# plus Rust (rustup) and Node.js 20+.
+#
+# DuckDB is compiled from source on the first build. .cargo/config.toml caps
+# cargo at 4 parallel jobs so this fits in 16 GB of RAM.
+set -euo pipefail
+cd "$(dirname "$0")"
 
-set -e  # Exit on error
+BETA=0
+[[ "${1:-}" == "--beta" ]] && BETA=1
 
-echo "==================================="
-echo "ParVu Linux Build Script"
-echo "==================================="
+echo "==> Installing UI dependencies"
+npm --prefix ui ci
 
-# Get version from pyproject.toml
-VERSION=$(grep "^version" pyproject.toml | cut -d'"' -f2)
-echo "Building ParVu v${VERSION}"
+echo "==> Checking and testing the UI"
+npm --prefix ui run typecheck
+npm --prefix ui test
 
-# Colors for output
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+echo "==> Testing the Rust crates"
+cargo test -p parvu-core -p parvu-dsl -p parvu-config
 
-# Clean previous builds
-echo -e "${BLUE}Cleaning previous builds...${NC}"
-rm -rf build dist ParVu*.deb
+case "$(uname -s)" in
+  Linux*) BUNDLES="deb" ;;
+  MINGW*|MSYS*|CYGWIN*) BUNDLES="nsis" ;;
+  *) BUNDLES="" ;;
+esac
 
-# Install build dependencies
-echo -e "${BLUE}Installing build dependencies...${NC}"
-uv sync --extra build
+ARGS=(build)
+[[ -n "$BUNDLES" ]] && ARGS+=(--bundles "$BUNDLES")
+[[ $BETA -eq 1 ]] && ARGS+=(--config tauri.next.conf.json)
 
-# The spec file is versioned in the repo; never generate a stand-in.
-if [ ! -f "parvu.spec" ]; then
-    echo "ERROR: parvu.spec not found. Restore it from git." >&2
-    exit 1
-fi
+echo "==> Building the app (${BUNDLES:-no installer})"
+(cd crates/parvu-app && npx --prefix ../../ui tauri "${ARGS[@]}")
 
-# Build with PyInstaller
-echo -e "${BLUE}Building standalone binary with PyInstaller...${NC}"
-uv run pyinstaller parvu.spec --clean --noconfirm
-
-# Check if build succeeded
-if [ -d "dist/parvu" ]; then
-    echo -e "${GREEN}✓ Standalone binary built successfully${NC}"
-    echo "Location: dist/parvu/"
-else
-    echo "ERROR: Build failed!"
-    exit 1
-fi
-
-# Verify bundled resources sit where parvu.RESOURCES_DIR expects them
-for res in settings/settings.json settings/default_settings.json history/recents.json static; do
-    if [ ! -e "dist/parvu/_internal/parvu/resources/${res}" ]; then
-        echo "ERROR: missing bundled resource parvu/resources/${res}" >&2
-        exit 1
-    fi
-done
-echo -e "${GREEN}✓ Bundled resources verified${NC}"
-
-# Create .deb package structure
-echo -e "${BLUE}Creating .deb package...${NC}"
-
-DEB_DIR="ParVu-${VERSION}-deb"
-mkdir -p ${DEB_DIR}/DEBIAN
-mkdir -p ${DEB_DIR}/usr/local/bin
-mkdir -p ${DEB_DIR}/usr/share/applications
-mkdir -p ${DEB_DIR}/usr/share/parvu
-mkdir -p ${DEB_DIR}/usr/share/doc/parvu
-mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/256x256/apps
-mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/128x128/apps
-mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/64x64/apps
-mkdir -p ${DEB_DIR}/usr/share/icons/hicolor/48x48/apps
-
-# Copy binary
-cp -r dist/parvu/* ${DEB_DIR}/usr/share/parvu/
-
-# Generate and copy application icons in different sizes
-echo -e "${BLUE}Generating application icons...${NC}"
-
-# Check if ImageMagick is available, otherwise try Python with PIL
-if command -v convert &> /dev/null; then
-    # Use ImageMagick to resize icons
-    convert assets/parvu.png -resize 256x256 ${DEB_DIR}/usr/share/icons/hicolor/256x256/apps/parvu.png
-    convert assets/parvu.png -resize 128x128 ${DEB_DIR}/usr/share/icons/hicolor/128x128/apps/parvu.png
-    convert assets/parvu.png -resize 64x64 ${DEB_DIR}/usr/share/icons/hicolor/64x64/apps/parvu.png
-    convert assets/parvu.png -resize 48x48 ${DEB_DIR}/usr/share/icons/hicolor/48x48/apps/parvu.png
-    echo -e "${GREEN}✓ Icons generated with ImageMagick${NC}"
-elif uv run python3 -c "import PIL" 2>/dev/null; then
-    # Use Python with PIL
-    uv run python3 << PYEOF
-from PIL import Image
-
-icon_path = 'assets/parvu.png'
-img = Image.open(icon_path)
-
-sizes = {
-    '256x256': 256,
-    '128x128': 128,
-    '64x64': 64,
-    '48x48': 48
-}
-
-for size_name, size in sizes.items():
-    icon_resized = img.resize((size, size), Image.Resampling.LANCZOS)
-    output_path = f'${DEB_DIR}/usr/share/icons/hicolor/{size_name}/apps/parvu.png'
-    icon_resized.save(output_path, 'PNG')
-    print(f'Created {size_name} icon')
-PYEOF
-    echo -e "${GREEN}✓ Icons generated with Python/PIL${NC}"
-else
-    # Fallback: just copy the original icon to all sizes
-    echo -e "${BLUE}ImageMagick and PIL not available, using original icon for all sizes${NC}"
-    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/256x256/apps/parvu.png
-    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/128x128/apps/parvu.png
-    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/64x64/apps/parvu.png
-    cp assets/parvu.png ${DEB_DIR}/usr/share/icons/hicolor/48x48/apps/parvu.png
-    echo -e "${GREEN}✓ Icons copied${NC}"
-fi
-
-# Create launcher script
-cat > ${DEB_DIR}/usr/local/bin/parvu << 'EOF'
-#!/bin/bash
-cd /usr/share/parvu
-exec ./parvu "$@"
-EOF
-chmod +x ${DEB_DIR}/usr/local/bin/parvu
-
-# Create desktop entry with file associations
-cat > ${DEB_DIR}/usr/share/applications/parvu.desktop << EOF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=ParVu
-GenericName=Parquet File Viewer
-Comment=View and query Parquet, CSV, and JSON files
-Exec=/usr/local/bin/parvu %F
-Icon=parvu
-Terminal=false
-Categories=Development;Utility;Database;
-Keywords=parquet;csv;json;viewer;data;database;query;sql;
-MimeType=application/x-parquet;application/vnd.apache.parquet;text/csv;text/comma-separated-values;application/json;
-StartupNotify=true
-EOF
-
-# Create MIME type definitions for Parquet files
-mkdir -p ${DEB_DIR}/usr/share/mime/packages
-cat > ${DEB_DIR}/usr/share/mime/packages/parvu.xml << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-  <mime-type type="application/x-parquet">
-    <comment>Apache Parquet file</comment>
-    <comment xml:lang="en">Apache Parquet file</comment>
-    <glob pattern="*.parquet"/>
-    <glob pattern="*.pq"/>
-    <magic priority="50">
-      <match type="string" offset="0" value="PAR1"/>
-    </magic>
-    <icon name="parvu"/>
-    <generic-icon name="x-office-spreadsheet"/>
-  </mime-type>
-  <mime-type type="application/vnd.apache.parquet">
-    <comment>Apache Parquet file</comment>
-    <glob pattern="*.parquet"/>
-    <glob pattern="*.pq"/>
-    <icon name="parvu"/>
-  </mime-type>
-</mime-info>
-EOF
-
-# Create postinst script to update MIME database and desktop database
-cat > ${DEB_DIR}/DEBIAN/postinst << 'EOF'
-#!/bin/bash
-set -e
-
-# Update MIME database
-if [ -x /usr/bin/update-mime-database ]; then
-    update-mime-database /usr/share/mime || true
-fi
-
-# Update desktop database
-if [ -x /usr/bin/update-desktop-database ]; then
-    update-desktop-database /usr/share/applications || true
-fi
-
-# Update icon cache
-if [ -x /usr/bin/gtk-update-icon-cache ]; then
-    gtk-update-icon-cache -f /usr/share/icons/hicolor || true
-fi
-
-echo "ParVu installed successfully!"
-echo "You can now set ParVu as the default application for .parquet, .csv, and .json files"
-echo "Right-click on a file → Properties → Open With → ParVu"
-
-exit 0
-EOF
-chmod +x ${DEB_DIR}/DEBIAN/postinst
-
-# Create postrm script to clean up
-cat > ${DEB_DIR}/DEBIAN/postrm << 'EOF'
-#!/bin/bash
-set -e
-
-if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
-    # Update MIME database
-    if [ -x /usr/bin/update-mime-database ]; then
-        update-mime-database /usr/share/mime || true
-    fi
-
-    # Update desktop database
-    if [ -x /usr/bin/update-desktop-database ]; then
-        update-desktop-database /usr/share/applications || true
-    fi
-fi
-
-exit 0
-EOF
-chmod +x ${DEB_DIR}/DEBIAN/postrm
-
-# Create control file
-cat > ${DEB_DIR}/DEBIAN/control << EOF
-Package: parvu
-Version: ${VERSION}
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: ParVu Developers <https://github.com/AzizNadirov/ParVu>
-Description: Parquet, CSV, and JSON File Viewer
- ParVu is a powerful desktop application for viewing and querying
- large Parquet, CSV, and JSON files. Built with PyQt6 and DuckDB
- for efficient data handling.
- .
- Features:
-  - Support for Parquet, CSV, and JSON files
-  - SQL querying with DuckDB
-  - Lazy loading for huge files (8GB+)
-  - Excel-like filtering and sorting
-  - Multiple export formats
-  - Theme system with customization
-  - Multi-language support
-EOF
-
-# Copy documentation
-cp README.md ${DEB_DIR}/usr/share/doc/parvu/
-if [ -f "CHANGELOG.md" ]; then
-    cp CHANGELOG.md ${DEB_DIR}/usr/share/doc/parvu/
-fi
-
-# Build .deb package
-dpkg-deb --build ${DEB_DIR}
-mv ${DEB_DIR}.deb ParVu-${VERSION}-amd64.deb
-
-# Cleanup
-rm -rf ${DEB_DIR}
-
-echo -e "${GREEN}==================================="
-echo -e "Build completed successfully!"
-echo -e "===================================${NC}"
-echo ""
-echo "Outputs:"
-echo "  1. Standalone binary: dist/parvu/"
-echo "  2. Debian package: ParVu-${VERSION}-amd64.deb"
-echo ""
-echo "To install the .deb package:"
-echo "  sudo dpkg -i ParVu-${VERSION}-amd64.deb"
-echo ""
-echo "To run the standalone binary:"
-echo "  cd dist/parvu && ./parvu"
+echo
+echo "Done. Installers are in target/release/bundle/"
+ls -1 target/release/bundle/*/* 2>/dev/null || true

@@ -1,5 +1,6 @@
-//! Golden tests: Rust output must equal the Python DSL output recorded by
-//! `scripts/dsl_golden.py` in `tests/golden/dsl.json`.
+//! Golden tests against `tests/golden/dsl.json`, which records the output of
+//! the original Python implementation for 306 expressions. Entries in the
+//! allowlist below are cases where the Python output was wrong.
 
 use std::collections::HashMap;
 

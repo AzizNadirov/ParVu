@@ -1,6 +1,6 @@
 # ParVu Rust Rewrite — Plan
 
-> Status: phases 0–6 implemented on the working tree, Phase 7 (beta and cutover) not started. See [§12](#12-implementation-status).
+> Status: phases 0–6 done; Phase 7 cutover done on the `rust-rewrite` branch (Python code removed), beta testing and merge pending. See [§12](#12-implementation-status).
 > Target: ParVu 1.0 as a Rust application, replacing the Python/PyQt6 app.
 > Owner: @AzizNadirov.
 > Last revised: 2026-11-12.
@@ -312,15 +312,15 @@ The Rust beta was checked end to end on a headless X display: opening files from
 |---|---|
 | 0. Spike | Toolkit chosen: Tauri 2. The UI uses **React** instead of Svelte, because Glide Data Grid is a React component. Baseline numbers are not recorded yet. |
 | 1. Core | `crates/parvu-core`: engine, Parquet/CSV/JSON/Excel sources, paging, cell edits, operations, export, statistics, search. |
-| 2. DSL | `crates/parvu-dsl`: pest grammar, resolver, compiler, registry, golden tests against the Python implementation (`scripts/dsl_golden.py`). |
+| 2. DSL | `crates/parvu-dsl`: pest grammar, resolver, compiler, registry, golden tests against output recorded from the Python implementation (`tests/golden/dsl.json`). |
 | 3. Config | `crates/parvu-config`: settings, recents, app state, translations, themes. Reads existing `~/.ParVu` folders unchanged. |
 | 4–5. App and UI | `crates/parvu-app` (Tauri commands) and `ui/` (React): every window feature and dialog from the parity checklist in §7. |
-| 6. Packaging | `build-rust.sh` builds a `parvu-next` beta package by default and the final `parvu` package with `--final`. CI (`.github/workflows/rust.yml`) passes on Linux and Windows: tests and clippy with a prebuilt DuckDB (about 4 minutes), Python tests, and on `main`, tags or manual runs the `.deb` (28 MB) and Windows `setup.exe` (14 MB) installers plus a clean-home smoke test on Linux. Windows ships an NSIS installer only, because MSI rejects pre-release versions. |
+| 6. Packaging | `build.sh` builds the `parvu` package, or the `parvu-next` beta with `--beta`. CI (`.github/workflows/ci.yml`) passes on Linux and Windows: tests and clippy with a prebuilt DuckDB (about 4 minutes), Python tests, and on `main`, tags or manual runs the `.deb` (28 MB) and Windows `setup.exe` (14 MB) installers plus a clean-home smoke test on Linux. Windows ships an NSIS installer only, because MSI rejects pre-release versions. |
 
 ### Changes from the plan
 
 - **Pages are sent as formatted text, not Arrow IPC.** Rust formats each cell with Arrow's own formatter. The UI needs no type-specific formatting code, and a page of a few hundred rows is small.
-- **Translations moved to JSON.** `crates/parvu-config/locales/*.json` is now the source of truth. Keys were exported once from the Python locale files with `scripts/export_locales.py`, and new keys were added there in all three languages. Running the export script again would drop the new keys.
+- **Translations moved to JSON.** `crates/parvu-config/locales/*.json` is now the source of truth. Keys were exported once from the Python locale files, and new keys were added there in all three languages.
 - **Cell edits use an overlay view** instead of rewriting the file: each tab's view replaces edited cells by row number, so queries, joins and saves see edits without loading the file into memory.
 
 ### Python behaviour that was fixed rather than copied
@@ -336,5 +336,5 @@ The Rust beta was checked end to end on a headless X display: opening files from
 ### Remaining work
 
 1. Run the Windows installer on a real Windows machine. CI builds it and runs the tests on Windows, but nobody has opened the app there yet.
-2. Phase 7: ship `parvu-next` to users, collect feedback, then cut over with `./build-rust.sh --final` and remove the Python code.
+2. Phase 7: the Python code is removed on the `rust-rewrite` branch and `./build.sh` now builds the `parvu` package that replaces it (`--beta` builds `parvu-next`). Still to do: use the beta, merge, and tag a release.
 3. Decide the open questions in §11. Plugins were dropped; settings stay in `~/.ParVu`.

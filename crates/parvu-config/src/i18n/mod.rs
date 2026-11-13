@@ -1,11 +1,11 @@
-//! Translations, ported from `infrastructure/i18n`.
+//! Translations.
 //!
-//! The catalogs are flat JSON maps exported from the Python locale modules by
-//! `scripts/export_locales.py` and embedded at compile time. Lookup order is
-//! the current language, then English, then the key itself. Formatting
-//! follows Python `str.format` (see [`format`]): with no arguments the text is
-//! returned untouched; if formatting fails the unformatted text is returned
-//! and a warning logged, as in the Python app.
+//! The catalogs are the flat JSON maps in `locales/` (one key per string; add
+//! new keys to all three files), embedded at compile time. Lookup order is
+//! the current language, then English, then the key itself. Placeholders
+//! follow Python `str.format` syntax (see [`format`]), which the locale
+//! files were written in: with no arguments the text is returned untouched;
+//! if formatting fails the unformatted text is returned and a warning logged.
 
 pub mod format;
 
