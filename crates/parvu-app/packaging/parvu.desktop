@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ParVu
+GenericName=Parquet File Viewer
+Comment=View and query Parquet, CSV, JSON and Excel files
+Exec={{exec}} %F
+Icon={{icon}}
+StartupWMClass={{exec}}
+Terminal=false
+Categories={{categories}}
+Keywords=parquet;csv;json;excel;viewer;data;database;query;sql;
+MimeType=application/vnd.apache.parquet;application/x-parquet;text/csv;text/comma-separated-values;application/json;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;
+StartupNotify=true

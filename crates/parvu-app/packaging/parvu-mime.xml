@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.apache.parquet">
+    <comment>Apache Parquet file</comment>
+    <glob pattern="*.parquet"/>
+    <glob pattern="*.pq"/>
+    <magic priority="50">
+      <match type="string" offset="0" value="PAR1"/>
+    </magic>
+    <icon name="parvu"/>
+    <generic-icon name="x-office-spreadsheet"/>
+  </mime-type>
+</mime-info>

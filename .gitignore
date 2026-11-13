@@ -189,3 +189,9 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Rust / Tauri / UI
+/target/
+/ui/node_modules/
+/ui/dist/
+/crates/parvu-app/gen/

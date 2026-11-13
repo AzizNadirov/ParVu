@@ -112,6 +112,47 @@ uv run python src/app.py
 
 See [BUILDING.md](BUILDING.md) for complete build guide.
 
+### Rust version (beta)
+
+ParVu is being rewritten in Rust with a Tauri window and a React UI. The plan is in
+[plans/RUST_REWRITE_PLAN.md](plans/RUST_REWRITE_PLAN.md). It reads the same `~/.ParVu`
+settings, recent files and themes as the Python app.
+
+Linux build requirements (Debian/Ubuntu), plus Rust and Node.js 20 or newer:
+
+```bash
+sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+     libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
+```
+
+Build and install the beta package, which installs as `parvu-next` next to the Python app:
+
+```bash
+./build-rust.sh
+sudo dpkg -i target/release/bundle/deb/*.deb
+parvu-next
+```
+
+`./build-rust.sh --final` builds the `parvu` package that replaces the Python app.
+
+| Path | Contents |
+|------|----------|
+| `crates/parvu-core` | DuckDB engine, tabs, cell edits, operations, export |
+| `crates/parvu-dsl` | Expression language parser and compiler |
+| `crates/parvu-config` | Settings, recent files, translations, themes |
+| `crates/parvu-app` | Tauri app: window and commands |
+| `ui/` | React UI |
+
+Run the tests with:
+
+```bash
+cargo test -p parvu-core -p parvu-dsl -p parvu-config
+npm --prefix ui test
+```
+
+The first build compiles DuckDB from C++ source, which takes several minutes.
+`.cargo/config.toml` limits cargo to 4 parallel jobs so the build fits in 16 GB of RAM.
+
 ## How to Use
 
 ### Launch Application
