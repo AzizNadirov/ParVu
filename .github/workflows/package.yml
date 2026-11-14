@@ -4,6 +4,11 @@ name: Package
 # uploads both as the artifacts "parvu-<os>". Called by ci.yml and release.yml.
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: "Commit, branch or tag to build (default: the triggering commit)"
+        type: string
+        default: ""
 
 jobs:
   package:
@@ -13,6 +18,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: System libraries
         if: runner.os == 'Linux'
         run: |

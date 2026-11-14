@@ -122,8 +122,9 @@ for rel in json.load(sys.stdin):
   curl -fL --progress-bar -o "$deb" "$deb_url"
   if [[ "$sums_url" != "-" ]]; then
     curl -fsSL -o "$work/SHA256SUMS.txt" "$sums_url"
-    (cd "$work" && grep " $(basename "$deb")\$" SHA256SUMS.txt | sha256sum -c --quiet -) \
-      || die "checksum mismatch for $(basename "$deb")"
+    # Compare by hash: GitHub can change characters in asset names.
+    sum=$(sha256sum "$deb" | cut -d' ' -f1)
+    grep -q "^$sum " "$work/SHA256SUMS.txt" || die "checksum mismatch for $(basename "$deb")"
     echo "    checksum OK"
   fi
   install_deb "$deb"

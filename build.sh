@@ -51,6 +51,9 @@ ARGS=(build --features bundled-duckdb)
 [[ -n "$BUNDLES" ]] && ARGS+=(--bundles "$BUNDLES")
 [[ $BETA -eq 1 ]] && ARGS+=(--config tauri.next.conf.json)
 
+# Old packages would otherwise be listed and repacked with the new one.
+rm -f target/release/bundle/deb/*.deb
+
 echo "==> Building the app (${BUNDLES:-no installer})"
 (cd crates/parvu-app && npx --prefix ../../ui tauri "${ARGS[@]}")
 
