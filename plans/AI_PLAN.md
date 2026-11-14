@@ -3,6 +3,7 @@
 > **Status:** proposal, not implemented.
 > **Revised:** 2026-11-14 for the Rust app (Tauri, React, DuckDB). The earlier version, written for the Python/PyQt6 app, is in git history (`git log -p plans/AI_PLAN.md`).
 > **Target:** a `1.1.0` preview after the `1.0.0` release.
+> **Progress:** milestone A is done (`parvu-core/src/readonly.rs`, `Workspace::preview_op`, the `schema` feature).
 
 The assistant lets people ask questions about their data in plain language and get either an answer, which it works out by inspecting the data with read-only tools, or a proposed change to the table, which the user approves before it runs. It never changes data on its own.
 
@@ -446,7 +447,16 @@ All strings go through `t()`, with keys under `ai.*` (`ai.panel.title`, `ai.prop
 
 ## 15. Milestones
 
-**A: Data side (no AI yet).**
+**A: Data side (no AI yet). Done.**
+- `parvu_core::readonly`:
+  - `ReadSession`: a snapshot of every tab's current result on its own connection, with `query` (guarded, row cap, timeout), `describe_table`, `sample`, `value_counts`, `column_stats` and `check_operation`;
+  - `guard_select`: the §6 guard.
+- `Workspace::read_session`, `Workspace::preview_op` and `Workspace::build_op`.
+- `parvu-core` feature `schema`: `schemars` derives and `ops::operation_schema()`.
+- `DataTools` (§4.1) will be a thin trait in `parvu-ai` implemented over `ReadSession`.
+- Plain table functions that read no files (`range`, `generate_series`, `unnest`) are allowed. `AddColumn` / `Replace` expressions are checked with the same guard, so a proposal can't read files either.
+
+The original plan for A:
 - A1. `preview_op` and the SQL guard in `parvu-core`, with tests.
 - A2. Optional `schemars` derive on `Operation` and its parameter types, with doc comments on each variant.
 - A3. The `DataTools` implementation in `parvu-app` over a cloned connection, with interrupt.
