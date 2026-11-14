@@ -462,6 +462,193 @@ impl FunctionRegistry {
             Some("REPLACE"),
         );
 
+        // More conditionals
+        add(
+            "IFNULL",
+            vec![p("value", LT::Unknown), p("fallback", LT::Unknown)],
+            LT::Unknown,
+            "The value, or the fallback where the value is NULL (pandas fillna).",
+            "IFNULL(sales[discount], 0)",
+            Some("IFNULL"),
+        );
+        add(
+            "GREATEST",
+            vec![p("a", LT::Unknown), p("b", LT::Unknown)],
+            LT::Unknown,
+            "The largest of the arguments (any number of them).",
+            "GREATEST(sales[price], 0)",
+            Some("GREATEST"),
+        );
+        add(
+            "LEAST",
+            vec![p("a", LT::Unknown), p("b", LT::Unknown)],
+            LT::Unknown,
+            "The smallest of the arguments (any number of them).",
+            "LEAST(sales[qty], 100)",
+            Some("LEAST"),
+        );
+
+        // More text functions
+        add(
+            "SPLIT_PART",
+            vec![p("text", LT::Text), p("separator", LT::Text), p("index", LT::Numeric)],
+            LT::Text,
+            "The index-th piece (from 1) of text split by the separator.",
+            "SPLIT_PART(people[email], '@', 2)",
+            Some("SPLIT_PART"),
+        );
+        add(
+            "SUBSTR",
+            vec![p("text", LT::Text), p("start", LT::Numeric), opt("length", LT::Numeric)],
+            LT::Text,
+            "Part of the text from position start (from 1), optionally of a given length.",
+            "SUBSTR(sales[code], 1, 3)",
+            Some("SUBSTRING"),
+        );
+        add(
+            "LEFT",
+            vec![p("text", LT::Text), p("count", LT::Numeric)],
+            LT::Text,
+            "The first count characters.",
+            "LEFT(sales[code], 2)",
+            Some("LEFT"),
+        );
+        add(
+            "RIGHT",
+            vec![p("text", LT::Text), p("count", LT::Numeric)],
+            LT::Text,
+            "The last count characters.",
+            "RIGHT(sales[code], 4)",
+            Some("RIGHT"),
+        );
+        add(
+            "LPAD",
+            vec![p("text", LT::Text), p("length", LT::Numeric), p("fill", LT::Text)],
+            LT::Text,
+            "Pad text on the left with fill up to length characters.",
+            "LPAD(CAST(sales[id], 'VARCHAR'), 6, '0')",
+            Some("LPAD"),
+        );
+        add(
+            "RPAD",
+            vec![p("text", LT::Text), p("length", LT::Numeric), p("fill", LT::Text)],
+            LT::Text,
+            "Pad text on the right with fill up to length characters.",
+            "RPAD(sales[code], 8, '_')",
+            Some("RPAD"),
+        );
+        add(
+            "REVERSE",
+            vec![p("text", LT::Text)],
+            LT::Text,
+            "The text backwards.",
+            "REVERSE(sales[code])",
+            Some("REVERSE"),
+        );
+        add(
+            "REGEX_EXTRACT",
+            vec![p("text", LT::Text), p("pattern", LT::Text), opt("group", LT::Numeric)],
+            LT::Text,
+            "The part of the text matching a regular expression, or one of its groups (pandas str.extract).",
+            "REGEX_EXTRACT(people[phone], '(\\d{3})', 1)",
+            Some("REGEXP_EXTRACT"),
+        );
+        add(
+            "REGEX_MATCH",
+            vec![p("text", LT::Text), p("pattern", LT::Text)],
+            LT::Boolean,
+            "True where the text contains a match of the regular expression.",
+            "REGEX_MATCH(people[email], '@example\\.com$')",
+            Some("REGEXP_MATCHES"),
+        );
+
+        // More date functions
+        add(
+            "STRFTIME",
+            vec![p("date", LT::Unknown), p("format", LT::Text)],
+            LT::Text,
+            "Format a date or timestamp as text, e.g. '%Y-%m' or '%d.%m.%Y'.",
+            "STRFTIME(sales[day], '%Y-%m')",
+            Some("STRFTIME"),
+        );
+        add(
+            "STRPTIME",
+            vec![p("text", LT::Text), p("format", LT::Text)],
+            LT::Timestamp,
+            "Parse text into a timestamp with a format such as '%d.%m.%Y'.",
+            "STRPTIME(sales[day_text], '%d.%m.%Y')",
+            Some("STRPTIME"),
+        );
+        add(
+            "QUARTER",
+            vec![p("date", LT::Date)],
+            LT::Numeric,
+            "Quarter of the year (1-4).",
+            "QUARTER(sales[day])",
+            Some("QUARTER"),
+        );
+        add(
+            "WEEK",
+            vec![p("date", LT::Date)],
+            LT::Numeric,
+            "ISO week of the year (1-53).",
+            "WEEK(sales[day])",
+            Some("WEEK"),
+        );
+        add(
+            "DAYOFWEEK",
+            vec![p("date", LT::Date)],
+            LT::Numeric,
+            "Day of the week, 0 = Sunday to 6 = Saturday.",
+            "DAYOFWEEK(sales[day])",
+            Some("DAYOFWEEK"),
+        );
+        add(
+            "HOUR",
+            vec![p("timestamp", LT::Timestamp)],
+            LT::Numeric,
+            "Hour (0-23).",
+            "HOUR(events[time])",
+            Some("HOUR"),
+        );
+        add(
+            "MINUTE",
+            vec![p("timestamp", LT::Timestamp)],
+            LT::Numeric,
+            "Minute (0-59).",
+            "MINUTE(events[time])",
+            Some("MINUTE"),
+        );
+        add(
+            "DATE_TRUNC",
+            vec![p("part", LT::Text), p("date", LT::Unknown)],
+            LT::Date,
+            "Round a date down to the start of its 'year', 'quarter', 'month', 'week', 'day' or 'hour' (pandas dt.floor).",
+            "DATE_TRUNC('month', sales[day])",
+            Some("DATE_TRUNC"),
+        );
+
+        // More math
+        add("LN", vec![p("value", LT::Numeric)], LT::Numeric, "Natural logarithm.", "LN(sales[price])", Some("LN"));
+        add("LOG10", vec![p("value", LT::Numeric)], LT::Numeric, "Base-10 logarithm.", "LOG10(sales[price])", Some("LOG10"));
+        add("EXP", vec![p("value", LT::Numeric)], LT::Numeric, "e raised to the value.", "EXP(sales[rate])", Some("EXP"));
+        add(
+            "MOD",
+            vec![p("value", LT::Numeric), p("divisor", LT::Numeric)],
+            LT::Numeric,
+            "Remainder of a division.",
+            "MOD(sales[id], 10)",
+            Some("MOD"),
+        );
+        add(
+            "SIGN",
+            vec![p("value", LT::Numeric)],
+            LT::Numeric,
+            "-1, 0 or 1 by the sign of the value.",
+            "SIGN(sales[change])",
+            Some("SIGN"),
+        );
+
         // Table-level operations
         add(
             "DROP_DUPLICATES",
@@ -502,7 +689,7 @@ mod tests {
     #[test]
     fn defaults() {
         let r = FunctionRegistry::default();
-        assert_eq!(r.all_functions().len(), 33);
+        assert_eq!(r.all_functions().len(), 33 + 25);
         assert_eq!(r.lookup("sum").unwrap().name, "SUM");
         assert_eq!(
             r.lookup("countd").unwrap().sql_name.as_deref(),

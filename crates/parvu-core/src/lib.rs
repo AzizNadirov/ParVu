@@ -3,6 +3,7 @@
 //! Everything here is UI-independent. The Tauri app wraps [`Workspace`] in a
 //! mutex and exposes its methods as commands.
 
+pub mod clean;
 pub mod edits;
 pub mod engine;
 pub mod error;
@@ -11,9 +12,11 @@ pub mod format;
 pub mod ops;
 pub mod page;
 pub mod pagination;
+pub mod reshape;
 pub mod search;
 pub mod sql;
 pub mod stats;
+pub mod window;
 pub mod workspace;
 
 pub use duckdb;

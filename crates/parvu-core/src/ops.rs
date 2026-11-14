@@ -9,9 +9,12 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::clean::{BinMethod, Combine, Condition, FillMethod, SliceMode, SortKey};
 use crate::error::{CoreError, Result};
 use crate::page::{Cell, ColumnMeta};
+use crate::reshape::{AggFunc, Aggregation};
 use crate::sql::{is_safe_type_name, quote_ident, quote_literal};
+use crate::window::WindowSpec;
 
 /// i18n key plus named arguments, translated by the UI.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,7 +60,7 @@ impl JoinType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Operation {
     Sort { column: String, ascending: bool },
@@ -94,6 +97,133 @@ pub enum Operation {
         output_column: String,
         expression: String,
     },
+
+    // Reshaping (crate::reshape)
+    /// One row per group with the aggregations (pandas `groupby().agg()`).
+    GroupBy { by: Vec<String>, aggregations: Vec<Aggregation> },
+    /// One output column per distinct value of `columns` (pandas `pivot_table`).
+    Pivot {
+        #[serde(default)]
+        index: Vec<String>,
+        columns: String,
+        /// `None` counts rows (a crosstab).
+        #[serde(default)]
+        values: Option<String>,
+        func: AggFunc,
+    },
+    /// Columns to rows (pandas `melt`). Empty `value_columns` means all others.
+    Melt {
+        #[serde(default)]
+        id_columns: Vec<String>,
+        #[serde(default)]
+        value_columns: Vec<String>,
+        variable_name: String,
+        value_name: String,
+    },
+    /// Rows to columns and columns to rows (pandas `df.T`).
+    Transpose {
+        /// Column whose values name the new columns.
+        #[serde(default)]
+        header_column: Option<String>,
+    },
+    ValueCounts {
+        columns: Vec<String>,
+        #[serde(default)]
+        normalize: bool,
+        #[serde(default)]
+        dropna: bool,
+    },
+    /// One row of statistics per column (pandas `describe`).
+    Describe,
+
+    // Filtering and cleaning (crate::clean)
+    Filter {
+        conditions: Vec<Condition>,
+        #[serde(default)]
+        combine: Combine,
+    },
+    FillNull {
+        /// Empty means all columns.
+        #[serde(default)]
+        columns: Vec<String>,
+        method: FillMethod,
+        #[serde(default)]
+        value: String,
+    },
+    SortBy { keys: Vec<SortKey> },
+    /// Keep these columns, in this order.
+    SelectColumns { columns: Vec<String> },
+    Slice {
+        mode: SliceMode,
+        n: u64,
+        #[serde(default)]
+        seed: Option<u64>,
+    },
+    SplitColumn {
+        column: String,
+        separator: String,
+        #[serde(default)]
+        regex: bool,
+        /// `None` uses the largest number of parts found.
+        #[serde(default)]
+        parts: Option<u32>,
+        #[serde(default)]
+        keep_original: bool,
+    },
+    Bin {
+        column: String,
+        method: BinMethod,
+        #[serde(default)]
+        bins: u32,
+        #[serde(default)]
+        edges: Vec<f64>,
+        #[serde(default)]
+        labels: Vec<String>,
+        output: String,
+    },
+
+    // Column functions (crate::window)
+    Window(WindowSpec),
+}
+
+/// Row-number column added internally to keep or use table order.
+pub const ROW_NUMBER: &str = "__pv_rn";
+
+/// `SELECT *, ROW_NUMBER() OVER () AS "__pv_rn" FROM (<query>)`.
+pub fn with_row_number(query: &str) -> String {
+    format!("SELECT *, ROW_NUMBER() OVER () AS {} FROM ({query})", quote_ident(ROW_NUMBER))
+}
+
+/// `wanted`, or `wanted_2`, `wanted_3`… if it is already taken.
+pub fn unique_name(taken: &[String], wanted: &str) -> String {
+    let wanted = if wanted.is_empty() { "column" } else { wanted };
+    if !taken.iter().any(|t| t == wanted) {
+        return wanted.to_string();
+    }
+    (2..).map(|n| format!("{wanted}_{n}")).find(|n| !taken.iter().any(|t| t == n)).unwrap_or_default()
+}
+
+/// A number as SQL text: integers without a fraction, others in full precision.
+pub fn fmt_number(f: f64) -> String {
+    if f.fract() == 0.0 && f.abs() < 1e15 { format!("{}", f as i64) } else { format!("{f:?}") }
+}
+
+/// SQL literal for a user-typed value compared with a column of type `dtype`:
+/// numbers must parse, other types are cast from text.
+pub fn typed_literal(raw: &str, dtype: &str) -> Result<String> {
+    let v = raw.trim();
+    let meta = ColumnMeta::new("", dtype);
+    if meta.is_numeric() {
+        if v.parse::<f64>().is_ok_and(f64::is_finite) {
+            Ok(v.to_string())
+        } else {
+            Err(CoreError::invalid(format!("'{raw}' is not a number")))
+        }
+    } else if is_safe_type_name(dtype) && !dtype.eq_ignore_ascii_case("VARCHAR") {
+        Ok(format!("CAST({} AS {dtype})", quote_literal(v)))
+    } else {
+        Ok(quote_literal(raw))
+    }
 }
 
 /// What an operation needs to know about the tab it runs on.
@@ -103,6 +233,9 @@ pub struct OpContext<'a> {
     pub columns: &'a [ColumnMeta],
     /// Current query of another tab by name, for joins and appends.
     pub other_query: &'a dyn Fn(&str) -> Option<String>,
+    /// Runs a read-only query and returns its rows as text, for operations
+    /// that depend on the data (pivot values, bin edges, split widths).
+    pub query: &'a dyn Fn(&str) -> Result<Vec<Vec<Cell>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,12 +245,12 @@ pub struct BuiltOp {
 }
 
 impl<'a> OpContext<'a> {
-    fn require(&self, column: &str) -> Result<()> {
-        if self.columns.iter().any(|c| c.name == column) {
-            Ok(())
-        } else {
-            Err(CoreError::UnknownColumn(column.to_string()))
-        }
+    pub(crate) fn require(&self, column: &str) -> Result<()> {
+        self.column(column).map(|_| ())
+    }
+
+    pub(crate) fn column(&self, column: &str) -> Result<&ColumnMeta> {
+        self.columns.iter().find(|c| c.name == column).ok_or_else(|| CoreError::UnknownColumn(column.to_string()))
     }
 
     fn other(&self, name: &str) -> Result<String> {
@@ -328,6 +461,30 @@ impl Operation {
                 };
                 (sql, StepLabel::new("step.replace", &[("column", column), ("pattern", pattern)]))
             }
+            Operation::GroupBy { by, aggregations } => crate::reshape::group_by(ctx, by, aggregations)?,
+            Operation::Pivot { index, columns, values, func } => {
+                crate::reshape::pivot(ctx, index, columns, values.as_deref(), *func)?
+            }
+            Operation::Melt { id_columns, value_columns, variable_name, value_name } => {
+                crate::reshape::melt(ctx, id_columns, value_columns, variable_name, value_name)?
+            }
+            Operation::Transpose { header_column } => crate::reshape::transpose(ctx, header_column.as_deref())?,
+            Operation::ValueCounts { columns, normalize, dropna } => {
+                crate::reshape::value_counts(ctx, columns, *normalize, *dropna)?
+            }
+            Operation::Describe => crate::reshape::describe(ctx)?,
+            Operation::Filter { conditions, combine } => crate::clean::filter(ctx, conditions, *combine)?,
+            Operation::FillNull { columns, method, value } => crate::clean::fill_null(ctx, columns, *method, value)?,
+            Operation::SortBy { keys } => crate::clean::sort_by(ctx, keys)?,
+            Operation::SelectColumns { columns } => crate::clean::select_columns(ctx, columns)?,
+            Operation::Slice { mode, n, seed } => crate::clean::slice(ctx, *mode, *n, *seed)?,
+            Operation::SplitColumn { column, separator, regex, parts, keep_original } => {
+                crate::clean::split_column(ctx, column, separator, *regex, *parts, *keep_original)?
+            }
+            Operation::Bin { column, method, bins, edges, labels, output } => {
+                crate::clean::bin(ctx, column, *method, *bins, edges, labels, output)?
+            }
+            Operation::Window(spec) => crate::window::window(ctx, spec)?,
         };
         Ok(BuiltOp { sql, label })
     }
@@ -337,6 +494,10 @@ impl Operation {
 mod tests {
     use super::*;
 
+    fn no_query(_: &str) -> Result<Vec<Vec<Cell>>> {
+        Ok(Vec::new())
+    }
+
     fn cols() -> Vec<ColumnMeta> {
         vec![ColumnMeta::new("id", "BIGINT"), ColumnMeta::new("name", "VARCHAR")]
     }
@@ -344,7 +505,7 @@ mod tests {
     fn build(op: Operation) -> Result<BuiltOp> {
         let c = cols();
         let other = |n: &str| if n == "b" { Some("SELECT * FROM \"b\"".to_string()) } else { None };
-        op.build(&OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other })
+        op.build(&OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other, query: &no_query })
     }
 
     #[test]
@@ -367,7 +528,7 @@ mod tests {
     fn remove_last_column_fails() {
         let c = vec![ColumnMeta::new("only", "BIGINT")];
         let other = |_: &str| None;
-        let ctx = OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other };
+        let ctx = OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other, query: &no_query };
         assert!(Operation::Remove { column: "only".into() }.build(&ctx).is_err());
         assert_eq!(build(Operation::Remove { column: "id".into() }).unwrap().sql, "SELECT \"name\" FROM (Q)");
     }
@@ -414,7 +575,7 @@ mod tests {
     fn duplicate_picks_free_name() {
         let c = vec![ColumnMeta::new("a", "BIGINT"), ColumnMeta::new("a_copy", "BIGINT")];
         let other = |_: &str| None;
-        let ctx = OpContext { table: "t", current_query: "Q", columns: &c, other_query: &other };
+        let ctx = OpContext { table: "t", current_query: "Q", columns: &c, other_query: &other, query: &no_query };
         let b = Operation::Duplicate { column: "a".into() }.build(&ctx).unwrap();
         assert_eq!(b.sql, "SELECT *, \"a\" AS \"a_copy2\" FROM (Q)");
     }

@@ -343,17 +343,22 @@ impl Workspace {
             // A sort right after another sort replaces it instead of wrapping
             // it: stacked ORDER BYs make DuckDB sort the whole result twice.
             // The earlier sort stays in the history, so undo still returns to it.
-            let last_was_sort =
-                t.steps.last().is_some_and(|s| s.kind == StepKind::Sql && s.label.key == "step.sort");
-            let source = match (op, last_was_sort, t.engine.previous_query()) {
-                (Operation::Sort { .. }, true, Some(before_sort)) => before_sort,
+            let last_was_sort = t.steps.last().is_some_and(|s| {
+                s.kind == StepKind::Sql && (s.label.key == "step.sort" || s.label.key == "step.sort_by")
+            });
+            let is_sort = matches!(op, Operation::Sort { .. } | Operation::SortBy { .. });
+            let source = match (is_sort, last_was_sort, t.engine.previous_query()) {
+                (true, true, Some(before_sort)) => before_sort,
                 _ => t.engine.current_query(),
             };
+            let conn = &self.conn;
+            let query = |sql: &str| crate::page::format_batches(&crate::engine::query_batches(conn, sql)?);
             op.build(&OpContext {
                 table: &t.name,
                 current_query: source,
                 columns: &columns,
                 other_query: &other,
+                query: &query,
             })?
         };
         self.run_sql(id, &built.sql, Some(built.label))
