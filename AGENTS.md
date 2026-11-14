@@ -12,7 +12,7 @@ How to find your way around ParVu and change it safely.
 - **User data:** `~/.ParVu` (settings, recent files, themes, logs), same format as the old Python app
 - **Entry point:** `crates/parvu-app/src/main.rs`
 
-The app was rewritten from Python/PyQt6; the plan and its status are in `plans/RUST_REWRITE_PLAN.md`. `plans/AI_PLAN.md` was written for the Python app and needs revising before use.
+The app was rewritten from Python/PyQt6; the plan and its status are in `plans/RUST_REWRITE_PLAN.md`. `plans/AI_PLAN.md` is the (not yet implemented) plan for the AI assistant and MCP server.
 
 ## Layout
 
