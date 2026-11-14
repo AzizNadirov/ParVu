@@ -7,6 +7,7 @@ import { Dialog } from "../components/Dialog";
 import { ColumnSelect } from "./common";
 import { isNumericType } from "./logic";
 import "./dialogs.css";
+import { Icon } from "../components/Icon";
 
 interface Args {
   columns: ColumnMeta[];
@@ -74,7 +75,7 @@ function ConditionalFormatDialog({ ui, close, a }: { ui: Ui; close: Closer<Forma
             <span className="pv-swatch" style={{ background: SWATCH[r.color] }} />
             <span className="grow">{describe(r)}</span>
             <button className="pv-icon-btn" title={t("btn.remove")} onClick={() => setRules((l) => l.filter((_, j) => j !== i))}>
-              ✕
+              <Icon name="close" />
             </button>
           </div>
         ))}

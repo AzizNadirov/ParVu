@@ -210,7 +210,7 @@ impl Default for Settings {
             result_pagination_rows_per_page: IntOrString::Int(100),
             save_file_history: "True".into(),
             max_rows: IntOrString::Int(100_000),
-            current_theme: "ParVu Light".into(),
+            current_theme: crate::themes::DEFAULT_THEME_NAME.into(),
             current_language: "en".into(),
             enable_large_dataset_warning: true,
             warning_criteria: WarningCriteria::Rows,

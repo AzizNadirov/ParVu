@@ -5,6 +5,7 @@ import { Dialog } from "../components/Dialog";
 import { ColumnSelect, RichText } from "./common";
 import { buildSortByOp, moveItem } from "./logic";
 import "./dialogs.css";
+import { Icon } from "../components/Icon";
 
 interface Args {
   table: string;
@@ -55,10 +56,10 @@ function SortDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>;
               {t("dialog.sort.nulls_first")}
             </label>
             <button className="pv-icon-btn" disabled={i === 0} onClick={() => setKeys((l) => moveItem(l, i, -1))}>
-              ▲
+              <Icon name="arrowUp" />
             </button>
             <button className="pv-icon-btn" disabled={i === keys.length - 1} onClick={() => setKeys((l) => moveItem(l, i, 1))}>
-              ▼
+              <Icon name="arrowDown" />
             </button>
             <button
               className="pv-icon-btn"
@@ -66,7 +67,7 @@ function SortDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>;
               disabled={keys.length === 1}
               onClick={() => setKeys((l) => l.filter((_, j) => j !== i))}
             >
-              ✕
+              <Icon name="close" />
             </button>
           </div>
         ))}

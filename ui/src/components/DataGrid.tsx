@@ -95,7 +95,7 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
       textMedium: cssVar("--pv-colors-table-foreground", "#737383"),
       textLight: cssVar("--pv-colors-status-foreground", "#999"),
       textHeader: cssVar("--pv-colors-table-header-foreground", "#313139"),
-      textHeaderSelected: "#ffffff",
+      textHeaderSelected: cssVar("--pv-derived-on-accent", "#ffffff"),
       bgCell: cssVar("--pv-colors-table-background", "#ffffff"),
       bgCellMedium: cssVar("--pv-derived-table-alternate-row", "#fafafb"),
       bgHeader: cssVar("--pv-colors-table-header-background", "#f7f7f8"),
@@ -105,7 +105,8 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
       horizontalBorderColor: cssVar("--pv-derived-table-grid", "rgba(115,116,131,0.16)"),
       fontFamily: `${font}, system-ui, sans-serif`,
       baseFontStyle: size,
-      headerFontStyle: `600 ${size}`,
+      headerFontStyle: `500 ${size}`,
+      cellHorizontalPadding: 10,
       markerFontStyle: size,
       editorFontSize: size,
     };

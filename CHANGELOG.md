@@ -10,6 +10,8 @@
 - **Conditional formatting:** colour scales and highlight rules; **freeze columns**; column widths kept per tab; **fill down** (`Ctrl+D`) as one undoable step.
 - **Expression functions:** `IFNULL`, `GREATEST`, `LEAST`, `SPLIT_PART`, `SUBSTR`, `LEFT`, `RIGHT`, `LPAD`, `RPAD`, `REVERSE`, `REGEX_EXTRACT`, `REGEX_MATCH`, `STRFTIME`, `STRPTIME`, `QUARTER`, `WEEK`, `DAYOFWEEK`, `HOUR`, `MINUTE`, `DATE_TRUNC`, `LN`, `LOG10`, `EXP`, `MOD`, `SIGN`.
 - Shortcuts: `Ctrl+Shift+L` filter, `Ctrl+G` group by, `Ctrl+D` fill down, `Ctrl+Shift+C` chart.
+- **Material Design 3 interface:** tonal, filled, outlined, text and icon buttons with ripples; outlined text fields; rounded dialogs, menus and cards with elevation; Material icons; app bar, tabs and progress bars in Material style. Works with every theme, including custom ones.
+- **Material Light** (new default) and **Material Dark** themes, with Roboto and Roboto Mono bundled.
 
 ## [1.0.0-alpha.1]
 

@@ -65,7 +65,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 
 ### UI
 - All user-visible text through `t(key, args)`; add new keys to all three files in `crates/parvu-config/locales/` (en, ru, az) with the same placeholders. `cargo test -p parvu-config` checks this.
-- Colours and fonts only from the theme's `--pv-*` CSS variables.
+- Colours and fonts only from the theme's `--pv-*` CSS variables or the Material `--md-*` tokens derived from them at the top of `ui/src/styles.css`. Buttons: default (tonal), `primary` (filled), `text`, `outlined`, `icon`; icons through `components/Icon.tsx` (`@mdi/js`).
 - Dialogs live in `ui/src/dialogs/`, one file each, opened with `openXxx(ui, args): Promise<Result>`; keep their pure logic in `dialogs/logic.ts` with tests.
 - Use `PopupMenu` for menus. Never block the window's own context menu in inputs or the editor.
 

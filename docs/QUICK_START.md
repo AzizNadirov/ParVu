@@ -46,7 +46,7 @@ While no transform is applied, you can type into any cell. Edited cells are high
 ## Language and theme
 
 - View → Language: English, Russian or Azerbaijani.
-- View → Theme: ParVu Light, Excel, ParVu Black, or your own.
+- View → Theme: Material Light (default), Material Dark, ParVu Light, Excel, ParVu Black, or your own.
 
 Both apply immediately.
 

@@ -70,6 +70,7 @@ import {
   openWindow,
   preloadDialogs,
 } from "./dialogs/lazy";
+import { Icon } from "./components/Icon";
 
 /** Per-tab UI state that lives only in the window. */
 interface TabUi {
@@ -1271,6 +1272,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                         if (st) st.mode = "sql";
                       }}
                     >
+                      {mode === "sql" && <Icon name="check" size={16} />}
                       {t("editor.mode.sql")}
                     </button>
                     <button
@@ -1280,6 +1282,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                         if (st) st.mode = "expression";
                       }}
                     >
+                      {mode === "expression" && <Icon name="check" size={16} />}
                       {t("editor.mode.expression")}
                     </button>
                   </div>
@@ -1300,20 +1303,44 @@ export function App({ boot }: { boot: Bootstrap }) {
                 {mode === "expression" && <div className="expr-preview mono ellipsis" title={preview}>{preview}</div>}
                 <div className="editor-actions row">
                   <button className="primary" disabled={busy} onClick={() => void execute()} title={t("editor.run_hint")}>
-                    ▶ {t("btn.execute")}
+                    <Icon name="run" />
+                    {t("btn.execute")}
                   </button>
-                  <button disabled={busy} onClick={() => void resetTab()}>
+                  <button className="outlined" disabled={busy} onClick={() => void resetTab()}>
+                    <Icon name="reset" />
                     {t("btn.reset")}
                   </button>
-                  <button onClick={() => void showTableInfo()}>{t("btn.table_info")}</button>
+                  <button className="outlined" onClick={() => void showTableInfo()}>
+                    <Icon name="info" />
+                    {t("btn.table_info")}
+                  </button>
                   <span className="muted small">{t("editor.run_hint")}</span>
                   <span className="spacer" />
-                  <button onClick={() => void runOpDialog(openFilter)}>⏷ {t("btn.filter")}</button>
-                  <button onClick={() => void runOpDialog(openGroupBy, undefined, true)}>Σ {t("btn.group_by")}</button>
-                  <button onClick={() => void showChart()}>📊 {t("btn.chart")}</button>
-                  <button onClick={() => void runMath()}>🧮 {t("menu.operations.math")}</button>
-                  <button onClick={() => void runJoin()}>🔗 {t("menu.operations.join")}</button>
-                  <button onClick={() => void runAppend()}>⬇ {t("menu.operations.append")}</button>
+                  <button className="text" onClick={() => void runOpDialog(openFilter)}>
+                    <Icon name="filter" />
+                    {t("btn.filter")}
+                  </button>
+                  <button className="text" onClick={() => void runOpDialog(openGroupBy, undefined, true)}>
+                    <Icon name="groupBy" />
+                    {t("btn.group_by")}
+                  </button>
+                  <button className="text" onClick={() => void showChart()}>
+                    <Icon name="chart" />
+                    {t("btn.chart")}
+                  </button>
+                  <span className="divider" />
+                  <button className="text" onClick={() => void runMath()}>
+                    <Icon name="math" />
+                    {t("menu.operations.math")}
+                  </button>
+                  <button className="text" onClick={() => void runJoin()}>
+                    <Icon name="join" />
+                    {t("menu.operations.join")}
+                  </button>
+                  <button className="text" onClick={() => void runAppend()}>
+                    <Icon name="append" />
+                    {t("menu.operations.append")}
+                  </button>
                 </div>
                 <div className="resize-handle" onMouseDown={startResize} />
               </section>
@@ -1366,7 +1393,7 @@ export function App({ boot }: { boot: Bootstrap }) {
           <span className="ellipsis grow">{statusText}</span>
           {activeTab && !activeTab.is_base_query && <span className="muted">{t("status.read_only")}</span>}
           {activeTab && activeTab.pending_edits > 0 && (
-            <span className="warn-text">📝 {t("status.unsaved_edits", { count: activeTab.pending_edits })}</span>
+            <span className="warn-text">{t("status.unsaved_edits", { count: activeTab.pending_edits })}</span>
           )}
           {activeTab && <span className="nowrap">{t("pagination.rows", { total_rows: activeTab.total_rows })}</span>}
         </footer>

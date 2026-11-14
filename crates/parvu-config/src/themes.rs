@@ -16,7 +16,7 @@ use crate::paths::AppPaths;
 use crate::settings::Settings;
 
 /// Name of the default theme, used when the configured one is missing.
-pub const DEFAULT_THEME_NAME: &str = "ParVu Light";
+pub const DEFAULT_THEME_NAME: &str = "Material Light";
 
 /// Colour scheme. Every field defaults to the Python model default.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -243,9 +243,12 @@ fn builtin(json: &str) -> Theme {
     Theme::from_json(json).expect("built-in theme JSON is valid (checked by tests)")
 }
 
-/// The built-in themes: "ParVu Light", "Excel", "ParVu Black".
+/// The built-in themes: "Material Light", "Material Dark", "ParVu Light",
+/// "Excel", "ParVu Black".
 pub fn builtin_themes() -> Vec<Theme> {
     vec![
+        builtin(include_str!("../themes/material_light.json")),
+        builtin(include_str!("../themes/material_dark.json")),
         builtin(include_str!("../themes/parvu_light.json")),
         builtin(include_str!("../themes/excel.json")),
         builtin(include_str!("../themes/parvu_black.json")),
@@ -267,6 +270,25 @@ fn css_string(v: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+/// Text colour for `color` (`#RGB` or `#RRGGBB`): white while it keeps a
+/// contrast of at least 3:1 (Material's bar for buttons), else black. White
+/// when the colour cannot be parsed.
+pub fn on_color(color: &str) -> &'static str {
+    let hex = color.trim().trim_start_matches('#');
+    let expanded: String = match hex.len() {
+        3 => hex.chars().flat_map(|c| [c, c]).collect(),
+        6 => hex.to_owned(),
+        _ => return "#FFFFFF",
+    };
+    let Ok(v) = u32::from_str_radix(&expanded, 16) else { return "#FFFFFF" };
+    let lin = |c: u32| {
+        let c = f64::from(c) / 255.0;
+        if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    };
+    let l = 0.2126 * lin((v >> 16) & 255) + 0.7152 * lin((v >> 8) & 255) + 0.0722 * lin(v & 255);
+    if 1.05 / (l + 0.05) >= 3.0 { "#FFFFFF" } else { "#000000" }
+}
+
 /// CSS custom properties for every colour and layout value of `theme`.
 ///
 /// Naming: `--pv-<group>-<field>`, where `<group>` is the JSON group
@@ -279,11 +301,11 @@ fn css_string(v: &str) -> String {
 /// * font families: quoted CSS strings;
 /// * booleans: `1` or `0`.
 ///
-/// Two derived values reproduce the old QSS logic:
-/// `--pv-derived-table-grid` (grid colour or `transparent` when `show_grid`
-/// is off) and `--pv-derived-table-alternate-row` (alternate row colour, or
-/// the table background when `alternate_row_colors` is off). Fields within a
-/// group are emitted in alphabetical order.
+/// Derived values: `--pv-derived-table-grid` (grid colour or `transparent`
+/// when `show_grid` is off), `--pv-derived-table-alternate-row` (alternate
+/// row colour, or the table background when `alternate_row_colors` is off)
+/// and `--pv-derived-on-accent` (black or white, whichever reads better on
+/// `accent_primary`). Fields within a group are emitted in alphabetical order.
 pub fn theme_css_variables(theme: &Theme) -> String {
     let mut out = String::from(":root {\n");
     for (group, value) in [
@@ -309,6 +331,7 @@ pub fn theme_css_variables(theme: &Theme) -> String {
     let alt = if l.alternate_row_colors { &c.table_alternate_row } else { &c.table_background };
     let _ = writeln!(out, "  --pv-derived-table-grid: {grid};");
     let _ = writeln!(out, "  --pv-derived-table-alternate-row: {};", css_safe(alt));
+    let _ = writeln!(out, "  --pv-derived-on-accent: {};", on_color(&c.accent_primary));
     out.push_str("}\n");
     out
 }
@@ -443,7 +466,7 @@ impl ThemeManager {
         }
     }
 
-    /// Select `settings.current_theme`, falling back to "ParVu Light" if it
+    /// Select `settings.current_theme`, falling back to the default theme if it
     /// does not exist.
     pub fn apply_settings(&mut self, settings: &Settings) -> &Theme {
         if !self.set_theme(&settings.current_theme) {

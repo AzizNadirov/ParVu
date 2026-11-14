@@ -28,7 +28,7 @@ fn settings_render_vars() {
 #[test]
 fn settings_defaults() {
     let s = Settings::default();
-    assert_eq!(s.current_theme, "ParVu Light");
+    assert_eq!(s.current_theme, "Material Light");
     assert_eq!(s.current_language, "en");
     assert!(s.enable_large_dataset_warning);
     assert_eq!(s.default_limit(), 1000);
@@ -50,7 +50,7 @@ fn loads_bundled_settings_json() {
     assert_eq!(s.rows_per_page(), 500);
     assert_eq!(s.max_rows(), 1000);
     assert!(s.save_file_history_enabled());
-    assert_eq!(s.current_theme, "ParVu Light");
+    assert_eq!(s.current_theme, "Material Light");
     assert_eq!(s.bug_report_email, "eziznadirov@gmail.com");
     assert_eq!(s.colour_execute_button, "yellow");
     assert!(s.sql_keywords.contains(&"ORDER BY".to_string()));
@@ -66,7 +66,7 @@ fn loads_bundled_default_settings_json() {
     let s = Settings::from_json_lenient(BUNDLED_DEFAULT_SETTINGS_JSON).unwrap();
     assert_eq!(s.default_limit(), 500);
     assert_eq!(s.default_result_font_size(), 11);
-    assert_eq!(s.current_theme, "ParVu Light");
+    assert_eq!(s.current_theme, "Material Light");
     assert_eq!(s.bug_report_email, "parvu.bugs@gmail.com");
     assert_eq!(s.colour_table_info_button, "#95baf5");
     assert!(s.sql_keywords.contains(&"EXPLAIN".to_string()));

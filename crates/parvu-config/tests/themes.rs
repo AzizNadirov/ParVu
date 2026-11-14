@@ -7,14 +7,14 @@ use parvu_config::{ColorScheme, ConfigError, Settings, Theme, ThemeManager, them
 fn theme_manager_builtin() {
     let (_tmp, mgr) = common::theme_manager();
     let themes = mgr.list_themes();
-    for name in ["ParVu Light", "Excel", "ParVu Black"] {
+    for name in ["Material Light", "Material Dark", "ParVu Light", "Excel", "ParVu Black"] {
         assert!(themes.contains(&name.to_string()), "{name}");
     }
     // Built-ins are written to the themes folder for reference.
-    for f in ["parvu_light.json", "excel.json", "parvu_black.json"] {
+    for f in ["material_light.json", "material_dark.json", "parvu_light.json", "excel.json", "parvu_black.json"] {
         assert!(mgr.themes_dir().join(f).is_file(), "{f}");
     }
-    assert_eq!(themes.len(), 3, "built-in files must not be listed twice");
+    assert_eq!(themes.len(), 5, "built-in files must not be listed twice");
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn apply_settings_with_fallback() {
     let s = Settings { current_theme: "Excel".into(), ..Settings::default() };
     assert_eq!(mgr.apply_settings(&s).name, "Excel");
     let s = Settings { current_theme: "Gone".into(), ..Settings::default() };
-    assert_eq!(mgr.apply_settings(&s).name, "ParVu Light");
+    assert_eq!(mgr.apply_settings(&s).name, DEFAULT_THEME_NAME);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn theme_to_json() {
 #[test]
 fn builtin_themes_round_trip_and_css() {
     let themes = builtin_themes();
-    assert_eq!(themes.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["ParVu Light", "Excel", "ParVu Black"]);
+    assert_eq!(themes.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Material Light", "Material Dark", "ParVu Light", "Excel", "ParVu Black"]);
     for theme in themes {
         let back = Theme::from_json(&theme.to_json().unwrap()).unwrap();
         assert_eq!(back, theme);
@@ -69,9 +69,9 @@ fn builtin_themes_round_trip_and_css() {
         for k in layout.as_object().unwrap().keys() {
             assert!(css.contains(&format!("--pv-layout-{}: ", k.replace('_', "-"))), "{}: {k}", theme.name);
         }
-        // colours + layout + 2 derived
+        // colours + layout + 3 derived
         let n = css.lines().filter(|l| l.trim_start().starts_with("--pv-")).count();
-        assert_eq!(n, colors.as_object().unwrap().len() + layout.as_object().unwrap().len() + 2);
+        assert_eq!(n, colors.as_object().unwrap().len() + layout.as_object().unwrap().len() + 3);
     }
 }
 
@@ -108,7 +108,7 @@ fn custom_themes_load_from_folder() {
     std::fs::write(mgr.themes_dir().join("broken.json"), "nope").unwrap();
     std::fs::write(mgr.themes_dir().join("readme.txt"), "x").unwrap();
 
-    assert_eq!(mgr.list_themes(), ["Excel", "My Custom", "ParVu Black", "ParVu Light"]);
+    assert_eq!(mgr.list_themes(), ["Excel", "Material Dark", "Material Light", "My Custom", "ParVu Black", "ParVu Light"]);
     let t = mgr.get_theme("My Custom").unwrap();
     assert_eq!(t.colors.background, "#101010");
     assert_eq!(t.colors.menu_hover, ColorScheme::default().menu_hover);
@@ -149,4 +149,18 @@ fn existing_builtin_files_are_not_overwritten() {
     assert!(std::fs::read_to_string(dir.join("excel.json")).unwrap().contains("user edited"));
     // Built-in definition still wins for the name, as in Python.
     assert_ne!(mgr.get_theme("Excel").unwrap().description, "user edited");
+}
+
+#[test]
+fn on_accent_colour() {
+    use parvu_config::themes::on_color;
+    assert_eq!(on_color("#6750A4"), "#FFFFFF");
+    assert_eq!(on_color("#D0BCFF"), "#000000");
+    assert_eq!(on_color("#2196F3"), "#FFFFFF");
+    assert_eq!(on_color("#FFEB3B"), "#000000");
+    assert_eq!(on_color("#217346"), "#FFFFFF");
+    assert_eq!(on_color("#fff"), "#000000");
+    assert_eq!(on_color("navy"), "#FFFFFF");
+    let css = theme_css_variables(&builtin_themes()[1]);
+    assert!(css.contains("  --pv-derived-on-accent: #000000;\n"));
 }

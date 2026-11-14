@@ -6,6 +6,7 @@ import { Dialog } from "../components/Dialog";
 import { ColumnChecklist, ColumnSelect, RichText } from "./common";
 import { aggNeedsColumn, buildGroupByOp, isNumericType } from "./logic";
 import "./dialogs.css";
+import { Icon } from "../components/Icon";
 
 interface Args {
   table: string;
@@ -76,7 +77,7 @@ function GroupByDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nul
                   onChange={(e) => update(i, { alias: e.target.value })}
                 />
                 <button className="pv-icon-btn" title={t("btn.remove")} onClick={() => setAggs((l) => l.filter((_, j) => j !== i))}>
-                  ✕
+                  <Icon name="close" />
                 </button>
               </div>
             ))}
