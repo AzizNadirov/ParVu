@@ -92,6 +92,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 | Keyboard shortcuts | the `onKey` handler in `ui/src/App.tsx`, `dialogs/ShortcutsDialog.tsx` |
 | Packaging | `crates/parvu-app/tauri*.conf.json`, `crates/parvu-app/packaging/`, `build.sh` |
 | CI | `.github/workflows/ci.yml` (tests), `package.yml` (installers) |
+| MCP server (`parvu mcp`) | `parvu-app/src/mcp.rs` (tools, `--allow-dir` / `--allow-write`), user guide `docs/MCP.md`; tests with `cargo test -p parvu-app` |
 | Read-only access for AI / MCP (SQL guard, previews) | `parvu-core/src/readonly.rs`, `Workspace::read_session` / `preview_op`, tests in `parvu-core/tests/readonly.rs`; see `plans/AI_PLAN.md` §6 |
 | Releases | `.github/workflows/release.yml`, triggered by a `v*` tag; steps in `RELEASES.md` |
 

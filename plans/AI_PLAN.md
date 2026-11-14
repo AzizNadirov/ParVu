@@ -3,7 +3,7 @@
 > **Status:** proposal, not implemented.
 > **Revised:** 2026-11-14 for the Rust app (Tauri, React, DuckDB). The earlier version, written for the Python/PyQt6 app, is in git history (`git log -p plans/AI_PLAN.md`).
 > **Target:** a `1.1.0` preview after the `1.0.0` release.
-> **Progress:** milestone A is done (`parvu-core/src/readonly.rs`, `Workspace::preview_op`, the `schema` feature).
+> **Progress:** milestone A is done (`parvu-core/src/readonly.rs`, `Workspace::preview_op`, the `schema` feature). E1 and E2 (the `parvu mcp` stdio server) are done: `parvu-app/src/mcp.rs`, `docs/MCP.md`.
 
 The assistant lets people ask questions about their data in plain language and get either an answer, which it works out by inspecting the data with read-only tools, or a proposed change to the table, which the user approves before it runs. It never changes data on its own.
 

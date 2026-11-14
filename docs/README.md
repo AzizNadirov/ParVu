@@ -8,6 +8,7 @@
 | [DSL.md](DSL.md) | The expression language |
 | [THEMES.md](THEMES.md) | Built-in and custom themes |
 | [I18N.md](I18N.md) | Languages and adding a translation |
+| [MCP.md](MCP.md) | Using ParVu from AI clients (Claude Code, Claude Desktop, VS Code) |
 | [FILE_ASSOCIATIONS.md](FILE_ASSOCIATIONS.md) | Opening files with ParVu from the file manager |
 | [CRASH_REPORTING.md](CRASH_REPORTING.md) | Logs and crash reports |
 

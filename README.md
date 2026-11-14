@@ -70,6 +70,9 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 - CSV delimiter, header and quoting; Parquet compression
 - Progress bar and cancel for large exports
 
+### AI clients (MCP)
+- **`parvu mcp`** turns ParVu into an MCP server, so Claude Code, Claude Desktop, VS Code and other AI clients can open your data files and query them with DuckDB. Only folders you allow are reachable, queries are read-only, and nothing is written unless you add `--allow-write`. See [docs/MCP.md](docs/MCP.md).
+
 ### User Interface
 - **Themes** - Material Design 3 interface with 5 built-in themes (Material Light, Material Dark, ParVu Light, Excel, ParVu Black), plus custom themes you can import and export
 - **Languages** - English, Russian and Azerbaijani, switchable at any time

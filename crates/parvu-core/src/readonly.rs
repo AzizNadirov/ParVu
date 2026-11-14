@@ -149,6 +149,12 @@ fn rewrite(v: &mut Value, ctes: &HashSet<String>, resolve: &dyn Fn(&str) -> Opti
     Ok(())
 }
 
+/// DuckDB's message without the "LINE 1: …" excerpt, which would show the
+/// internal, rewritten SQL instead of the caller's.
+fn clean_db_error(msg: &str) -> String {
+    msg.split("\n\nLINE ").next().unwrap_or(msg).trim().to_string()
+}
+
 /// Rows of a read-only query.
 #[derive(Debug, Clone, Serialize)]
 pub struct QueryRows {
@@ -255,6 +261,7 @@ impl ReadSession {
         let timed_out = watchdog.is_some_and(|w| w.join().unwrap_or(false));
         let (columns, mut rows) = match result {
             Err(_) if timed_out => return Err(rejected("The query took too long and was stopped.")),
+            Err(CoreError::Db(e)) => return Err(rejected(clean_db_error(&e.to_string()))),
             other => other?,
         };
         let truncated = rows.len() > max_rows;

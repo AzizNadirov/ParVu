@@ -131,6 +131,8 @@ fn guard_refuses_writes_files_and_unknown_tables() {
     assert!(err.contains("read_text"), "{err}");
     let err = ro.query("SELECT * FROM nowhere", 1, None).unwrap_err().to_string();
     assert!(err.contains("sales, regions"), "{err}");
+    let err = ro.query("SELECT nope FROM sales", 1, None).unwrap_err().to_string();
+    assert!(err.contains("nope") && !err.contains("__pv_ro") && !err.contains("LINE"), "{err}");
     let err = ro.query("DELETE FROM sales", 1, None).unwrap_err().to_string();
     assert!(err.contains("Only SELECT"), "{err}");
 }
