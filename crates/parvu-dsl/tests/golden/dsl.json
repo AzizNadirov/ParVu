@@ -4844,6 +4844,501 @@
     "sql_name": "REPLACE"
    },
    {
+    "name": "IFNULL",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "fallback",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The value, or the fallback where the value is NULL (pandas fillna).",
+    "example": "IFNULL(sales[discount], 0)",
+    "sql_name": "IFNULL"
+   },
+   {
+    "name": "GREATEST",
+    "params": [
+     {
+      "name": "a",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "b",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The largest of the arguments (any number of them).",
+    "example": "GREATEST(sales[price], 0)",
+    "sql_name": "GREATEST"
+   },
+   {
+    "name": "LEAST",
+    "params": [
+     {
+      "name": "a",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "b",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The smallest of the arguments (any number of them).",
+    "example": "LEAST(sales[qty], 100)",
+    "sql_name": "LEAST"
+   },
+   {
+    "name": "SPLIT_PART",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "separator",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "index",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The index-th piece (from 1) of text split by the separator.",
+    "example": "SPLIT_PART(people[email], '@', 2)",
+    "sql_name": "SPLIT_PART"
+   },
+   {
+    "name": "SUBSTR",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "start",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "length",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Part of the text from position start (from 1), optionally of a given length.",
+    "example": "SUBSTR(sales[code], 1, 3)",
+    "sql_name": "SUBSTRING"
+   },
+   {
+    "name": "LEFT",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "count",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The first count characters.",
+    "example": "LEFT(sales[code], 2)",
+    "sql_name": "LEFT"
+   },
+   {
+    "name": "RIGHT",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "count",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The last count characters.",
+    "example": "RIGHT(sales[code], 4)",
+    "sql_name": "RIGHT"
+   },
+   {
+    "name": "LPAD",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "length",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "fill",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Pad text on the left with fill up to length characters.",
+    "example": "LPAD(CAST(sales[id], 'VARCHAR'), 6, '0')",
+    "sql_name": "LPAD"
+   },
+   {
+    "name": "RPAD",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "length",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "fill",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Pad text on the right with fill up to length characters.",
+    "example": "RPAD(sales[code], 8, '_')",
+    "sql_name": "RPAD"
+   },
+   {
+    "name": "REVERSE",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The text backwards.",
+    "example": "REVERSE(sales[code])",
+    "sql_name": "REVERSE"
+   },
+   {
+    "name": "REGEX_EXTRACT",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "pattern",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "group",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The part of the text matching a regular expression, or one of its groups (pandas str.extract).",
+    "example": "REGEX_EXTRACT(people[phone], '(\\d{3})', 1)",
+    "sql_name": "REGEXP_EXTRACT"
+   },
+   {
+    "name": "REGEX_MATCH",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "pattern",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "True where the text contains a match of the regular expression.",
+    "example": "REGEX_MATCH(people[email], '@example\\.com$')",
+    "sql_name": "REGEXP_MATCHES"
+   },
+   {
+    "name": "STRFTIME",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "format",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Format a date or timestamp as text, e.g. '%Y-%m' or '%d.%m.%Y'.",
+    "example": "STRFTIME(sales[day], '%Y-%m')",
+    "sql_name": "STRFTIME"
+   },
+   {
+    "name": "STRPTIME",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "format",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TIMESTAMP",
+    "description": "Parse text into a timestamp with a format such as '%d.%m.%Y'.",
+    "example": "STRPTIME(sales[day_text], '%d.%m.%Y')",
+    "sql_name": "STRPTIME"
+   },
+   {
+    "name": "QUARTER",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Quarter of the year (1-4).",
+    "example": "QUARTER(sales[day])",
+    "sql_name": "QUARTER"
+   },
+   {
+    "name": "WEEK",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "ISO week of the year (1-53).",
+    "example": "WEEK(sales[day])",
+    "sql_name": "WEEK"
+   },
+   {
+    "name": "DAYOFWEEK",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Day of the week, 0 = Sunday to 6 = Saturday.",
+    "example": "DAYOFWEEK(sales[day])",
+    "sql_name": "DAYOFWEEK"
+   },
+   {
+    "name": "HOUR",
+    "params": [
+     {
+      "name": "timestamp",
+      "logical_type": "TIMESTAMP",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Hour (0-23).",
+    "example": "HOUR(events[time])",
+    "sql_name": "HOUR"
+   },
+   {
+    "name": "MINUTE",
+    "params": [
+     {
+      "name": "timestamp",
+      "logical_type": "TIMESTAMP",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Minute (0-59).",
+    "example": "MINUTE(events[time])",
+    "sql_name": "MINUTE"
+   },
+   {
+    "name": "DATE_TRUNC",
+    "params": [
+     {
+      "name": "part",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "date",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "DATE",
+    "description": "Round a date down to the start of its 'year', 'quarter', 'month', 'week', 'day' or 'hour' (pandas dt.floor).",
+    "example": "DATE_TRUNC('month', sales[day])",
+    "sql_name": "DATE_TRUNC"
+   },
+   {
+    "name": "LN",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Natural logarithm.",
+    "example": "LN(sales[price])",
+    "sql_name": "LN"
+   },
+   {
+    "name": "LOG10",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Base-10 logarithm.",
+    "example": "LOG10(sales[price])",
+    "sql_name": "LOG10"
+   },
+   {
+    "name": "EXP",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "e raised to the value.",
+    "example": "EXP(sales[rate])",
+    "sql_name": "EXP"
+   },
+   {
+    "name": "MOD",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "divisor",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Remainder of a division.",
+    "example": "MOD(sales[id], 10)",
+    "sql_name": "MOD"
+   },
+   {
+    "name": "SIGN",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "-1, 0 or 1 by the sign of the value.",
+    "example": "SIGN(sales[change])",
+    "sql_name": "SIGN"
+   },
+   {
     "name": "DROP_DUPLICATES",
     "params": [
      {

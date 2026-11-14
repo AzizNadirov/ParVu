@@ -515,6 +515,52 @@ pub async fn edit_cell(
     .await
 }
 
+/// Aggregated or sampled data for a chart of the tab's current result.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn chart_data(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    spec: parvu_core::chart::ChartSpec,
+) -> ApiResult<parvu_core::chart::ChartData> {
+    with_ws(state, window, move |ws| Ok(ws.chart(id, &spec)?)).await
+}
+
+/// Numeric minimum and maximum of a column, for colour scales.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn column_range(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+) -> ApiResult<Option<(f64, f64)>> {
+    with_ws(state, window, move |ws| Ok(ws.numeric_range(id, &column)?)).await
+}
+
+/// One cell of a batch edit: absolute row, column and new value.
+#[derive(Debug, serde::Deserialize)]
+pub struct CellValue {
+    pub row: u64,
+    pub column: String,
+    pub value: Cell,
+}
+
+/// Edit several cells as one undoable step (fill down).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn edit_cells(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    cells: Vec<CellValue>,
+) -> ApiResult<TabSummary> {
+    with_ws(state, window, move |ws| {
+        let edits: Vec<(u64, String, Cell)> = cells.into_iter().map(|c| (c.row, c.column, c.value)).collect();
+        ws.edit_cells(id, &edits)?;
+        Ok(ws.summary(id)?)
+    })
+    .await
+}
+
 /// Save to the tab's own file (`path` = null) or to `path`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_tab(

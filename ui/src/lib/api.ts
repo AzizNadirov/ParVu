@@ -59,7 +59,144 @@ export type Operation =
   | { op: "filter_values"; column: string; values: Cell[] }
   | { op: "join"; right: string; join_type: JoinType; left_key: string; right_key: string }
   | { op: "append"; tables: string[]; distinct: boolean }
-  | { op: "add_column"; name: string; expression: string };
+  | { op: "add_column"; name: string; expression: string }
+  // reshaping
+  | { op: "group_by"; by: string[]; aggregations: Aggregation[] }
+  | { op: "pivot"; index: string[]; columns: string; values: string | null; func: AggFunc }
+  | { op: "melt"; id_columns: string[]; value_columns: string[]; variable_name: string; value_name: string }
+  | { op: "transpose"; header_column: string | null }
+  | { op: "value_counts"; columns: string[]; normalize: boolean; dropna: boolean }
+  | { op: "describe" }
+  // filtering and cleaning
+  | { op: "filter"; conditions: Condition[]; combine: Combine }
+  | { op: "fill_null"; columns: string[]; method: FillMethod; value: string }
+  | { op: "sort_by"; keys: SortKey[] }
+  | { op: "select_columns"; columns: string[] }
+  | { op: "slice"; mode: SliceMode; n: number; seed: number | null }
+  | { op: "split_column"; column: string; separator: string; regex: boolean; parts: number | null; keep_original: boolean }
+  | {
+      op: "bin";
+      column: string;
+      method: BinMethod;
+      bins: number;
+      edges: number[];
+      labels: string[];
+      output: string;
+    }
+  // column functions
+  | ({ op: "window" } & WindowSpec);
+
+export type ChartKind = "bar" | "line" | "scatter" | "histogram";
+export interface ChartSpec {
+  kind: ChartKind;
+  x: string;
+  y: string | null;
+  agg: AggFunc;
+  bins: number | null;
+  sort_by_value: boolean;
+}
+export interface ChartData {
+  labels: string[];
+  values: (number | null)[];
+  xs: (number | null)[];
+  truncated: boolean;
+}
+
+export const AGG_FUNCS = [
+  "count",
+  "rows",
+  "count_distinct",
+  "sum",
+  "mean",
+  "median",
+  "min",
+  "max",
+  "std",
+  "var",
+  "first",
+  "last",
+  "mode",
+  "list",
+] as const;
+export type AggFunc = (typeof AGG_FUNCS)[number];
+export interface Aggregation {
+  column: string;
+  func: AggFunc;
+  alias: string | null;
+}
+
+export const COND_OPS = [
+  "eq",
+  "ne",
+  "gt",
+  "ge",
+  "lt",
+  "le",
+  "between",
+  "contains",
+  "not_contains",
+  "starts_with",
+  "ends_with",
+  "matches",
+  "in",
+  "not_in",
+  "is_null",
+  "not_null",
+  "is_empty",
+  "not_empty",
+] as const;
+export type CondOp = (typeof COND_OPS)[number];
+export interface Condition {
+  column: string;
+  op: CondOp;
+  value: string;
+  value2: string;
+  case_sensitive: boolean;
+}
+export type Combine = "and" | "or";
+
+export const FILL_METHODS = ["value", "forward", "backward", "mean", "median", "mode"] as const;
+export type FillMethod = (typeof FILL_METHODS)[number];
+
+export interface SortKey {
+  column: string;
+  ascending: boolean;
+  nulls_first: boolean;
+}
+export type SliceMode = "head" | "tail" | "sample";
+export type BinMethod = "equal_width" | "quantile" | "edges";
+
+export const WINDOW_FUNCS = [
+  "cum_sum",
+  "cum_min",
+  "cum_max",
+  "cum_mean",
+  "cum_count",
+  "shift",
+  "diff",
+  "pct_change",
+  "rank",
+  "percent_rank",
+  "row_number",
+  "rolling_mean",
+  "rolling_sum",
+  "rolling_min",
+  "rolling_max",
+  "rolling_std",
+] as const;
+export type WindowFunc = (typeof WINDOW_FUNCS)[number];
+export type RankMethod = "average" | "min" | "max" | "dense" | "first";
+export interface WindowSpec {
+  column: string;
+  func: WindowFunc;
+  periods: number | null;
+  window: number | null;
+  rank_method: RankMethod;
+  ascending: boolean;
+  partition_by: string[];
+  order_by: string | null;
+  output: string;
+}
 
 export interface ReplaceRequest {
   column: string;
@@ -279,9 +416,13 @@ export const api = {
   resetTab: (id: number) => call<TabSummary>("reset_tab", { id }),
   editCell: (id: number, row: number, column: string, value: Cell) =>
     call<TabSummary>("edit_cell", { id, row, column, value }),
+  editCells: (id: number, cells: { row: number; column: string; value: Cell }[]) =>
+    call<TabSummary>("edit_cells", { id, cells }),
   saveTab: (id: number, path: string | null) => call<TabSummary>("save_tab", { id, path }),
 
   columnStats: (id: number, column: string) => call<ColumnStats>("column_stats", { id, column }),
+  chartData: (id: number, spec: ChartSpec) => call<ChartData>("chart_data", { id, spec }),
+  columnRange: (id: number, column: string) => call<[number, number] | null>("column_range", { id, column }),
   uniqueValues: (id: number, column: string) => call<Cell[]>("unique_values", { id, column }),
   columnTuple: (id: number, column: string, mode: "first" | "random", n: number) =>
     call<string>("column_tuple", { id, column, mode, n }),

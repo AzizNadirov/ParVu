@@ -14,6 +14,7 @@ import {
   type ApiError,
   type Bootstrap,
   type Cell,
+  type ColumnMeta,
   type Operation,
   type Page,
   type Settings,
@@ -29,11 +30,16 @@ import { MenuBar, PopupMenu, type MenuEntry } from "./components/PopupMenu";
 import { DataGrid, isNumericType, type GridHandle } from "./components/DataGrid";
 import { QueryEditor, type EditorMode } from "./components/QueryEditor";
 import { Pagination, StepsPanel, TabBar, Welcome, stepText } from "./components/Panels";
+import type { FormatRule } from "./lib/format";
 import {
   SearchPanel,
   openAboutDialog,
   openAppendDialog,
+  openBin,
+  openChart,
   openColumnStats,
+  openColumns,
+  openConditionalFormat,
   openConfirmClose,
   openCopyTuple,
   openCrashReport,
@@ -41,16 +47,27 @@ import {
   openDropNull,
   openExportDialog,
   openExpressionHelp,
+  openFillNull,
+  openFilter,
+  openGroupBy,
   openJoinDialog,
   openLanguageSelector,
   openMathDialog,
+  openMelt,
+  openPivot,
   openReplace,
   openSettingsDialog,
   openShortcutsDialog,
+  openSlice,
+  openSort,
+  openSplitColumn,
   openTableInfo,
   openThemeSelector,
+  openTranspose,
   openUniqueValues,
   openUnsavedChanges,
+  openValueCounts,
+  openWindow,
   preloadDialogs,
 } from "./dialogs/lazy";
 
@@ -60,7 +77,29 @@ interface TabUi {
   mode: EditorMode;
   page: number;
   sort: { column: string; ascending: boolean } | null;
+  /** Columns frozen on the left. */
+  frozen: number;
+  /** Column widths set by dragging, by name. */
+  widths: Record<string, number>;
+  formats: FormatRule[];
+  /** Min and max of the columns that have a colour scale. */
+  ranges: Record<string, { min: number; max: number }>;
 }
+
+const newTabUi = (name: string): TabUi => ({
+  query: `SELECT * FROM ${name}`,
+  mode: "sql",
+  page: 1,
+  sort: null,
+  frozen: 0,
+  widths: {},
+  formats: [],
+  ranges: {},
+});
+
+const NO_WIDTHS: Record<string, number> = {};
+const NO_FORMATS: FormatRule[] = [];
+const NO_RANGES: Record<string, { min: number; max: number }> = {};
 
 const CHANGE_TYPES = ["INTEGER", "BIGINT", "DOUBLE", "VARCHAR", "BOOLEAN", "DATE", "TIMESTAMP"];
 
@@ -88,6 +127,14 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [tabs, setTabs] = useState<TabSummary[]>([]);
   const [active, setActive] = useState<number | null>(null);
   const tabUi = useRef(new Map<number, TabUi>());
+  // Bumped when view-only tab state (widths, frozen columns, formats) changes.
+  const [, setViewTick] = useState(0);
+  const updateView = useCallback((id: number, patch: Partial<TabUi>) => {
+    const st = tabUi.current.get(id);
+    if (!st) return;
+    Object.assign(st, patch);
+    setViewTick((n) => n + 1);
+  }, []);
   const [editorText, setEditorText] = useState("");
   const [mode, setMode] = useState<EditorMode>("sql");
   const [page, setPage] = useState<Page | null>(null);
@@ -314,7 +361,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       status(t("status.loading"));
       try {
         const s = await api.openFile(path);
-        tabUi.current.set(s.id, { query: `SELECT * FROM ${s.name}`, mode: "sql", page: 1, sort: null });
+        tabUi.current.set(s.id, newTabUi(s.name));
         upsertTab(s);
         switchTo(s.id);
         void refreshSchema();
@@ -548,13 +595,47 @@ export function App({ boot }: { boot: Bootstrap }) {
     { type: "separator" },
     { label: t("context.sort_asc"), onSelect: () => void sortBy(column, true) },
     { label: t("context.sort_desc"), onSelect: () => void sortBy(column, false) },
+    { label: t("context.sort_more"), onSelect: () => void runOpDialog(openSort, column) },
     { type: "separator" },
+    { label: t("context.filter"), onSelect: () => void runOpDialog(openFilter, column) },
     { label: t("context.copy_values"), onSelect: () => void copyTuple(column) },
     { label: t("context.unique_values"), onSelect: () => void showUniqueValues(column) },
+    { label: t("context.value_counts"), onSelect: () => void runOpDialog(openValueCounts, column, true) },
     { label: t("context.column_stats"), onSelect: () => void showStats(column) },
+    { label: t("context.chart"), onSelect: () => void showChart(column) },
     { type: "separator" },
     { label: t("context.replace_values"), onSelect: () => void runReplace(column) },
+    { label: t("context.fill_null"), onSelect: () => void runOpDialog(openFillNull, column) },
     { label: t("context.drop_null"), onSelect: () => void runDropNull(column) },
+    {
+      label: t("context.transform"),
+      submenu: [
+        { label: t("menu.reshape.group_by"), onSelect: () => void runOpDialog(openGroupBy, column, true) },
+        { label: t("menu.reshape.pivot"), onSelect: () => void runOpDialog(openPivot, column, true) },
+        { label: t("menu.operations.window"), onSelect: () => void runOpDialog(openWindow, column, true) },
+        { label: t("menu.data.split"), onSelect: () => void runOpDialog(openSplitColumn, column) },
+        { label: t("menu.data.bin"), onSelect: () => void runOpDialog(openBin, column) },
+      ],
+    },
+    { type: "separator" },
+    {
+      label: t("context.freeze_here"),
+      onSelect: () => activeTab && updateView(activeTab.id, { frozen: columnNames.indexOf(column) + 1 }),
+    },
+    {
+      label: t("context.unfreeze"),
+      disabled: !(activeTab && (tabUi.current.get(activeTab.id)?.frozen ?? 0) > 0),
+      onSelect: () => activeTab && updateView(activeTab.id, { frozen: 0 }),
+    },
+    { label: t("context.conditional_format"), onSelect: () => void editFormats(column) },
+    {
+      label: t("context.clear_format"),
+      disabled: !(activeTab && tabUi.current.get(activeTab.id)?.formats.some((f) => f.column === column)),
+      onSelect: () => {
+        const st = activeTab && tabUi.current.get(activeTab.id);
+        if (st && activeTab) updateView(activeTab.id, { formats: st.formats.filter((f) => f.column !== column) });
+      },
+    },
   ];
 
   const cellMenu = (row: number, col: number): MenuEntry[] => {
@@ -575,6 +656,13 @@ export function App({ boot }: { boot: Bootstrap }) {
       { label: t("context.copy_with_headers"), onSelect: () => copy("tsv", true) },
       { type: "separator" },
       { label: t("context.filter_by_value"), onSelect: () => void applyOp({ op: "filter_values", column, values: [value] }) },
+      { label: t("context.filter_custom"), onSelect: () => void runFilterFromCell(column, value) },
+      {
+        label: t("context.fill_down"),
+        shortcut: "Ctrl+D",
+        disabled: !page?.editable || (grid.current?.selectionRange()?.height ?? 0) < 2,
+        onSelect: () => void fillDown(),
+      },
       {
         label: t("context.set_null"),
         disabled: !page?.editable || value === null,
@@ -651,6 +739,95 @@ export function App({ boot }: { boot: Bootstrap }) {
     withTab(async (tab) => {
       const r = await openMathDialog(ui, { tabId: tab.id, table: tab.name, columns: columnNames });
       if (r) await mutate(tab.id, () => api.addComputedColumn(tab.id, r.name, r.text), t("error.operation_failed"));
+    });
+
+  /** Open an operation dialog for the active tab and apply its result. */
+  type OpDialog = (
+    ui: Ui,
+    a: { table: string; columns: ColumnMeta[]; selected?: string },
+  ) => Promise<Operation | null>;
+  const runOpDialog = async (open: OpDialog, selected?: string, expensive = false) =>
+    withTab(async (tab) => {
+      if (expensive && !(await confirmLargeDataset())) return;
+      const op = await open(ui, { table: tab.name, columns: page?.columns ?? [], selected });
+      if (!op) return;
+      const s = await applyOp(op);
+      // A multi-column sort replaces the header sort indicator.
+      const st = tabUi.current.get(tab.id);
+      if (s && st && op.op === "sort_by") st.sort = null;
+    });
+
+  const runTranspose = async () =>
+    withTab(async (tab) => {
+      const op = await openTranspose(ui, { table: tab.name, columns: page?.columns ?? [], rows: tab.total_rows });
+      if (op) await applyOp(op);
+    });
+
+  const runSlice = async () =>
+    withTab(async (tab) => {
+      const op = await openSlice(ui, { table: tab.name, rows: tab.total_rows });
+      if (op) await applyOp(op);
+    });
+
+  const runDescribe = async () =>
+    withTab(async () => {
+      if (await confirmLargeDataset()) await applyOp({ op: "describe" });
+    });
+
+  const runFilterFromCell = async (column: string, value: Cell) =>
+    withTab(async (tab) => {
+      const op = await openFilter(ui, {
+        table: tab.name,
+        columns: page?.columns ?? [],
+        selected: column,
+        initial: value === null ? { op: "is_null" } : { op: "eq", value },
+      });
+      if (op) await applyOp(op);
+    });
+
+  /** Copy the first row of the selection into the selected rows below it (Ctrl+D). */
+  const fillDown = async () =>
+    withTab(async (tab) => {
+      const range = grid.current?.selectionRange();
+      if (!page || !range || range.height < 2) {
+        status(t("status.fill_down_select"), 4000);
+        return;
+      }
+      if (!page.editable) {
+        status(t("status.read_only"), 4000);
+        return;
+      }
+      const cells = [];
+      for (let c = range.x; c < range.x + range.width; c++) {
+        const column = page.columns[c]?.name;
+        if (!column) continue;
+        const value = page.rows[range.y]?.[c] ?? null;
+        for (let r = range.y + 1; r < range.y + range.height; r++) cells.push({ row: page.offset + r, column, value });
+      }
+      try {
+        const s = await api.editCells(tab.id, cells);
+        upsertTab(s);
+        await loadPage(tab.id, page.page);
+        const last = s.steps[s.steps.length - 1];
+        if (last) status(t("steps.applied", { step: stepText(t, last) }), 4000);
+      } catch (e) {
+        await loadPage(tab.id, page.page);
+        status(t("status.edit_rejected", { error: errorMessage(e) }), 8000);
+      }
+    });
+
+  const showChart = async (selected?: string) =>
+    withTab(async (tab) => {
+      if (!(await confirmLargeDataset())) return;
+      await openChart(ui, { tabId: tab.id, table: tab.name, columns: page?.columns ?? [], selected });
+    });
+
+  const editFormats = async (selected?: string) =>
+    withTab(async (tab) => {
+      const st = tabUi.current.get(tab.id);
+      if (!st) return;
+      const rules = await openConditionalFormat(ui, { columns: page?.columns ?? [], rules: st.formats, selected });
+      if (rules) updateView(tab.id, { formats: rules });
     });
 
   const showTableInfo = async () =>
@@ -845,20 +1022,55 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.view.steps"), checked: stepsOpen, onSelect: () => setStepsOpen((v) => !v) },
         { type: "separator" },
         { label: t("menu.view.table_info"), disabled: !activeTab, onSelect: () => void showTableInfo() },
+        { label: t("menu.view.chart"), shortcut: "Ctrl+Shift+C", disabled: !activeTab, onSelect: () => void showChart() },
+        { label: t("menu.view.conditional_format"), disabled: !activeTab, onSelect: () => void editFormats() },
+        {
+          label: t("menu.view.unfreeze"),
+          disabled: !(activeTab && (tabUi.current.get(activeTab.id)?.frozen ?? 0) > 0),
+          onSelect: () => activeTab && updateView(activeTab.id, { frozen: 0 }),
+        },
         { type: "separator" },
         { label: t("menu.view.theme"), onSelect: () => void openThemeSelector(ui, { onTheme }) },
         { label: t("menu.view.language"), onSelect: () => void openLanguageSelector(ui, { onLanguage }) },
       ],
     },
     {
+      title: t("menu.data"),
+      items: (): MenuEntry[] => [
+        { label: t("menu.data.filter"), shortcut: "Ctrl+Shift+L", disabled: !activeTab, onSelect: () => void runOpDialog(openFilter) },
+        { label: t("menu.data.sort"), disabled: !activeTab, onSelect: () => void runOpDialog(openSort) },
+        { label: t("menu.data.columns"), disabled: !activeTab, onSelect: () => void runOpDialog(openColumns) },
+        { label: t("menu.data.slice"), disabled: !activeTab, onSelect: () => void runSlice() },
+        { type: "separator" },
+        { label: t("menu.data.fill_null"), disabled: !activeTab, onSelect: () => void runOpDialog(openFillNull) },
+        { label: t("menu.operations.drop_null"), disabled: !activeTab, onSelect: () => void runDropNull() },
+        { label: t("menu.operations.drop_duplicates"), disabled: !activeTab, onSelect: () => void runDropDuplicates() },
+        { label: t("menu.operations.replace"), disabled: !activeTab, onSelect: () => void runReplace() },
+        { type: "separator" },
+        { label: t("menu.data.split"), disabled: !activeTab, onSelect: () => void runOpDialog(openSplitColumn) },
+        { label: t("menu.data.bin"), disabled: !activeTab, onSelect: () => void runOpDialog(openBin) },
+      ],
+    },
+    {
+      title: t("menu.reshape"),
+      items: (): MenuEntry[] => [
+        { label: t("menu.reshape.group_by"), shortcut: "Ctrl+G", disabled: !activeTab, onSelect: () => void runOpDialog(openGroupBy, undefined, true) },
+        { label: t("menu.reshape.pivot"), disabled: !activeTab, onSelect: () => void runOpDialog(openPivot, undefined, true) },
+        { label: t("menu.reshape.melt"), disabled: !activeTab, onSelect: () => void runOpDialog(openMelt) },
+        { label: t("menu.reshape.transpose"), disabled: !activeTab, onSelect: () => void runTranspose() },
+        { type: "separator" },
+        { label: t("menu.reshape.value_counts"), disabled: !activeTab, onSelect: () => void runOpDialog(openValueCounts, undefined, true) },
+        { label: t("menu.reshape.describe"), disabled: !activeTab, onSelect: () => void runDescribe() },
+      ],
+    },
+    {
       title: t("menu.operations"),
       items: (): MenuEntry[] => [
         { label: t("menu.operations.math"), disabled: !activeTab, onSelect: () => void runMath() },
+        { label: t("menu.operations.window"), disabled: !activeTab, onSelect: () => void runOpDialog(openWindow, undefined, true) },
+        { type: "separator" },
         { label: t("menu.operations.join"), disabled: !activeTab, onSelect: () => void runJoin() },
         { label: t("menu.operations.append"), disabled: !activeTab, onSelect: () => void runAppend() },
-        { label: t("menu.operations.drop_duplicates"), disabled: !activeTab, onSelect: () => void runDropDuplicates() },
-        { label: t("menu.operations.drop_null"), disabled: !activeTab, onSelect: () => void runDropNull() },
-        { label: t("menu.operations.replace"), disabled: !activeTab, onSelect: () => void runReplace() },
       ],
     },
     {
@@ -874,8 +1086,10 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   // ------------------------------------------------------------ effects
   // Keep refs to the latest handlers for global listeners.
-  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs });
-  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs };
+  const filterRows = () => void runOpDialog(openFilter);
+  const groupBy = () => void runOpDialog(openGroupBy, undefined, true);
+  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart });
+  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -895,6 +1109,10 @@ export function App({ boot }: { boot: Bootstrap }) {
       else if (ctrl && k === "s") run(() => void h.save());
       else if (ctrl && k === "e") run(() => void h.exportTab());
       else if (ctrl && k === "w") run(() => h.activeTab && void h.closeTab(h.activeTab.id));
+      else if (ctrl && e.shiftKey && k === "l") run(() => h.activeTab && h.filterRows());
+      else if (ctrl && !e.shiftKey && k === "g") run(() => h.activeTab && h.groupBy());
+      else if (ctrl && e.shiftKey && k === "c" && !typing) run(() => h.activeTab && void h.showChart());
+      else if (ctrl && !e.shiftKey && k === "d" && !typing) run(() => h.activeTab && void h.fillDown());
       else if (ctrl && k === "f") run(h.openSearch);
       else if (ctrl && (k === "/" || e.code === "Slash")) run(() => void openShortcutsDialog(ui));
       else if (e.key === "F3") run(() => (h.search ? (e.shiftKey ? searchKeys.current?.prev() : searchKeys.current?.next()) : h.openSearch()));
@@ -988,6 +1206,30 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   // ------------------------------------------------------------ render
   const st = activeTab ? tabUi.current.get(activeTab.id) : undefined;
+
+  // Colour scales need each column's min and max over the whole result;
+  // re-read them when the data or the scaled columns change.
+  const scaleColumns = [...new Set((st?.formats ?? []).filter((f) => f.kind === "scale").map((f) => f.column))];
+  const rangeKey = activeTab ? `${activeTab.id}|${activeTab.current_query}|${activeTab.pending_edits}|${scaleColumns.join("\u0000")}` : "";
+  useEffect(() => {
+    if (!activeTab || !scaleColumns.length) return;
+    const id = activeTab.id;
+    let cancelled = false;
+    void Promise.all(scaleColumns.map((c) => api.columnRange(id, c).then((r) => [c, r] as const).catch(() => [c, null] as const))).then(
+      (pairs) => {
+        if (cancelled) return;
+        const ranges: Record<string, { min: number; max: number }> = {};
+        for (const [c, r] of pairs) if (r) ranges[c] = { min: r[0], max: r[1] };
+        updateView(id, { ranges });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // rangeKey covers the tab, its data and the scaled columns.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeKey]);
+
   const sqlFont = String(settings.default_sql_font || "monospace");
   const sqlSize = num(settings.default_sql_font_size, 11);
   const headerLabel = activeTab
@@ -1066,6 +1308,9 @@ export function App({ boot }: { boot: Bootstrap }) {
                   <button onClick={() => void showTableInfo()}>{t("btn.table_info")}</button>
                   <span className="muted small">{t("editor.run_hint")}</span>
                   <span className="spacer" />
+                  <button onClick={() => void runOpDialog(openFilter)}>⏷ {t("btn.filter")}</button>
+                  <button onClick={() => void runOpDialog(openGroupBy, undefined, true)}>Σ {t("btn.group_by")}</button>
+                  <button onClick={() => void showChart()}>📊 {t("btn.chart")}</button>
                   <button onClick={() => void runMath()}>🧮 {t("menu.operations.math")}</button>
                   <button onClick={() => void runJoin()}>🔗 {t("menu.operations.join")}</button>
                   <button onClick={() => void runAppend()}>⬇ {t("menu.operations.append")}</button>
@@ -1093,6 +1338,11 @@ export function App({ boot }: { boot: Bootstrap }) {
                 onHeaderMenu={(c, x, y) => setMenu({ x, y, items: headerMenu(c) })}
                 onCellMenu={(r, c, x, y) => setMenu({ x, y, items: cellMenu(r, c) })}
                 onEdit={(r, c, v) => void editCell(r, c, v)}
+                frozen={st?.frozen ?? 0}
+                widths={st?.widths ?? NO_WIDTHS}
+                onResize={(c, w) => activeTab && updateView(activeTab.id, { widths: { ...(st?.widths ?? {}), [c]: w } })}
+                formats={st?.formats ?? NO_FORMATS}
+                ranges={st?.ranges ?? NO_RANGES}
               />
               {busy && <div className="busy-bar" />}
             </section>

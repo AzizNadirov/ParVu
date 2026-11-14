@@ -233,6 +233,22 @@ mod tests {
     }
 
     #[test]
+    fn new_functions_compile() {
+        let r = FunctionRegistry::default();
+        let cat = catalog();
+        let sql = |src: &str| translate(src, &cat, &r, "sales").unwrap().sql;
+        assert_eq!(
+            sql("sales[size] = IF(sales[id] > 10, 'big', 'small')"),
+            "SELECT \"id\", \"name\", IF(sales.id > 10, 'big', 'small') AS \"size\" FROM sales"
+        );
+        assert_eq!(sql("GREATEST(sales[id], 0, 5)"), "SELECT GREATEST(sales.id, 0, 5) FROM sales");
+        assert_eq!(sql("SUBSTR(sales[name], 1, 3)"), "SELECT SUBSTRING(sales.name, 1, 3) FROM sales");
+        assert_eq!(sql("REGEX_MATCH(sales[name], 'a+')"), "SELECT REGEXP_MATCHES(sales.name, 'a+') FROM sales");
+        assert_eq!(sql("DATE_TRUNC('month', sales[id])"), "SELECT DATE_TRUNC('month', sales.id) FROM sales");
+        assert!(translate("IF(sales[id] > 1)", &cat, &r, "sales").is_err(), "IF needs three arguments");
+    }
+
+    #[test]
     fn preview_assignment() {
         let r = FunctionRegistry::default();
         assert_eq!(

@@ -8,6 +8,9 @@ import type { Translate } from "../lib/i18n";
 export function stepText(t: Translate, label: StepLabel): string {
   const args: Record<string, string> = { ...label.args };
   if (label.key === "step.sort" && args.direction) args.direction = t(`step.direction.${args.direction}`);
+  if (label.key === "step.slice" && args.mode) args.mode = t(`step.slice_mode.${args.mode}`);
+  if (label.key === "step.window" && args.func) args.func = t(`window.${args.func}`);
+  if (label.key === "step.fill_null" && args.method && !args.method.startsWith("'")) args.method = t(`fill.${args.method}`);
   return t(label.key, args);
 }
 

@@ -29,7 +29,11 @@ Dependencies only point down. `parvu-dsl` and `parvu-config` don't depend on Duc
 | `engine.rs` | `QueryEngine`: a tab's current SQL, undo history and paging |
 | `format.rs` | File formats; registering a file as a DuckDB view; reading Excel with `calamine` |
 | `edits.rs` | Pending cell edits and the overlay SQL that applies them |
-| `ops.rs` | `Operation`: every table operation (sort, rename, join, drop duplicates…), building its SQL and step label |
+| `ops.rs` | `Operation`: every table operation, building its SQL and step label; the simple ones are built here |
+| `reshape.rs` | Group by, pivot, melt, transpose, value counts, describe |
+| `clean.rs` | Condition filters, fill missing values, multi-column sort, choosing columns, head/tail/sample, split, bin |
+| `window.rs` | Running totals, shift/diff, rank and rolling values, per group |
+| `chart.rs` | Chart data aggregated or sampled by DuckDB |
 | `page.rs` | A page of results, formatted to text with Arrow's formatter |
 | `export.rs` | Export via DuckDB `COPY`, or `rust_xlsxwriter` for Excel |
 | `stats.rs`, `search.rs` | Column statistics, distinct values, samples, full-table search |
@@ -42,7 +46,11 @@ Opening `sales.parquet` creates:
 - `sales`: the view users query. Without edits it equals the source view. With pending cell edits it overlays them by row number, so queries, joins and saves see the edits without rewriting the file;
 - a `QueryEngine` whose current query starts as `SELECT * FROM "sales"`.
 
-Every applied step (query, operation or cell edit) goes into one list in the tab, so undo always reverts the most recent step. Saving exports the current query to a temporary file next to the target, renames it into place, and reopens the tab from the result.
+Every applied step (query, operation or cell edit) goes into one list in the tab, so undo always reverts the most recent step. Fill down is one step holding several cell edits and the earlier edit of each cell, so undo restores them exactly.
+
+Operations whose SQL depends on the data (pivot columns, bin edges, split widths, transpose names) read it through `OpContext::query` before building their SQL. Row order is kept with a `ROW_NUMBER() OVER ()` column (`__pv_rn`) wherever an operation needs it.
+
+Conditional formatting, frozen columns and column widths belong to the window (`TabUi` in `App.tsx`), not to the data: they are not steps and are never saved. Saving exports the current query to a temporary file next to the target, renames it into place, and reopens the tab from the result.
 
 ### Memory
 

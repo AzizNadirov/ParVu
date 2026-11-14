@@ -185,3 +185,24 @@ table.simple td select { width: 100%; }
 
 /* unique values */
 .pv-unique .item { padding: 1px 6px; }
+
+/* column pickers and rule lists (group by, filter, sort…) */
+.pv-column-checklist { max-height: 200px; overflow: auto; }
+.pv-rules { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow: auto; }
+.pv-rules .row > select, .pv-rules .row > input[type="text"] { min-width: 0; }
+.pv-rule-num { width: 6em; }
+.pv-rule-name { flex: 0 0 9em; width: 9em; }
+.pv-icon-btn { min-width: 2em; padding-left: 4px; padding-right: 4px; }
+.pv-two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; }
+
+/* charts */
+.pv-chart { width: 100%; height: auto; max-height: 60vh; background: var(--pv-colors-table-background); border: 1px solid var(--pv-colors-table-grid); border-radius: 4px; }
+.pv-chart-mark { fill: var(--pv-colors-accent-primary); }
+.pv-chart-mark:hover { fill: var(--pv-colors-accent-secondary); }
+.pv-chart-dot { fill-opacity: 0.7; }
+.pv-chart-line { fill: none; stroke: var(--pv-colors-accent-primary); stroke-width: 2; }
+.pv-chart-grid { stroke: var(--pv-colors-table-grid); stroke-width: 1; opacity: 0.6; }
+.pv-chart-axis { stroke: var(--pv-colors-table-foreground); stroke-width: 1; opacity: 0.6; }
+.pv-chart-text { fill: var(--pv-colors-table-foreground); font-size: 11px; font-family: var(--pv-layout-default-font-family, sans-serif), sans-serif; }
+.pv-chart-title { font-weight: 600; }
+.pv-chart-box { min-height: 260px; display: flex; align-items: center; justify-content: center; }

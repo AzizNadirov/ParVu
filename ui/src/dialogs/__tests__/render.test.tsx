@@ -294,3 +294,98 @@ describe("SearchPanel", () => {
     });
   });
 });
+
+describe("pandas-style operation dialogs", () => {
+  it("submit their operation", async () => {
+    const ui = makeUi();
+    const columns = [
+      { name: "region", dtype: "VARCHAR" },
+      { name: "qty", dtype: "INTEGER" },
+    ];
+    const submit = async (p: Promise<unknown>) => {
+      await flush();
+      fireEvent.click(screen.getByText("btn.apply"));
+      const v = await p;
+      cleanup();
+      return v;
+    };
+    expect(await submit(D.openGroupBy(ui, { table: "t", columns, selected: "region" }))).toEqual({
+      op: "group_by",
+      by: ["region"],
+      aggregations: [
+        { column: "", func: "rows", alias: null },
+        { column: "qty", func: "sum", alias: null },
+      ],
+    });
+    expect(await submit(D.openPivot(ui, { table: "t", columns, selected: "region" }))).toEqual({
+      op: "pivot",
+      index: [],
+      columns: "region",
+      values: "qty",
+      func: "sum",
+    });
+    expect(await submit(D.openMelt(ui, { table: "t", columns }))).toMatchObject({ op: "melt", id_columns: ["region"] });
+    expect(await submit(D.openTranspose(ui, { table: "t", columns, rows: 3 }))).toEqual({ op: "transpose", header_column: null });
+    expect(await submit(D.openValueCounts(ui, { table: "t", columns, selected: "qty" }))).toMatchObject({ columns: ["qty"] });
+    expect(await submit(D.openFilter(ui, { table: "t", columns, selected: "qty", initial: { op: "gt", value: "2" } }))).toEqual({
+      op: "filter",
+      conditions: [{ column: "qty", op: "gt", value: "2", value2: "", case_sensitive: false }],
+      combine: "and",
+    });
+    const fill = D.openFillNull(ui, { table: "t", columns, selected: "qty" });
+    await flush();
+    expect((screen.getByText("btn.apply") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByDisplayValue("fill.value"), { target: { value: "forward" } });
+    fireEvent.click(screen.getByText("btn.apply"));
+    expect(await fill).toEqual({ op: "fill_null", columns: ["qty"], method: "forward", value: "" });
+    cleanup();
+    expect(await submit(D.openSort(ui, { table: "t", columns, selected: "qty" }))).toEqual({
+      op: "sort_by",
+      keys: [{ column: "qty", ascending: true, nulls_first: false }],
+    });
+    expect(await submit(D.openSlice(ui, { table: "t", rows: 10 }))).toEqual({ op: "slice", mode: "head", n: 100, seed: null });
+    expect(await submit(D.openSplitColumn(ui, { table: "t", columns }))).toMatchObject({ column: "region", separator: "," });
+    expect(await submit(D.openBin(ui, { table: "t", columns }))).toMatchObject({ column: "qty", output: "qty_bin", bins: 5 });
+    expect(await submit(D.openWindow(ui, { table: "t", columns }))).toMatchObject({ op: "window", func: "cum_sum", column: "qty", output: "qty_cumsum" });
+  });
+
+  it("the transpose dialog refuses big tables", async () => {
+    const ui = makeUi();
+    void D.openTranspose(ui, { table: "t", columns: [{ name: "a", dtype: "INT" }], rows: 501 });
+    await flush();
+    expect((screen.getByText("btn.apply") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("spreadsheet dialogs", () => {
+  it("conditional formatting returns the edited rules", async () => {
+    const ui = makeUi();
+    const p = D.openConditionalFormat(ui, {
+      columns: [{ name: "qty", dtype: "INTEGER" }],
+      rules: [{ kind: "scale", column: "qty", color: "primary" }],
+      selected: "qty",
+    });
+    await flush();
+    fireEvent.click(screen.getByText("dialog.format.highlight"));
+    fireEvent.change(document.querySelector(".pv-indent input")!, { target: { value: "5" } });
+    fireEvent.click(screen.getByText("dialog.format.add_rule"));
+    fireEvent.click(screen.getByText("btn.ok"));
+    await expect(p).resolves.toEqual([
+      { kind: "scale", column: "qty", color: "primary" },
+      { kind: "highlight", column: "qty", op: "gt", value: "5", value2: "", color: "primary" },
+    ]);
+  });
+
+  it("the chart dialog asks DuckDB for chart data and closes", async () => {
+    const ui = makeUi();
+    const p = D.openChart(ui, { tabId: 3, table: "t", columns: [{ name: "region", dtype: "VARCHAR" }, { name: "qty", dtype: "INTEGER" }] });
+    await act(async () => new Promise((r) => setTimeout(r, 400)));
+    expect(invoke).toHaveBeenCalledWith("chart_data", {
+      id: 3,
+      spec: { kind: "bar", x: "region", y: "qty", agg: "sum", bins: 20, sort_by_value: true },
+    });
+    fireEvent.click(screen.getByText("btn.close"));
+    await expect(p).resolves.toBeUndefined();
+  });
+});
+

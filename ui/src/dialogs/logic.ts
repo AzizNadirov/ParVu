@@ -1,8 +1,19 @@
 // Pure helpers behind the dialogs, kept free of React and Tauri so they can
 // be unit-tested.
 import type {
+  AggFunc,
+  Aggregation,
+  BinMethod,
   Cell,
   ColumnMeta,
+  Combine,
+  CondOp,
+  Condition,
+  FillMethod,
+  SliceMode,
+  SortKey,
+  WindowFunc,
+  WindowSpec,
   ColumnSpec,
   ColumnStats,
   ExportFormat,
@@ -484,4 +495,243 @@ export class SearchNavigator {
 
 export function previewValue(value: string, max = 200): string {
   return value.length <= max ? value : value.slice(0, max - 3) + "...";
+}
+
+// ---------------------------------------------------------------- reshaping
+
+/** Aggregations that work without a column (they count rows). */
+export function aggNeedsColumn(func: AggFunc): boolean {
+  return func !== "rows";
+}
+
+export function buildGroupByOp(by: string[], aggregations: Aggregation[]): Operation | null {
+  const aggs = aggregations
+    .filter((a) => !aggNeedsColumn(a.func) || a.column)
+    .map((a) => ({ ...a, column: aggNeedsColumn(a.func) ? a.column : "", alias: a.alias?.trim() || null }));
+  if (!aggs.length || aggs.length !== aggregations.length) return null;
+  return { op: "group_by", by, aggregations: aggs };
+}
+
+export function buildPivotOp(index: string[], columns: string, values: string, func: AggFunc): Operation | null {
+  if (!columns || index.includes(columns)) return null;
+  if (!values && func !== "rows" && func !== "count") return null;
+  return { op: "pivot", index, columns, values: values || null, func };
+}
+
+export function buildMeltOp(ids: string[], values: string[], variableName: string, valueName: string): Operation | null {
+  const v = variableName.trim();
+  const n = valueName.trim();
+  if (!v || !n || v === n || ids.includes(v) || ids.includes(n)) return null;
+  if (values.some((c) => ids.includes(c))) return null;
+  return { op: "melt", id_columns: ids, value_columns: values, variable_name: v, value_name: n };
+}
+
+export function buildValueCountsOp(columns: string[], normalize: boolean, dropna: boolean): Operation | null {
+  return columns.length ? { op: "value_counts", columns, normalize, dropna } : null;
+}
+
+// ---------------------------------------------------------------- filter and clean
+
+/** How many values a condition takes: 0 (is null), 1, or 2 (between). */
+export function condArity(op: CondOp): 0 | 1 | 2 {
+  if (op === "is_null" || op === "not_null" || op === "is_empty" || op === "not_empty") return 0;
+  return op === "between" ? 2 : 1;
+}
+
+/** Whether the case-sensitivity option applies to this condition. */
+export function condIsTextual(op: CondOp): boolean {
+  return ["eq", "ne", "contains", "not_contains", "starts_with", "ends_with", "matches", "in", "not_in"].includes(op);
+}
+
+export function emptyCondition(column: string): Condition {
+  return { column, op: "eq", value: "", value2: "", case_sensitive: false };
+}
+
+/**
+ * The filter, or null while a condition is incomplete. Comparisons on text
+ * columns may compare with an empty string; on other columns a value is needed.
+ */
+export function buildFilterOp(conditions: Condition[], combine: Combine, isText: (column: string) => boolean): Operation | null {
+  if (!conditions.length) return null;
+  for (const c of conditions) {
+    if (!c.column) return null;
+    const arity = condArity(c.op);
+    const needsText = !isText(c.column) || ["in", "not_in", "matches", "between"].includes(c.op);
+    if (arity >= 1 && needsText && !c.value.trim()) return null;
+    if (arity === 2 && !c.value2.trim()) return null;
+  }
+  return { op: "filter", conditions: conditions.map((c) => ({ ...c })), combine };
+}
+
+export function buildFillNullOp(columns: string[], method: FillMethod, value: string): Operation | null {
+  if (!columns.length) return null;
+  if (method === "value" && value === "") return null;
+  return { op: "fill_null", columns, method, value: method === "value" ? value : "" };
+}
+
+export function buildSortByOp(keys: SortKey[]): Operation | null {
+  const k = keys.filter((x) => x.column);
+  const names = k.map((x) => x.column);
+  if (!k.length || new Set(names).size !== names.length) return null;
+  return { op: "sort_by", keys: k };
+}
+
+/** Move the item at `i` by `delta` places, clamped to the list. */
+export function moveItem<T>(list: T[], i: number, delta: number): T[] {
+  const j = Math.max(0, Math.min(list.length - 1, i + delta));
+  if (i === j || i < 0 || i >= list.length) return list;
+  const out = list.slice();
+  const [x] = out.splice(i, 1);
+  out.splice(j, 0, x);
+  return out;
+}
+
+export function buildSelectColumnsOp(order: string[], kept: Set<string>): Operation | null {
+  const columns = order.filter((c) => kept.has(c));
+  return columns.length ? { op: "select_columns", columns } : null;
+}
+
+export function buildSliceOp(mode: SliceMode, n: number, seed: string): Operation | null {
+  if (!Number.isInteger(n) || n < 1) return null;
+  const s = seed.trim();
+  let parsed: number | null = null;
+  if (mode === "sample" && s) {
+    if (!/^\d+$/.test(s)) return null;
+    parsed = Number(s);
+  }
+  return { op: "slice", mode, n, seed: parsed };
+}
+
+export function buildSplitOp(
+  column: string,
+  separator: string,
+  regex: boolean,
+  parts: number | null,
+  keepOriginal: boolean,
+): Operation | null {
+  if (!column || separator === "") return null;
+  if (parts !== null && (!Number.isInteger(parts) || parts < 1 || parts > 50)) return null;
+  return { op: "split_column", column, separator, regex, parts, keep_original: keepOriginal };
+}
+
+/** "0, 10, 2.5" → [0, 10, 2.5]; null when an item is not a number. */
+export function parseNumberList(text: string): number[] | null {
+  const items = text
+    .split(/[,;\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const nums = items.map(Number);
+  return nums.every((n) => Number.isFinite(n)) ? nums : null;
+}
+
+/** "low, mid, high" → ["low", "mid", "high"]; empty text → []. */
+export function parseLabelList(text: string): string[] {
+  return text
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+export function buildBinOp(
+  column: string,
+  method: BinMethod,
+  bins: number,
+  edgesText: string,
+  labelsText: string,
+  output: string,
+): Operation | null {
+  if (!column || !output.trim()) return null;
+  const labels = parseLabelList(labelsText);
+  let edges: number[] = [];
+  let count = bins;
+  if (method === "edges") {
+    const e = parseNumberList(edgesText);
+    if (!e || new Set(e).size < 2) return null;
+    edges = e;
+    count = new Set(e).size - 1;
+  } else if (!Number.isInteger(bins) || bins < 1 || bins > 1000) {
+    return null;
+  }
+  if (labels.length && labels.length !== count) return null;
+  return { op: "bin", column, method, bins: method === "edges" ? 0 : bins, edges, labels, output: output.trim() };
+}
+
+// ---------------------------------------------------------------- window functions
+
+export function windowNeedsColumn(func: WindowFunc): boolean {
+  return func !== "cum_count" && func !== "row_number";
+}
+
+/** Which extra settings a window function uses. */
+export function windowUses(func: WindowFunc): { periods: boolean; window: boolean; rank: boolean } {
+  return {
+    periods: func === "shift" || func === "diff" || func === "pct_change",
+    window: func.startsWith("rolling_"),
+    rank: func === "rank" || func === "percent_rank",
+  };
+}
+
+export function defaultWindowOutput(func: WindowFunc, column: string): string {
+  const name = func.replace(/^cum_/, "cum");
+  return windowNeedsColumn(func) && column ? `${column}_${name}` : name;
+}
+
+export function buildWindowOp(spec: WindowSpec): Operation | null {
+  if (windowNeedsColumn(spec.func) && !spec.column) return null;
+  if (!spec.output.trim()) return null;
+  const uses = windowUses(spec.func);
+  if (uses.periods && (spec.periods === null || !Number.isInteger(spec.periods) || spec.periods === 0)) return null;
+  if (uses.window && (spec.window === null || !Number.isInteger(spec.window) || spec.window < 1)) return null;
+  return {
+    op: "window",
+    ...spec,
+    column: windowNeedsColumn(spec.func) ? spec.column : "",
+    periods: uses.periods ? spec.periods : null,
+    window: uses.window ? spec.window : null,
+    order_by: spec.order_by || null,
+    output: spec.output.trim(),
+  };
+}
+
+// ---------------------------------------------------------------- column types
+
+export function isTextType(dtype: string): boolean {
+  const t = dtype.toUpperCase();
+  return t === "VARCHAR" || t.startsWith("VARCHAR(") || t === "TEXT" || t === "STRING";
+}
+
+const NUMERIC_TYPES = [
+  "TINYINT",
+  "SMALLINT",
+  "INTEGER",
+  "BIGINT",
+  "HUGEINT",
+  "UTINYINT",
+  "USMALLINT",
+  "UINTEGER",
+  "UBIGINT",
+  "UHUGEINT",
+  "FLOAT",
+  "DOUBLE",
+  "REAL",
+];
+
+export function isNumericType(dtype: string): boolean {
+  const t = dtype.toUpperCase();
+  return NUMERIC_TYPES.includes(t) || t.startsWith("DECIMAL");
+}
+
+// ---------------------------------------------------------------- charts
+
+const looksLikeId = (name: string) => /(^id$|_id$|^id_)/i.test(name);
+
+/** Default horizontal axis: the first text-like column, else the first column. */
+export function defaultChartX(columns: ColumnMeta[]): string {
+  return columns.find((c) => !isNumericType(c.dtype))?.name ?? columns[0]?.name ?? "";
+}
+
+/** Default value column: a numeric column other than `x`, preferring ones that are not IDs. */
+export function defaultChartY(columns: ColumnMeta[], x: string): string {
+  const nums = columns.filter((c) => isNumericType(c.dtype) && c.name !== x).map((c) => c.name);
+  return nums.find((n) => !looksLikeId(n)) ?? nums[0] ?? "";
 }
