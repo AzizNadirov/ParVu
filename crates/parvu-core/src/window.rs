@@ -9,6 +9,7 @@ use crate::ops::{OpContext, ROW_NUMBER, StepLabel, with_row_number};
 use crate::sql::quote_ident as q;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum WindowFunc {
     CumSum,
@@ -65,6 +66,7 @@ impl WindowFunc {
 
 /// How ties are ranked (pandas `rank(method=…)`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum RankMethod {
     #[default]
@@ -80,6 +82,7 @@ fn default_true() -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct WindowSpec {
     /// The input column; unused for `cum_count` and `row_number`.
     #[serde(default)]

@@ -30,7 +30,7 @@ Dependencies only point down: `ui → parvu-app → (parvu-core, parvu-dsl, parv
 ## Commands
 
 ```bash
-cargo test -p parvu-core -p parvu-dsl -p parvu-config      # Rust tests (prebuilt DuckDB, seconds)
+cargo test -p parvu-core -p parvu-dsl -p parvu-config --features parvu-core/schema   # Rust tests (prebuilt DuckDB, seconds)
 cargo clippy --workspace --all-targets -- -D warnings      # must stay clean
 npm --prefix ui run typecheck && npm --prefix ui test      # UI
 cd crates/parvu-app && npx --prefix ../../ui tauri dev     # run the app
@@ -92,6 +92,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 | Keyboard shortcuts | the `onKey` handler in `ui/src/App.tsx`, `dialogs/ShortcutsDialog.tsx` |
 | Packaging | `crates/parvu-app/tauri*.conf.json`, `crates/parvu-app/packaging/`, `build.sh` |
 | CI | `.github/workflows/ci.yml` (tests), `package.yml` (installers) |
+| Read-only access for AI / MCP (SQL guard, previews) | `parvu-core/src/readonly.rs`, `Workspace::read_session` / `preview_op`, tests in `parvu-core/tests/readonly.rs`; see `plans/AI_PLAN.md` §6 |
 | Releases | `.github/workflows/release.yml`, triggered by a `v*` tag; steps in `RELEASES.md` |
 
 ## Known pitfalls

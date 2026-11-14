@@ -15,6 +15,7 @@ pub const PIVOT_MAX_COLUMNS: usize = 200;
 pub const TRANSPOSE_MAX_ROWS: u64 = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum AggFunc {
     /// Non-null values (pandas `count`).
@@ -91,6 +92,7 @@ impl AggFunc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Aggregation {
     /// Column to aggregate; may be empty for [`AggFunc::Rows`].
     #[serde(default)]

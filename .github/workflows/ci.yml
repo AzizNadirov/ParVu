@@ -50,7 +50,7 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
-        run: cargo test -p parvu-core -p parvu-dsl -p parvu-config
+        run: cargo test -p parvu-core -p parvu-dsl -p parvu-config --features parvu-core/schema
 
   # Installers take the longest (DuckDB is compiled from source), so they
   # are built only for main and manual runs. Version tags are built and

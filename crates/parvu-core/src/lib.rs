@@ -13,6 +13,7 @@ pub mod format;
 pub mod ops;
 pub mod page;
 pub mod pagination;
+pub mod readonly;
 pub mod reshape;
 pub mod search;
 pub mod sql;

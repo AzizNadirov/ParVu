@@ -33,6 +33,7 @@ impl StepLabel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Keep {
     #[default]
@@ -41,6 +42,7 @@ pub enum Keep {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum JoinType {
     Inner,
@@ -61,13 +63,21 @@ impl JoinType {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Operation {
+    /// Sort rows by one column.
     Sort { column: String, ascending: bool },
+    /// Rename a column.
     Rename { column: String, new_name: String },
+    /// Remove a column.
     Remove { column: String },
+    /// Cast a column to a DuckDB type such as `INTEGER`, `DOUBLE`, `DATE`,
+    /// `TIMESTAMP`, `VARCHAR`, `BOOLEAN` or `DECIMAL(18,2)`.
     ChangeType { column: String, new_type: String },
+    /// Add a copy of a column.
     Duplicate { column: String },
+    /// Remove duplicate rows, comparing the given columns (pandas `drop_duplicates`).
     DropDuplicates {
         /// Empty means all columns.
         #[serde(default)]
@@ -75,6 +85,7 @@ pub enum Operation {
         #[serde(default)]
         keep: Keep,
     },
+    /// Remove rows where a column is missing (pandas `dropna`).
     DropNull {
         column: String,
         /// `None` drops SQL NULLs; otherwise drops rows equal to this sentinel.
@@ -83,7 +94,10 @@ pub enum Operation {
     },
     /// Keep rows whose value (as text) is one of `values`; `None` matches NULL.
     FilterValues { column: String, values: Vec<Cell> },
+    /// Join another open table (`right`, by table name) on one key column each.
     Join { right: String, join_type: JoinType, left_key: String, right_key: String },
+    /// Append the rows of other open tables (by name) below this one;
+    /// `distinct` removes duplicate rows (SQL UNION).
     Append { tables: Vec<String>, distinct: bool },
     /// Add (or overwrite) a column computed by a SQL expression, e.g. a math
     /// operation or a compiled DSL expression. The current result is aliased
@@ -126,6 +140,8 @@ pub enum Operation {
         #[serde(default)]
         header_column: Option<String>,
     },
+    /// Count rows per distinct combination of `columns`, most frequent first
+    /// (pandas `value_counts`); `normalize` gives proportions.
     ValueCounts {
         columns: Vec<String>,
         #[serde(default)]
@@ -137,11 +153,14 @@ pub enum Operation {
     Describe,
 
     // Filtering and cleaning (crate::clean)
+    /// Keep rows matching the conditions (pandas boolean indexing / `query`).
     Filter {
         conditions: Vec<Condition>,
         #[serde(default)]
         combine: Combine,
     },
+    /// Fill missing values (pandas `fillna`, `ffill`, `bfill`); `value` is used
+    /// with the `value` method.
     FillNull {
         /// Empty means all columns.
         #[serde(default)]
@@ -150,15 +169,20 @@ pub enum Operation {
         #[serde(default)]
         value: String,
     },
+    /// Sort rows by several columns, first key first.
     SortBy { keys: Vec<SortKey> },
     /// Keep these columns, in this order.
     SelectColumns { columns: Vec<String> },
+    /// Keep the first, last or a random sample of `n` rows (pandas `head`,
+    /// `tail`, `sample`).
     Slice {
         mode: SliceMode,
         n: u64,
         #[serde(default)]
         seed: Option<u64>,
     },
+    /// Split a text column into several columns at a separator (pandas
+    /// `str.split(expand=True)`).
     SplitColumn {
         column: String,
         separator: String,
@@ -170,6 +194,9 @@ pub enum Operation {
         #[serde(default)]
         keep_original: bool,
     },
+    /// Put a numeric column's values into intervals, written to `output` (pandas
+    /// `cut` / `qcut`). Use `bins` with `equal_width` or `quantile`, `edges` with
+    /// `edges`; `labels` optionally name the intervals.
     Bin {
         column: String,
         method: BinMethod,
@@ -183,6 +210,8 @@ pub enum Operation {
     },
 
     // Column functions (crate::window)
+    /// Running totals, shifts, differences, ranks and rolling values, optionally
+    /// per group (pandas `cumsum`, `shift`, `diff`, `rank`, `rolling`).
     Window(WindowSpec),
 }
 
@@ -488,6 +517,12 @@ impl Operation {
         };
         Ok(BuiltOp { sql, label })
     }
+}
+
+/// JSON schema of [`Operation`], for AI and MCP tool definitions.
+#[cfg(feature = "schema")]
+pub fn operation_schema() -> serde_json::Value {
+    serde_json::to_value(schemars::schema_for!(Operation)).unwrap_or_default()
 }
 
 #[cfg(test)]
