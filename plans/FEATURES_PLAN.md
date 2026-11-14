@@ -49,7 +49,11 @@ Goal: cover the everyday pandas and LibreOffice Calc operations people use on a 
 
 ## Status
 
-- [ ] 1. Reshaping
-- [ ] 2. Filter and clean
-- [ ] 3. Column functions
-- [ ] 4. Spreadsheet features
+- [x] 1. Reshaping
+- [x] 2. Filter and clean
+- [x] 3. Column functions
+- [x] 4. Spreadsheet features
+
+Done on the `pandas-features` branch, with tests in `crates/parvu-core/tests/transforms.rs` and `ui/src/dialogs/__tests__/`.
+
+Ideas for later: saving formatting rules per file, exporting a chart as an image, `rolling` over a time window instead of a row count, multi-column pivot values.

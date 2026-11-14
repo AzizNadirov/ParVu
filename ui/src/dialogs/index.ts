@@ -33,5 +33,7 @@ export { openSlice } from "./SliceDialog";
 export { openSplitColumn } from "./SplitColumnDialog";
 export { openBin } from "./BinDialog";
 export { openWindow } from "./WindowDialog";
+export { openConditionalFormat } from "./ConditionalFormatDialog";
+export { openChart } from "./ChartDialog";
 export { SearchPanel } from "./SearchPanel";
 export type { SearchPanelProps } from "./SearchPanel";

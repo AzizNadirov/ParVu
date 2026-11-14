@@ -61,13 +61,13 @@ impl AggFunc {
     }
 
     /// Whether the SQL needs the row-number column (functions that follow table order).
-    fn needs_order(self) -> bool {
+    pub(crate) fn needs_order(self) -> bool {
         matches!(self, AggFunc::First | AggFunc::Last | AggFunc::List)
     }
 
     /// Aggregate SQL over `col` (already quoted; ignored for `Rows`), with an
     /// optional extra FILTER condition.
-    fn sql(self, col: &str, filter: Option<&str>) -> String {
+    pub(crate) fn sql(self, col: &str, filter: Option<&str>) -> String {
         let rn = q(ROW_NUMBER);
         let (expr, own_filter) = match self {
             AggFunc::Count => (format!("COUNT({col})"), None),

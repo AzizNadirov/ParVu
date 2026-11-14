@@ -27,6 +27,8 @@ export const SHORTCUT_GROUPS: [string, [string, string][]][] = [
       ["shortcuts.action.hscroll", "shortcuts.value.hscroll"],
       ["shortcuts.action.filter", "Ctrl+Shift+L"],
       ["shortcuts.action.group_by", "Ctrl+G"],
+      ["shortcuts.action.fill_down", "Ctrl+D"],
+      ["shortcuts.action.chart", "Ctrl+Shift+C"],
     ],
   ],
   [

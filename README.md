@@ -46,6 +46,21 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 - **Drag and drop** files onto the window to open them as tabs
 - **Large dataset warning** before expensive operations
 
+### Reshape and Analyse (pandas-style)
+- **Group by** with count, sum, mean, median, min, max, std, var, first, last, most frequent, distinct count or list (`Ctrl+G`)
+- **Pivot table** (one column per value, or a crosstab of counts), **unpivot** (melt) and **transpose**
+- **Value counts** and **describe** (min, max, mean, std, quartiles and nulls of every column)
+- **Filter rows** by conditions joined with AND or OR: =, ≠, <, >, between, contains, starts/ends with, regex, one of, is null or blank (`Ctrl+Shift+L`)
+- **Fill missing values** with a value, the previous or next value, or the column's mean, median or most frequent value
+- **Sort by several columns**, **choose and reorder columns**, keep the **first, last or a random sample** of rows
+- **Split a column** by a separator (Text to Columns) and **bin values** into equal-width, equal-count or custom intervals (`cut` / `qcut`)
+- **Running totals, ranks and rolling values**: cumulative sum/min/max/mean/count, shift, diff, percent change, rank (5 tie methods), rolling mean/sum/min/max/std, per group or overall
+
+### Spreadsheet Features
+- **Charts** - bar, line, scatter and histogram, calculated by DuckDB so they work on huge files (`Ctrl+Shift+C`)
+- **Conditional formatting** - colour scales and highlight rules per column
+- **Freeze columns**, remembered column widths, and **fill down** (`Ctrl+D`)
+
 ### Search
 - **Search** (`Ctrl+F`) finds matches across every page, not just the visible one. Search one column or all, with match case, whole cell and regex options. `F3` / `Shift+F3` step through matches, and the table jumps to the right page and cell.
 

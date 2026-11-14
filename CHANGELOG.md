@@ -1,5 +1,16 @@
 # ParVu Changelog
 
+## [Unreleased]
+
+### Added
+- **Data menu:** filter rows by conditions (AND/OR), multi-column sort, choose and reorder columns, first/last/random rows, fill missing values (value, forward, backward, mean, median, most frequent), split a column, bin values.
+- **Reshape menu:** group by with 14 aggregations, pivot table and crosstab, unpivot (melt), transpose, value counts, describe all columns.
+- **Running totals, ranks and rolling values** (Operations menu): cumulative sum/min/max/mean/count, shift, diff, percent change, rank, percent rank, row number, rolling mean/sum/min/max/std, per group and in any row order.
+- **Charts:** bar, line, scatter and histogram, aggregated by DuckDB.
+- **Conditional formatting:** colour scales and highlight rules; **freeze columns**; column widths kept per tab; **fill down** (`Ctrl+D`) as one undoable step.
+- **Expression functions:** `IFNULL`, `GREATEST`, `LEAST`, `SPLIT_PART`, `SUBSTR`, `LEFT`, `RIGHT`, `LPAD`, `RPAD`, `REVERSE`, `REGEX_EXTRACT`, `REGEX_MATCH`, `STRFTIME`, `STRPTIME`, `QUARTER`, `WEEK`, `DAYOFWEEK`, `HOUR`, `MINUTE`, `DATE_TRUNC`, `LN`, `LOG10`, `EXP`, `MOD`, `SIGN`.
+- Shortcuts: `Ctrl+Shift+L` filter, `Ctrl+G` group by, `Ctrl+D` fill down, `Ctrl+Shift+C` chart.
+
 ## [1.0.0-alpha.1]
 
 ParVu is rewritten in Rust (Tauri window, React UI, DuckDB). It reads the same `~/.ParVu` settings, recent files and themes as 0.x, and the `.deb` replaces the Python package. The Python code has been removed. See `plans/RUST_REWRITE_PLAN.md`.

@@ -32,6 +32,9 @@ pub type TabId = u64;
 enum StepKind {
     Sql,
     CellEdit { row: u64, column: String },
+    /// Several cells edited at once (fill down); keeps each cell's previous
+    /// pending edit so undo restores it exactly.
+    CellEdits { previous: Vec<(u64, String, Option<CellEdit>)> },
 }
 
 #[derive(Debug, Clone)]
@@ -380,6 +383,19 @@ impl Workspace {
                     return Err(e);
                 }
             }
+            StepKind::CellEdits { previous } => {
+                let before = tab.edits.clone();
+                for (row, column, prev) in previous {
+                    tab.edits.remove(*row, column);
+                    if let Some(p) = prev {
+                        tab.edits.add(p.clone());
+                    }
+                }
+                if let Err(e) = rebuild_overlay(conn, tab) {
+                    tab.edits = before;
+                    return Err(e);
+                }
+            }
         }
         tab.steps.pop();
         Ok(step.label)
@@ -443,6 +459,68 @@ impl Workspace {
         Ok(true)
     }
 
+    /// Edit several cells as one step (fill down). Cells whose value does not
+    /// change are skipped; returns how many changed. Same rules as
+    /// [`Workspace::edit_cell`].
+    pub fn edit_cells(&mut self, id: TabId, edits: &[(u64, String, Cell)]) -> Result<usize> {
+        const MAX_CELLS: usize = 100_000;
+        if edits.len() > MAX_CELLS {
+            return Err(CoreError::invalid(format!("Edit at most {MAX_CELLS} cells at once")));
+        }
+        let conn = &self.conn;
+        let tab = self.tabs.iter_mut().find(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
+        if !tab.engine.is_base_query() {
+            return Err(CoreError::invalid("Cells can only be edited before any transform is applied"));
+        }
+        let total = tab.engine.total_rows();
+        let columns = describe(conn, &format!("SELECT * FROM {}", quote_ident(&tab.source_view())))?;
+        let before = tab.edits.clone();
+        let mut previous = Vec::new();
+        for (row, column, value) in edits {
+            if *row >= total {
+                tab.edits = before;
+                return Err(CoreError::invalid(format!("Row {row} is out of range")));
+            }
+            let Some(col) = columns.iter().find(|c| &c.name == column) else {
+                tab.edits = before;
+                return Err(CoreError::UnknownColumn(column.clone()));
+            };
+            let value = match value {
+                Some(v) if v.is_empty() && !col.dtype.eq_ignore_ascii_case("VARCHAR") => None,
+                other => other.clone(),
+            };
+            if let Err(e) = validate_value(conn, &col.dtype, &value) {
+                tab.edits = before;
+                return Err(e);
+            }
+            let current: Cell = conn.query_row(
+                &format!("SELECT CAST({} AS VARCHAR) FROM {} LIMIT 1 OFFSET {row}", quote_ident(column), quote_ident(&tab.name)),
+                [],
+                |r| r.get(0),
+            )?;
+            if current == value {
+                continue;
+            }
+            let prev = tab.edits.get(*row, column).cloned();
+            let original = prev.as_ref().map(|e| e.old_value.clone()).unwrap_or(current);
+            previous.push((*row, column.clone(), prev));
+            tab.edits.add(CellEdit { row: *row, column: column.clone(), old_value: original, new_value: value });
+        }
+        if previous.is_empty() {
+            return Ok(0);
+        }
+        if let Err(e) = rebuild_overlay(conn, tab) {
+            tab.edits = before;
+            return Err(e);
+        }
+        let n = previous.len();
+        tab.steps.push(Step {
+            label: StepLabel::new("step.cell_edits", &[("count", &n.to_string())]),
+            kind: StepKind::CellEdits { previous },
+        });
+        Ok(n)
+    }
+
     pub fn pending_edits(&self, id: TabId) -> Result<Vec<CellEdit>> {
         Ok(self.tab(id)?.edits.all().to_vec())
     }
@@ -503,6 +581,29 @@ impl Workspace {
     pub fn column_stats(&self, id: TabId, column: &str) -> Result<ColumnStats> {
         let dtype = self.column_type(id, column)?;
         column_stats(&self.conn, self.tab(id)?.engine.current_query(), column, &dtype)
+    }
+
+    /// Chart data for the tab's current result.
+    pub fn chart(&self, id: TabId, spec: &crate::chart::ChartSpec) -> Result<crate::chart::ChartData> {
+        let t = self.tab(id)?;
+        let columns = t.engine.columns(&self.conn)?;
+        crate::chart::chart_data(&self.conn, t.engine.current_query(), &columns, spec)
+    }
+
+    /// Minimum and maximum of a column read as numbers (for colour scales),
+    /// or `None` when it has no numeric values.
+    pub fn numeric_range(&self, id: TabId, column: &str) -> Result<Option<(f64, f64)>> {
+        self.column_type(id, column)?;
+        let c = quote_ident(column);
+        let (lo, hi): (Option<f64>, Option<f64>) = self.conn.query_row(
+            &format!(
+                "SELECT MIN(TRY_CAST({c} AS DOUBLE)), MAX(TRY_CAST({c} AS DOUBLE)) FROM ({})",
+                self.tab(id)?.engine.current_query()
+            ),
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        Ok(lo.zip(hi))
     }
 
     pub fn unique_values(&self, id: TabId, column: &str) -> Result<Vec<Cell>> {

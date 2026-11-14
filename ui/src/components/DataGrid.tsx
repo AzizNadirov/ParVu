@@ -17,6 +17,7 @@ import {
 import "@glideapps/glide-data-grid/dist/index.css";
 import type { Cell, ColumnMeta, Page } from "../lib/api";
 import { cssVar } from "../lib/theme";
+import { cellBackground, type FormatColor, type FormatRule } from "../lib/format";
 
 const NUMERIC = /^(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|UTINYINT|USMALLINT|UINTEGER|UBIGINT|UHUGEINT|FLOAT|DOUBLE|REAL|DECIMAL)(\(|$)/i;
 export const isNumericType = (dtype: string) => NUMERIC.test(dtype.trim());
@@ -28,6 +29,8 @@ export interface GridHandle {
   currentCell(): { row: number; col: number } | null;
   /** Rows of the current rectangular selection, plus their column names. */
   selection(): { rows: Cell[][]; columns: string[] } | null;
+  /** The selected rectangle in page coordinates. */
+  selectionRange(): { x: number; y: number; width: number; height: number } | null;
   focus(): void;
 }
 
@@ -43,7 +46,18 @@ export interface DataGridProps {
   onHeaderMenu(column: string, x: number, y: number): void;
   onCellMenu(row: number, col: number, x: number, y: number): void;
   onEdit(row: number, column: string, value: string): void;
+  /** Number of columns kept in view on the left. */
+  frozen: number;
+  /** Column widths set by the user, by column name. */
+  widths: Record<string, number>;
+  onResize(column: string, width: number): void;
+  /** Conditional formatting rules. */
+  formats: FormatRule[];
+  /** Minimum and maximum of the columns with a colour scale. */
+  ranges: Record<string, { min: number; max: number }>;
 }
+
+const NO_RULES: FormatRule[] = [];
 
 function estimateWidth(meta: ColumnMeta, rows: Cell[][], col: number, charPx: number): number {
   let longest = meta.name.length + 3;
@@ -59,14 +73,13 @@ function estimateWidth(meta: ColumnMeta, rows: Cell[][], col: number, charPx: nu
 const EDITED_OVERRIDE: Partial<Theme> = { bgCell: "rgba(255, 213, 79, 0.45)" };
 
 const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(props, ref) {
-  const { page, sort, themeKey, nullText } = props;
+  const { page, sort, themeKey, nullText, widths, formats, ranges } = props;
   // Event handlers from the parent change identity on every render. Keep the
   // latest ones in a ref so the callbacks passed to the grid stay stable and
   // the canvas is not redrawn for unrelated parent updates.
   const handlers = useRef(props);
   handlers.current = props;
   const editor = useRef<DataEditorRef>(null);
-  const [widths, setWidths] = useState<Record<string, number>>({});
   const [selection, setSelection] = useState<GridSelection>({
     columns: CompactSelection.empty(),
     rows: CompactSelection.empty(),
@@ -111,6 +124,12 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
       nullOverride: { textDark: cssVar("--pv-colors-editor-comment", "#999") } as Partial<Theme>,
       rowHeight: px("--pv-layout-table-row-height", 26),
       headerHeight: px("--pv-layout-table-header-height", 30),
+      colors: {
+        primary: cssVar("--pv-colors-accent-primary", "#2196F3"),
+        secondary: cssVar("--pv-colors-accent-secondary", "#4CAF50"),
+        warning: cssVar("--pv-colors-accent-warning", "#FF9800"),
+        error: cssVar("--pv-colors-accent-error", "#F44336"),
+      } as Record<FormatColor, string>,
     };
     // themeKey changes when the CSS variables change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,11 +152,26 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
 
   const numeric = useMemo(() => (page?.columns ?? []).map((c) => isNumericType(c.dtype)), [page]);
 
+  // Formatting rules per column index, so drawing a cell looks at its own rules only.
+  const rulesByCol = useMemo(
+    () => (page?.columns ?? []).map((c) => formats.filter((f) => f.column === c.name)),
+    [page, formats],
+  );
+
   const getCellContent = useCallback(
     ([col, row]: Item): GridCell => {
       const v = page?.rows[row]?.[col] ?? null;
       const edited = editedSet.has(`${row}:${col}`);
       const isNull = v === null;
+      const rules = rulesByCol[col] ?? NO_RULES;
+      const bg = !edited && rules.length ? cellBackground(rules, v, ranges, styling.colors) : null;
+      const override = edited
+        ? EDITED_OVERRIDE
+        : bg
+          ? { bgCell: bg, ...(isNull ? styling.nullOverride : {}) }
+          : isNull
+            ? styling.nullOverride
+            : undefined;
       return {
         kind: GridCellKind.Text,
         data: v ?? "",
@@ -145,10 +179,10 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         allowOverlay: true,
         readonly: !page?.editable,
         contentAlign: numeric[col] ? "right" : "left",
-        themeOverride: edited ? EDITED_OVERRIDE : isNull ? styling.nullOverride : undefined,
+        themeOverride: override,
       };
     },
-    [page, editedSet, numeric, nullText, styling],
+    [page, editedSet, numeric, nullText, styling, rulesByCol, ranges],
   );
 
   const getRowThemeOverride = useCallback(
@@ -205,6 +239,9 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         return c ? { row: c[1], col: c[0] } : null;
       },
       selection: getSelectionRows,
+      selectionRange() {
+        return selection.current?.range ?? null;
+      },
       focus() {
         editor.current?.focus();
       },
@@ -254,7 +291,8 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         rowHeight={styling.rowHeight}
         headerHeight={styling.headerHeight}
         getRowThemeOverride={getRowThemeOverride}
-        onColumnResize={(col, w) => setWidths((prev) => ({ ...prev, [col.id as string]: w }))}
+        onColumnResize={(col, w) => handlers.current.onResize(col.id as string, w)}
+        freezeColumns={Math.min(props.frozen, page.columns.length)}
         onHeaderClicked={onHeaderClicked}
         onHeaderContextMenu={onHeaderContextMenu}
         onCellContextMenu={([col, row], e) => {
@@ -290,5 +328,9 @@ export const DataGrid = memo(
     a.sort?.ascending === b.sort?.ascending &&
     a.themeKey === b.themeKey &&
     a.nullText === b.nullText &&
-    a.select?.seq === b.select?.seq,
+    a.select?.seq === b.select?.seq &&
+    a.frozen === b.frozen &&
+    a.widths === b.widths &&
+    a.formats === b.formats &&
+    a.ranges === b.ranges,
 );

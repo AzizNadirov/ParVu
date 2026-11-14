@@ -86,6 +86,22 @@ export type Operation =
   // column functions
   | ({ op: "window" } & WindowSpec);
 
+export type ChartKind = "bar" | "line" | "scatter" | "histogram";
+export interface ChartSpec {
+  kind: ChartKind;
+  x: string;
+  y: string | null;
+  agg: AggFunc;
+  bins: number | null;
+  sort_by_value: boolean;
+}
+export interface ChartData {
+  labels: string[];
+  values: (number | null)[];
+  xs: (number | null)[];
+  truncated: boolean;
+}
+
 export const AGG_FUNCS = [
   "count",
   "rows",
@@ -400,9 +416,13 @@ export const api = {
   resetTab: (id: number) => call<TabSummary>("reset_tab", { id }),
   editCell: (id: number, row: number, column: string, value: Cell) =>
     call<TabSummary>("edit_cell", { id, row, column, value }),
+  editCells: (id: number, cells: { row: number; column: string; value: Cell }[]) =>
+    call<TabSummary>("edit_cells", { id, cells }),
   saveTab: (id: number, path: string | null) => call<TabSummary>("save_tab", { id, path }),
 
   columnStats: (id: number, column: string) => call<ColumnStats>("column_stats", { id, column }),
+  chartData: (id: number, spec: ChartSpec) => call<ChartData>("chart_data", { id, spec }),
+  columnRange: (id: number, column: string) => call<[number, number] | null>("column_range", { id, column }),
   uniqueValues: (id: number, column: string) => call<Cell[]>("unique_values", { id, column }),
   columnTuple: (id: number, column: string, mode: "first" | "random", n: number) =>
     call<string>("column_tuple", { id, column, mode, n }),

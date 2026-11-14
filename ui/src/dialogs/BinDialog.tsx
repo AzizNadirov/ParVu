@@ -58,7 +58,7 @@ function BinDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>; 
         ))}
         {method === "edges" ? (
           <label className="row">
-            {t("dialog.bin.edges")}
+            {t("dialog.bin.edges_label")}
             <input
               type="text"
               className="grow pv-mono"

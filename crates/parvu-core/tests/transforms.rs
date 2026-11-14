@@ -1,6 +1,7 @@
 //! The pandas-style operations (reshape, clean, window) run against DuckDB.
 
 use parvu_core::Workspace;
+use parvu_core::chart::{ChartKind, ChartSpec};
 use parvu_core::clean::{BinMethod, Combine, CondOp, Condition, FillMethod, SliceMode, SortKey};
 use parvu_core::ops::Operation;
 use parvu_core::reshape::{AggFunc, Aggregation};
@@ -415,4 +416,60 @@ fn expression_function_names_exist_in_duckdb() {
         .unwrap();
     assert_eq!(row.len(), 26);
     assert!(row[4].contains('b') && row[11].contains("123") && row[13].contains("2024-03"), "{row:?}");
+}
+
+#[test]
+fn batch_edits_are_one_step_and_undo_restores_earlier_edits() {
+    let (_d, mut ws, id) = setup();
+    // An earlier single edit on a cell the batch will overwrite.
+    ws.edit_cell(id, 2, "region", Some("west".into())).unwrap();
+    let fill: Vec<(u64, String, Option<String>)> =
+        (1..4).map(|r| (r, "region".to_string(), Some("north".to_string()))).collect();
+    // Rows 1-3 become "north": 1 and 3 were "south", 2 was edited to "west".
+    let n = ws.edit_cells(id, &fill).unwrap();
+    assert_eq!(n, 3);
+    assert_eq!(col(&ws, id, "region"), s(&["north", "north", "north", "north", "north", "east"]));
+    assert_eq!(ws.summary(id).unwrap().steps.len(), 2);
+    ws.undo(id).unwrap();
+    assert_eq!(col(&ws, id, "region"), s(&["north", "south", "west", "south", "north", "east"]), "the earlier edit is back");
+    // Invalid values are refused and change nothing.
+    assert!(ws.edit_cells(id, &[(0, "qty".into(), Some("x".into())), (1, "qty".into(), Some("1".into()))]).is_err());
+    assert_eq!(col(&ws, id, "qty"), s(&["3", "∅", "5", "2", "7", "∅"]));
+    // Unchanged values make no step.
+    assert_eq!(ws.edit_cells(id, &[(0, "qty".into(), Some("3".into()))]).unwrap(), 0);
+}
+
+#[test]
+fn numeric_range_for_colour_scales() {
+    let (_d, ws, id) = setup();
+    assert_eq!(ws.numeric_range(id, "qty").unwrap(), Some((2.0, 7.0)));
+    assert_eq!(ws.numeric_range(id, "region").unwrap(), None);
+    assert!(ws.numeric_range(id, "nope").is_err());
+}
+
+fn chart(kind: ChartKind, x: &str, y: Option<&str>, agg: AggFunc) -> ChartSpec {
+    ChartSpec { kind, x: x.into(), y: y.map(String::from), agg, bins: None, sort_by_value: false }
+}
+
+#[test]
+fn chart_data_is_aggregated_in_duckdb() {
+    let (_d, ws, id) = setup();
+    let bar = ws.chart(id, &chart(ChartKind::Bar, "region", Some("qty"), AggFunc::Sum)).unwrap();
+    assert_eq!(bar.labels, s(&["east", "north", "south"]));
+    assert_eq!(bar.values, vec![None, Some(15.0), Some(2.0)]);
+    let bar = ws.chart(id, &ChartSpec { sort_by_value: true, ..chart(ChartKind::Bar, "region", None, AggFunc::Sum) }).unwrap();
+    assert_eq!(bar.labels, s(&["north", "south", "east"]), "row counts, largest first");
+    assert_eq!(bar.values, vec![Some(3.0), Some(2.0), Some(1.0)]);
+    let line = ws.chart(id, &chart(ChartKind::Line, "day", Some("price"), AggFunc::Mean)).unwrap();
+    assert_eq!(line.labels.first().map(String::as_str), Some("2024-01-01"));
+    assert_eq!(line.labels.last().map(String::as_str), Some("NULL"));
+    let sc = ws.chart(id, &chart(ChartKind::Scatter, "qty", Some("price"), AggFunc::Sum)).unwrap();
+    assert_eq!(sc.xs.len(), 6);
+    assert!(!sc.truncated);
+    let h = ws.chart(id, &ChartSpec { bins: Some(5), ..chart(ChartKind::Histogram, "qty", None, AggFunc::Sum) }).unwrap();
+    assert_eq!(h.labels, s(&["2", "3", "4", "5", "6"]));
+    assert_eq!(h.values.iter().flatten().sum::<f64>(), 4.0, "four non-null values");
+    assert_eq!(h.values.last(), Some(&Some(1.0)), "the maximum lands in the last bin");
+    assert!(ws.chart(id, &chart(ChartKind::Histogram, "region", None, AggFunc::Sum)).is_err());
+    assert!(ws.chart(id, &chart(ChartKind::Bar, "region", Some("qty"), AggFunc::List)).is_err());
 }

@@ -77,7 +77,9 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 
 | Task | Where |
 |------|-------|
-| A table operation | `parvu-core/src/ops.rs`, the menu or dialog in `ui/src/App.tsx` / `ui/src/dialogs/` |
+| A table operation | `parvu-core/src/ops.rs` (or `reshape.rs`, `clean.rs`, `window.rs`), the menu or dialog in `ui/src/App.tsx` / `ui/src/dialogs/` |
+| Charts | `parvu-core/src/chart.rs`, `ui/src/components/Chart.tsx`, `ui/src/dialogs/ChartDialog.tsx` |
+| Conditional formatting | `ui/src/lib/format.ts`, `ui/src/dialogs/ConditionalFormatDialog.tsx`, applied in `DataGrid.tsx` |
 | A new backend command | `parvu-app/src/commands.rs`, register in `main.rs`, wrapper in `ui/src/lib/api.ts` |
 | Query, paging or undo behaviour | `parvu-core/src/engine.rs`, `workspace.rs` |
 | Cell edits or saving | `parvu-core/src/edits.rs`, `workspace.rs` |

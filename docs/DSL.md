@@ -115,7 +115,10 @@ Functions are case-insensitive: `upper`, `UPPER`, `Upper` all work.
 | `SQRT(x)` | Square root | `SQRT(data[area])` |
 | `POWER(x, y)` | x raised to y | `POWER(data[base], 2)` |
 | `LN(x)` | Natural log | `LN(data[value])` |
+| `LOG10(x)` | Base-10 log | `LOG10(data[value])` |
 | `EXP(x)` | e^x | `EXP(data[rate])` |
+| `MOD(x, d)` | Remainder | `MOD(data[id], 10)` |
+| `SIGN(x)` | -1, 0 or 1 | `SIGN(data[change])` |
 
 ### String
 
@@ -125,11 +128,39 @@ Functions are case-insensitive: `upper`, `UPPER`, `Upper` all work.
 | `LOWER(s)` | Lowercase | `LOWER(data[email])` |
 | `LEN(s)` | Length | `LEN(data[code])` |
 | `TRIM(s)` | Remove whitespace | `TRIM(data[comment])` |
-| `SUBSTRING(s, start, len)` | Extract substring | `SUBSTRING(data[id], 1, 4)` |
+| `SUBSTR(s, start, len)` | Extract substring (from 1) | `SUBSTR(data[id], 1, 4)` |
+| `LEFT(s, n)` / `RIGHT(s, n)` | First / last n characters | `LEFT(data[code], 2)` |
+| `LPAD(s, n, fill)` / `RPAD(s, n, fill)` | Pad to n characters | `LPAD(data[code], 6, '0')` |
+| `REVERSE(s)` | Reverse | `REVERSE(data[code])` |
+| `SPLIT_PART(s, sep, i)` | i-th piece (from 1) | `SPLIT_PART(data[email], '@', 2)` |
+| `REGEX_EXTRACT(s, pattern, group)` | Matching part or group | `REGEX_EXTRACT(data[phone], '(\\d{3})', 1)` |
+| `REGEX_MATCH(s, pattern)` | True where the pattern matches | `REGEX_MATCH(data[email], '@example')` |
 | `REPLACE(s, old, new, case_sensitive, regex)` | Replace text | `REPLACE(data[phone], '-', '')` |
 | `CONTAINS(s, sub)` | Contains check | `CONTAINS(data[desc], 'sale')` |
 | `STARTSWITH(s, prefix)` | Prefix check | `STARTSWITH(data[id], 'US')` |
 | `ENDSWITH(s, suffix)` | Suffix check | `ENDSWITH(data[file], '.csv')` |
+
+### Conditional
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `IF(cond, a, b)` | a where cond is true, else b | `IF(data[qty] > 10, 'bulk', 'single')` |
+| `IFNULL(x, fallback)` | fallback where x is NULL | `IFNULL(data[discount], 0)` |
+| `COALESCE(a, b, ...)` | First non-NULL | `COALESCE(data[nick], data[name])` |
+| `GREATEST(a, b, ...)` / `LEAST(a, b, ...)` | Largest / smallest | `GREATEST(data[price], 0)` |
+
+### Date and Time
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `YEAR(d)`, `MONTH(d)`, `DAY(d)` | Parts of a date | `YEAR(data[day])` |
+| `QUARTER(d)`, `WEEK(d)`, `DAYOFWEEK(d)` | Quarter, ISO week, day of week (0 = Sunday) | `QUARTER(data[day])` |
+| `HOUR(t)`, `MINUTE(t)` | Parts of a timestamp | `HOUR(data[time])` |
+| `DATE_TRUNC(part, d)` | Start of the year, quarter, month, week, day or hour | `DATE_TRUNC('month', data[day])` |
+| `DATEDIFF(part, a, b)` | Difference in days, months… | `DATEDIFF('day', data[start], data[end])` |
+| `STRFTIME(d, format)` | Date as text | `STRFTIME(data[day], '%Y-%m')` |
+| `STRPTIME(s, format)` | Text to timestamp | `STRPTIME(data[text], '%d.%m.%Y')` |
+| `TODAY()`, `NOW()` | Current date / timestamp | `DATEDIFF('day', data[day], TODAY())` |
 
 ### Aggregation
 

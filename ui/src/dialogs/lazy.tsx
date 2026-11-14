@@ -52,5 +52,7 @@ export const openSlice = deferred("openSlice");
 export const openSplitColumn = deferred("openSplitColumn");
 export const openBin = deferred("openBin");
 export const openWindow = deferred("openWindow");
+export const openConditionalFormat = deferred("openConditionalFormat");
+export const openChart = deferred("openChart");
 
 export const SearchPanel = lazy(() => load().then((m) => ({ default: m.SearchPanel })));

@@ -720,3 +720,18 @@ export function isNumericType(dtype: string): boolean {
   const t = dtype.toUpperCase();
   return NUMERIC_TYPES.includes(t) || t.startsWith("DECIMAL");
 }
+
+// ---------------------------------------------------------------- charts
+
+const looksLikeId = (name: string) => /(^id$|_id$|^id_)/i.test(name);
+
+/** Default horizontal axis: the first text-like column, else the first column. */
+export function defaultChartX(columns: ColumnMeta[]): string {
+  return columns.find((c) => !isNumericType(c.dtype))?.name ?? columns[0]?.name ?? "";
+}
+
+/** Default value column: a numeric column other than `x`, preferring ones that are not IDs. */
+export function defaultChartY(columns: ColumnMeta[], x: string): string {
+  const nums = columns.filter((c) => isNumericType(c.dtype) && c.name !== x).map((c) => c.name);
+  return nums.find((n) => !looksLikeId(n)) ?? nums[0] ?? "";
+}

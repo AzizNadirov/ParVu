@@ -356,3 +356,36 @@ describe("pandas-style operation dialogs", () => {
     expect((screen.getByText("btn.apply") as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+describe("spreadsheet dialogs", () => {
+  it("conditional formatting returns the edited rules", async () => {
+    const ui = makeUi();
+    const p = D.openConditionalFormat(ui, {
+      columns: [{ name: "qty", dtype: "INTEGER" }],
+      rules: [{ kind: "scale", column: "qty", color: "primary" }],
+      selected: "qty",
+    });
+    await flush();
+    fireEvent.click(screen.getByText("dialog.format.highlight"));
+    fireEvent.change(document.querySelector(".pv-indent input")!, { target: { value: "5" } });
+    fireEvent.click(screen.getByText("dialog.format.add_rule"));
+    fireEvent.click(screen.getByText("btn.ok"));
+    await expect(p).resolves.toEqual([
+      { kind: "scale", column: "qty", color: "primary" },
+      { kind: "highlight", column: "qty", op: "gt", value: "5", value2: "", color: "primary" },
+    ]);
+  });
+
+  it("the chart dialog asks DuckDB for chart data and closes", async () => {
+    const ui = makeUi();
+    const p = D.openChart(ui, { tabId: 3, table: "t", columns: [{ name: "region", dtype: "VARCHAR" }, { name: "qty", dtype: "INTEGER" }] });
+    await act(async () => new Promise((r) => setTimeout(r, 400)));
+    expect(invoke).toHaveBeenCalledWith("chart_data", {
+      id: 3,
+      spec: { kind: "bar", x: "region", y: "qty", agg: "sum", bins: 20, sort_by_value: true },
+    });
+    fireEvent.click(screen.getByText("btn.close"));
+    await expect(p).resolves.toBeUndefined();
+  });
+});
+
