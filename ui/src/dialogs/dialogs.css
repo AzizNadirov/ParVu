@@ -185,3 +185,12 @@ table.simple td select { width: 100%; }
 
 /* unique values */
 .pv-unique .item { padding: 1px 6px; }
+
+/* column pickers and rule lists (group by, filter, sort…) */
+.pv-column-checklist { max-height: 200px; overflow: auto; }
+.pv-rules { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow: auto; }
+.pv-rules .row > select, .pv-rules .row > input[type="text"] { min-width: 0; }
+.pv-rule-num { width: 6em; }
+.pv-rule-name { flex: 0 0 9em; width: 9em; }
+.pv-icon-btn { min-width: 2em; padding-left: 4px; padding-right: 4px; }
+.pv-two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; }

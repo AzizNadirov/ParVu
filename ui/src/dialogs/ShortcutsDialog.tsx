@@ -25,6 +25,8 @@ export const SHORTCUT_GROUPS: [string, [string, string][]][] = [
       ["shortcuts.action.copy_tsv", "Ctrl+C"],
       ["shortcuts.action.copy_other", "shortcuts.value.copy_other"],
       ["shortcuts.action.hscroll", "shortcuts.value.hscroll"],
+      ["shortcuts.action.filter", "Ctrl+Shift+L"],
+      ["shortcuts.action.group_by", "Ctrl+G"],
     ],
   ],
   [

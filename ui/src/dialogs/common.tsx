@@ -138,3 +138,70 @@ export function useDebounced<T>(value: T, ms: number, effect: (v: T) => void | (
     };
   }, [value, ms]);
 }
+
+/** Checklist of columns with "select all" / "none" buttons. */
+export function ColumnChecklist({
+  ui,
+  columns,
+  checked,
+  onChange,
+  disabled,
+}: {
+  ui: Ui;
+  columns: string[];
+  checked: Set<string>;
+  onChange: (next: Set<string>) => void;
+  /** Columns that cannot be ticked (used elsewhere in the dialog). */
+  disabled?: Set<string>;
+}) {
+  const toggle = (c: string) => {
+    const n = new Set(checked);
+    if (n.has(c)) n.delete(c);
+    else n.add(c);
+    onChange(n);
+  };
+  return (
+    <div className="col">
+      <div className="row">
+        <button onClick={() => onChange(new Set(columns.filter((c) => !disabled?.has(c))))}>{ui.t("btn.select_all")}</button>
+        <button onClick={() => onChange(new Set())}>{ui.t("btn.deselect_all")}</button>
+      </div>
+      <div className="list-box pv-column-checklist">
+        {columns.map((c) => (
+          <div key={c} className={`item ${checked.has(c) ? "selected" : ""}`}>
+            <label className="row grow">
+              <input type="checkbox" checked={checked.has(c)} disabled={disabled?.has(c)} onChange={() => toggle(c)} />
+              {c}
+            </label>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Drop-down of columns; `emptyLabel` adds a "none" choice with value "". */
+export function ColumnSelect({
+  columns,
+  value,
+  onChange,
+  emptyLabel,
+  className,
+}: {
+  columns: string[];
+  value: string;
+  onChange: (v: string) => void;
+  emptyLabel?: string;
+  className?: string;
+}) {
+  return (
+    <select className={className ?? "grow"} value={value} onChange={(e) => onChange(e.target.value)}>
+      {emptyLabel !== undefined && <option value="">{emptyLabel}</option>}
+      {columns.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  );
+}

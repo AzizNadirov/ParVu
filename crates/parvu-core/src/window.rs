@@ -36,13 +36,14 @@ pub enum WindowFunc {
 }
 
 impl WindowFunc {
+    /// The serde name, also used in step labels (the UI translates `window.<name>`).
     pub fn name(self) -> &'static str {
         match self {
-            WindowFunc::CumSum => "cumsum",
-            WindowFunc::CumMin => "cummin",
-            WindowFunc::CumMax => "cummax",
-            WindowFunc::CumMean => "cummean",
-            WindowFunc::CumCount => "cumcount",
+            WindowFunc::CumSum => "cum_sum",
+            WindowFunc::CumMin => "cum_min",
+            WindowFunc::CumMax => "cum_max",
+            WindowFunc::CumMean => "cum_mean",
+            WindowFunc::CumCount => "cum_count",
             WindowFunc::Shift => "shift",
             WindowFunc::Diff => "diff",
             WindowFunc::PctChange => "pct_change",

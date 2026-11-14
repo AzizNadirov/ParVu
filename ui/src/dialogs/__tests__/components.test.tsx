@@ -37,7 +37,7 @@ describe("shortcuts", () => {
   it("includes Shift+Wheel horizontal scrolling", () => {
     const rows = shortcutRows(t);
     expect(rows).toContainEqual(["T(shortcuts.group.table)", "T(shortcuts.action.hscroll)", "T(shortcuts.value.hscroll)"]);
-    expect(rows).toHaveLength(16);
+    expect(rows).toHaveLength(18);
   });
 });
 

@@ -39,5 +39,18 @@ export const openExportDialog = deferred("openExportDialog");
 export const openUnsavedChanges = deferred("openUnsavedChanges");
 export const openConfirmClose = deferred("openConfirmClose");
 export const openCrashReport = deferred("openCrashReport");
+export const openGroupBy = deferred("openGroupBy");
+export const openPivot = deferred("openPivot");
+export const openMelt = deferred("openMelt");
+export const openTranspose = deferred("openTranspose");
+export const openValueCounts = deferred("openValueCounts");
+export const openFilter = deferred("openFilter");
+export const openFillNull = deferred("openFillNull");
+export const openSort = deferred("openSort");
+export const openColumns = deferred("openColumns");
+export const openSlice = deferred("openSlice");
+export const openSplitColumn = deferred("openSplitColumn");
+export const openBin = deferred("openBin");
+export const openWindow = deferred("openWindow");
 
 export const SearchPanel = lazy(() => load().then((m) => ({ default: m.SearchPanel })));
