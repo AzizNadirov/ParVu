@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.2]
+
 ### Added
 - **Data menu:** filter rows by conditions (AND/OR), multi-column sort, choose and reorder columns, first/last/random rows, fill missing values (value, forward, backward, mean, median, most frequent), split a column, bin values.
 - **Reshape menu:** group by with 14 aggregations, pivot table and crosstab, unpivot (melt), transpose, value counts, describe all columns.
@@ -12,6 +14,11 @@
 - Shortcuts: `Ctrl+Shift+L` filter, `Ctrl+G` group by, `Ctrl+D` fill down, `Ctrl+Shift+C` chart.
 - **Material Design 3 interface:** tonal, filled, outlined, text and icon buttons with ripples; outlined text fields; rounded dialogs, menus and cards with elevation; Material icons; app bar, tabs and progress bars in Material style. Works with every theme, including custom ones.
 - **Material Light** (new default) and **Material Dark** themes, with Roboto and Roboto Mono bundled.
+- `install.sh`: installs ParVu on Debian and Ubuntu, either the latest release (`--prebuilt`, checked against `SHA256SUMS.txt`) or built from source with all build dependencies.
+
+### Fixed
+- Publishing a GitHub release (installer files were not found after download); a release can be re-run for an existing tag.
+- Windows installer builds in CI failing with `cannot open input file 'duckdb.lib'` after a cache restore.
 
 ## [1.0.0-alpha.1]
 

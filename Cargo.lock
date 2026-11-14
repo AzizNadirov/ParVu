@@ -3226,7 +3226,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-app"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "chrono",
  "parvu-config",
@@ -3247,7 +3247,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-config"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "dirs 7.0.0",
  "serde",
@@ -3259,7 +3259,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-core"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "calamine",
  "chrono",
@@ -3275,7 +3275,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-dsl"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 dependencies = [
  "pest",
  "pest_derive",
