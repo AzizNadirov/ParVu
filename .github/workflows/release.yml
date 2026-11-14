@@ -4,21 +4,38 @@ name: Release
 # installers and publishes them as a GitHub release. Versions with a "-"
 # are marked as pre-releases. The notes come from that version's section in
 # CHANGELOG.md, followed by SHA-256 checksums.
+#
+# To retry a release with the current version of this workflow (re-running a
+# failed run uses the workflow file of the tagged commit), start it by hand:
+#   gh workflow run Release -f tag=v1.0.0-alpha.1
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish, e.g. v1.0.0
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
 jobs:
   check-version:
     runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ env.TAG }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - name: Tag matches the app version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG#v}"
           cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           tauri_version=$(jq -r .version crates/parvu-app/tauri.conf.json)
           ui_version=$(jq -r .version ui/package.json)
@@ -33,10 +50,14 @@ jobs:
   test:
     needs: check-version
     uses: ./.github/workflows/ci.yml
+    with:
+      ref: refs/tags/${{ needs.check-version.outputs.tag }}
 
   package:
-    needs: test
+    needs: [check-version, test]
     uses: ./.github/workflows/package.yml
+    with:
+      ref: refs/tags/${{ needs.check-version.outputs.tag }}
 
   publish:
     needs: package
@@ -45,13 +66,23 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
-          path: dist
-          merge-multiple: true
+          path: artifacts
+      - name: Collect the installers
+        run: |
+          # Artifacts keep their bundle folders (deb/, nsis/); release files are flat.
+          mkdir dist
+          find artifacts -type f \( -name '*.deb' -o -name '*.exe' \) -exec mv -t dist {} +
+          # GitHub may rewrite "~" in asset names; the deb's own version keeps it.
+          for f in dist/*~*; do if [ -e "$f" ]; then mv "$f" "${f//\~/-}"; fi; done
+          ls -l dist
+          ls dist/*.deb dist/*.exe >/dev/null
       - name: Release notes
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           # The section "## [<version>]" up to the next "## [" heading.
           awk -v v="$version" '
             index($0, "## [" v "]") == 1 { on = 1; next }
@@ -59,30 +90,28 @@ jobs:
             on { print }
           ' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "See [CHANGELOG.md](CHANGELOG.md)." > notes.md
-          cd dist
-          sha256sum * > SHA256SUMS.txt
+          (cd dist && sha256sum -- * > SHA256SUMS.txt)
           {
             echo
             echo "## Downloads"
             echo
-            echo "Installation and troubleshooting: [RELEASES.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/RELEASES.md)."
+            echo "Installation and troubleshooting: [RELEASES.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/RELEASES.md)."
             echo
             echo "| File | SHA-256 |"
             echo "|---|---|"
-            while read -r sum file; do echo "| \`$file\` | \`$sum\` |"; done < SHA256SUMS.txt
-          } >> ../notes.md
-          ls -l
+            while read -r sum file; do echo "| \`$file\` | \`$sum\` |"; done < dist/SHA256SUMS.txt
+          } >> notes.md
+          cat notes.md
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="$GITHUB_REF_NAME"
           flags=()
-          [[ "$tag" == *-* ]] && flags+=(--prerelease)
-          if gh release view "$tag" >/dev/null 2>&1; then
+          [[ "$TAG" == *-* ]] && flags+=(--prerelease)
+          if gh release view "$TAG" >/dev/null 2>&1; then
             # A re-run replaces the files of the existing release.
-            gh release upload "$tag" dist/* --clobber
-            gh release edit "$tag" --notes-file notes.md
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" --notes-file notes.md
           else
-            gh release create "$tag" dist/* --verify-tag --title "ParVu ${tag#v}" --notes-file notes.md "${flags[@]}"
+            gh release create "$TAG" dist/* --verify-tag --title "ParVu ${TAG#v}" --notes-file notes.md "${flags[@]}"
           fi

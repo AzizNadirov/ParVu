@@ -7,12 +7,19 @@ on:
   workflow_dispatch:
   # release.yml runs the tests through this workflow.
   workflow_call:
+    inputs:
+      ref:
+        description: "Commit, branch or tag to test (default: the triggering commit)"
+        type: string
+        default: ""
 
 jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: System libraries
         run: |
           sudo apt-get update
@@ -44,5 +51,6 @@ jobs:
   # published by release.yml.
   package:
     needs: test
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    # Not when release.yml calls this workflow (it passes a ref and packages itself).
+    if: ${{ !inputs.ref && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') }}
     uses: ./.github/workflows/package.yml
