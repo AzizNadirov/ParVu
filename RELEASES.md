@@ -74,7 +74,7 @@ Releases are built and published by GitHub Actions (`.github/workflows/release.y
    git tag -a v1.0.0 -m "ParVu 1.0.0"
    git push origin v1.0.0
    ```
-3. The workflow checks that the tag matches the version, runs the tests, builds the deb and the Windows installer, and publishes a GitHub release with both files, `SHA256SUMS.txt`, and the changelog section as notes. Versions with a `-` (such as `1.0.0-alpha.1`) are marked as pre-releases. A tag that doesn't match the version fails before anything is built.
+3. The workflow checks that the tag matches the version, runs the tests, builds the deb and the Windows installer, and publishes a GitHub release with both files, `SHA256SUMS.txt`, and the changelog section as notes. The notes start with install commands for the release's own files. Versions with a `-` (such as `1.1.0-beta.1`) are marked as pre-releases once a stable 1.x release exists; until then each alpha or beta becomes the Latest release, so the releases page doesn't point at the 0.x Python app. A tag that doesn't match the version fails before anything is built.
 
 Re-running a failed release workflow replaces the files of the existing release. To build installers locally, see [docs/BUILDING.md](docs/BUILDING.md).
 

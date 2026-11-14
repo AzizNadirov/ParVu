@@ -91,6 +91,28 @@ jobs:
           ' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "See [CHANGELOG.md](CHANGELOG.md)." > notes.md
           (cd dist && sha256sum -- * > SHA256SUMS.txt)
+          # Install instructions with this release's file names, above the changelog.
+          deb=$(cd dist && ls -- *.deb | head -1)
+          exe=$(cd dist && ls -- *.exe | head -1)
+          {
+            echo "## Install"
+            echo
+            echo "**Ubuntu / Debian** (64-bit):"
+            echo '```bash'
+            echo "sudo apt install ./$deb"
+            echo '```'
+            echo "or download, verify and install in one step:"
+            echo '```bash'
+            echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash -s -- --prebuilt"
+            echo '```'
+            echo
+            echo "**Windows 10/11** (64-bit): run \`$exe\`. The installer isn't code-signed yet: choose *More info → Run anyway*."
+            echo
+            echo "## Changes"
+            echo
+            sed 's/^### /#### /' notes.md
+          } > notes.full.md
+          mv notes.full.md notes.md
           {
             echo
             echo "## Downloads"
@@ -106,12 +128,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          flags=()
-          [[ "$TAG" == *-* ]] && flags+=(--prerelease)
+          # Versions with a "-" (1.1.0-beta.1) are pre-releases once a stable
+          # 1.x or later release exists. Until then the newest alpha/beta is
+          # the Latest release, so the page doesn't point at the 0.x Python app.
+          flags=(--latest)
+          if [[ "$TAG" == *-* ]] && gh release list --exclude-pre-releases --limit 100 --json tagName -q '.[].tagName' \
+               | grep -Eq '^v[1-9][0-9]*\.[0-9]+\.[0-9]+$'; then
+            flags=(--prerelease)
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             # A re-run replaces the files of the existing release.
             gh release upload "$TAG" dist/* --clobber
-            gh release edit "$TAG" --notes-file notes.md
+            gh release edit "$TAG" --notes-file notes.md "${flags[@]}"
           else
             gh release create "$TAG" dist/* --verify-tag --title "ParVu ${TAG#v}" --notes-file notes.md "${flags[@]}"
           fi
