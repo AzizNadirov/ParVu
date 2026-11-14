@@ -28,6 +28,12 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          # The prebuilt DuckDB library is downloaded next to the profile
+          # folders, which rust-cache does not save by default; without it a
+          # restored (fresh) libduckdb-sys build links a missing duckdb.lib.
+          prefix-key: v1-duckdb
+          cache-directories: target/duckdb-download
       - uses: actions/setup-node@v4
         with:
           node-version: 22
