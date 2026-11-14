@@ -10,9 +10,9 @@ How to find your way around ParVu and change it safely.
 - **Window:** Tauri 2 (system webview)
 - **UI:** React 18 + TypeScript + Vite in `ui/`; Glide Data Grid for the table; CodeMirror 6 for the editors
 - **User data:** `~/.ParVu` (settings, recent files, themes, logs), same format as the old Python app
-- **Entry point:** `crates/parvu-app/src/main.rs`
+- **Entry point:** `crates/parvu-app/src/main.rs` (the window), or `parvu mcp` (`src/mcp.rs`, an MCP server without a window)
 
-The app was rewritten from Python/PyQt6; the plan and its status are in `plans/RUST_REWRITE_PLAN.md`. `plans/AI_PLAN.md` is the (not yet implemented) plan for the AI assistant and MCP server.
+The app was rewritten from Python/PyQt6; the plan and its status are in `plans/RUST_REWRITE_PLAN.md`. `plans/AI_PLAN.md` is the plan for AI: the MCP server and its read-only data layer are done, the built-in assistant is not started.
 
 ## Layout
 
@@ -20,7 +20,7 @@ The app was rewritten from Python/PyQt6; the plan and its status are in `plans/R
 crates/parvu-core     DuckDB engine: tabs, paging, edits, operations, export, stats, search
 crates/parvu-dsl      expression language: parser → resolver → compiler (no DuckDB)
 crates/parvu-config   settings, recents, themes, translations (no DuckDB)
-crates/parvu-app      Tauri app: commands.rs, state.rs, main.rs, packaging
+crates/parvu-app      Tauri app: commands.rs, state.rs, main.rs, mcp.rs, packaging
 ui/src                React UI: App.tsx, components/, dialogs/, lib/
 docs/                 user and developer guides
 ```
@@ -31,6 +31,7 @@ Dependencies only point down: `ui → parvu-app → (parvu-core, parvu-dsl, parv
 
 ```bash
 cargo test -p parvu-core -p parvu-dsl -p parvu-config --features parvu-core/schema   # Rust tests (prebuilt DuckDB, seconds)
+cargo test -p parvu-app                                    # MCP server tests
 cargo clippy --workspace --all-targets -- -D warnings      # must stay clean
 npm --prefix ui run typecheck && npm --prefix ui test      # UI
 cd crates/parvu-app && npx --prefix ../../ui tauri dev     # run the app

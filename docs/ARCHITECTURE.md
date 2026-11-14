@@ -11,6 +11,7 @@ ParVu is a Tauri desktop app. A React UI runs in the system webview and calls Ru
 │ crates/parvu-app  (Tauri)                    │
 │   commands.rs: one function per command      │
 │   state.rs: one Workspace per window         │
+│   mcp.rs: `parvu mcp`, no window             │
 ├────────────────┬───────────────┬─────────────┤
 │ parvu-core     │ parvu-dsl     │ parvu-config│
 │ DuckDB engine  │ expressions   │ settings,   │
@@ -37,6 +38,7 @@ Dependencies only point down. `parvu-dsl` and `parvu-config` don't depend on Duc
 | `page.rs` | A page of results, formatted to text with Arrow's formatter |
 | `export.rs` | Export via DuckDB `COPY`, or `rust_xlsxwriter` for Excel |
 | `stats.rs`, `search.rs` | Column statistics, distinct values, samples, full-table search |
+| `readonly.rs` | `ReadSession` and the SQL guard: read-only access to the open tabs for AI tools and the MCP server |
 
 ### How a tab is stored
 
@@ -57,6 +59,17 @@ Conditional formatting, frozen columns and column widths belong to the window (`
 Each window's DuckDB connection is limited to 8 threads and to the **query memory limit** setting (1 GB by default, `PARVU_MEMORY_LIMIT_MB` overrides it). Above the limit DuckDB spills to `~/.cache/ParVu/duckdb`. Freed memory is returned to the system after large queries. Pages are fetched with `LIMIT/OFFSET`, so the first pages of a sorted result only need a top-N, while jumping deep into a sorted big file needs a full sort. A sort applied right after another sort replaces it rather than wrapping it, so the data is sorted once. A tab's column list is cached until its query changes.
 
 In the UI, the grid reads theme colours once per theme, reuses its style objects, and only re-renders when the page, sort or theme changes. Dialogs are loaded on first use.
+
+### Read-only sessions
+
+`Workspace::read_session()` snapshots every tab's current query into temporary views on a second connection. Callers (the MCP server now, the built-in assistant later) query it without holding the workspace, and a timeout interrupts long queries. Every query passes `readonly::guard_select`. It parses the SQL with DuckDB's `json_serialize_sql`, which only accepts a SELECT, then walks the tree:
+
+- every table must be an open tab or a CTE;
+- table functions that read files (`read_csv`, `read_text`, `glob`…) are refused;
+- file paths used as tables are refused;
+- tab names are rewritten to the session's views and turned back into SQL with `json_deserialize_sql`.
+
+`check_operation` applies the same guard to the raw SQL inside `AddColumn` and `Replace` operations. `Workspace::preview_op` shows what an operation would do without applying it. With the `schema` feature, `ops::operation_schema()` gives the JSON schema of `Operation` for tool definitions.
 
 ### Rules
 
@@ -82,6 +95,7 @@ Settings, recent files, themes and translations, all stored in `~/.ParVu` in the
 - `commands.rs` holds every command the UI can call. Data commands run on the blocking thread pool so the window stays responsive.
 - Each window has its own `Workspace`, created on first use and dropped when the window closes.
 - Exports run on a second DuckDB connection in a background thread and report progress through `export-progress` and `export-finished` events; `cancel_export` interrupts DuckDB.
+- `mcp.rs` is the MCP server. `main.rs` checks for the `mcp` argument before starting Tauri, so no window or webview is created. It uses the `rmcp` SDK on a tokio runtime over stdin/stdout. The server holds one `Workspace`; tools read through `ReadSession` and change tables with `Workspace::apply` / `undo`. stdout carries the protocol, so logs only go to the log file. User guide: [MCP.md](MCP.md).
 
 ## ui
 
@@ -91,6 +105,10 @@ Settings, recent files, themes and translations, all stored in `~/.ParVu` in the
 | `src/lib/api.ts` | Typed wrappers for every command, and the shared types |
 | `src/components/DataGrid.tsx` | Glide Data Grid (canvas, virtualised) |
 | `src/components/QueryEditor.tsx` | CodeMirror SQL and expression editor |
+| `src/components/Chart.tsx` | SVG charts drawn from data DuckDB aggregated |
+| `src/components/Icon.tsx` | Material icons (`@mdi/js`, imported one by one) |
+| `src/lib/format.ts` | Conditional formatting rules |
+| `src/lib/ripple.ts` | Material ripple on buttons, menu items and tabs |
 | `src/dialogs/` | One file per dialog, each opened with `openXxx(ui, args)` |
 | `src/lib/i18n.ts` | Translation lookup with Python-style `{name:,}` placeholders |
 

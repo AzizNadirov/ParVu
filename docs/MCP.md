@@ -14,13 +14,16 @@ parvu mcp [--allow-dir DIR]... [--allow-write] [FILE]...
 
 ## Setting up a client
 
-The examples allow `~/data`; use your own folder. With the beta package, the command is `parvu-next`.
+The examples allow `~/data`; use your own folders, which must exist. With the beta package, the command is `parvu-next`.
 
 **Claude Code**
 
 ```bash
-claude mcp add parvu -- parvu mcp --allow-dir ~/data
+claude mcp add -s user parvu -- parvu mcp --allow-dir ~/data
+claude mcp get parvu        # should say ✔ Connected
 ```
+
+`-s user` makes ParVu available in every folder. Without it, Claude Code registers the server for the current project only. Restart Claude Code, or reconnect with `/mcp`, after changing the configuration.
 
 **Claude Desktop**: in `claude_desktop_config.json` (Settings → Developer → Edit Config):
 
@@ -68,6 +71,29 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 - **What the model sees:** query results go to the client's model. Treat it like pasting those rows into a chat with that model.
 
 Logs go to ParVu's usual log folder (`~/.ParVu/logs`), never to the protocol stream.
+
+## Troubleshooting
+
+**"Failed to connect" / "Connection closed".** Run the same command by hand to see why:
+
+```bash
+parvu mcp --allow-dir ~/data < /dev/null
+```
+
+The most common cause is an `--allow-dir` folder that doesn't exist (`--allow-dir /home/me/data: No such file or directory`). Fix the folder, then in Claude Code:
+
+```bash
+claude mcp remove parvu -s user      # or -s local, as `claude mcp get parvu` shows
+claude mcp add -s user parvu -- parvu mcp --allow-dir ~/Documents
+```
+
+**"MCP server parvu already exists".** A server with that name is already registered. `claude mcp get parvu` shows its folders and scope; remove it first as above.
+
+**A ParVu window opens instead of a server, or the client times out.** The installed ParVu is older than the MCP server; `parvu mcp --help` prints the usage only on versions that have it. Install a newer build (`./install.sh` from a checkout of `main`, or a release that lists MCP in its notes).
+
+**A file "is outside the allowed folders".** Add that folder with another `--allow-dir`, or move the file into an allowed one.
+
+Logs are in `~/.ParVu/logs`; start the server with `PARVU_LOG=debug` in the client's environment for more detail.
 
 ## Notes
 

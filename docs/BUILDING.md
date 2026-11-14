@@ -2,8 +2,8 @@
 
 ## Requirements
 
-- [Rust](https://rustup.rs/) (stable)
-- Node.js 20 or newer
+- [Rust](https://rustup.rs/) 1.88 or newer (stable)
+- Node.js 22.12 or newer
 - **Linux (Debian/Ubuntu):**
   ```bash
   sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
@@ -23,7 +23,7 @@ The script installs the UI packages, runs the UI and Rust tests, and builds the 
 | Platform | Output |
 |---|---|
 | Linux | `target/release/bundle/deb/parvu_<version>_amd64.deb` |
-| Windows | `target/release/bundle/nsis/parvu_<version>_x64-setup.exe` |
+| Windows | `target/release/bundle/nsis/ParVu_<version>_x64-setup.exe` |
 
 Windows builds only the NSIS installer, because MSI does not accept pre-release versions such as `1.0.0-alpha.1`.
 
@@ -42,11 +42,22 @@ npx --prefix ../../ui tauri dev
 Tests and lint:
 
 ```bash
-cargo test -p parvu-core -p parvu-dsl -p parvu-config
+cargo test -p parvu-core -p parvu-dsl -p parvu-config --features parvu-core/schema
+cargo test -p parvu-app            # MCP server tests (needs the Linux packages above)
 cargo clippy --workspace --all-targets -- -D warnings
 npm --prefix ui run typecheck
 npm --prefix ui test
 ```
+
+The `schema` feature of `parvu-core` generates JSON schemas for the table operations; `parvu-app` always enables it (the MCP server uses them as tool schemas).
+
+### Running the MCP server from source
+
+```bash
+cargo run -p parvu-app -- mcp --allow-dir ~/data
+```
+
+`cargo run` finds the prebuilt DuckDB library by itself. To start `target/debug/parvu` directly (for example from an MCP client's config), add the folder holding `libduckdb.so` to the library path: `LD_LIBRARY_PATH=$(dirname $(find target/duckdb-download -name libduckdb.so | head -1))`. Installed packages don't need this.
 
 ## DuckDB
 
@@ -60,7 +71,7 @@ Never ship a build made without `bundled-duckdb`: it depends on a DuckDB library
 
 `.github/workflows/ci.yml`:
 
-- **Every push to `main` or `rust-*` branches, and pull requests:** UI checks, clippy and Rust tests, with the prebuilt DuckDB (a few minutes).
+- **Every push to `main` or `rust-*` branches, and pull requests:** UI checks, clippy and the Rust tests (including `parvu-app`), with the prebuilt DuckDB (a few minutes). The Rust build cache also keeps the downloaded DuckDB library (`target/duckdb-download`); without it a restored cache fails to link on Windows.
 - **`main` and manual runs** (`gh workflow run CI --ref <branch>`): also builds the Linux and Windows installers (`package.yml`), and on Linux installs the `.deb` and starts the app with an empty home directory. The installers are uploaded as run artifacts.
 - **`v*` tags** (`release.yml`): the same tests and installers, published as a GitHub release. See [RELEASES.md](../RELEASES.md#building-a-release).
 
