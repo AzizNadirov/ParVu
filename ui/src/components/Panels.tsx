@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { StepLabel, TabSummary } from "../lib/api";
 import type { Translate } from "../lib/i18n";
+import { Icon } from "./Icon";
 
 /** Translate a step label; sort directions are translated too. */
 export function stepText(t: Translate, label: StepLabel): string {
@@ -26,13 +27,12 @@ export function StepsPanel(props: {
   return (
     <section className="steps-panel">
       <header className="panel-header" onClick={props.onToggle}>
-        <span className="chevron">{open ? "▾" : "▸"}</span>
-        <span>
-          {t("steps.title")} ({steps.length})
-        </span>
+        <Icon name="chevronDown" className={`chevron${open ? " open" : ""}`} />
+        <span>{t("steps.title")}</span>
+        <span className="count">{steps.length}</span>
         <span className="spacer" />
         <button
-          className="small-btn"
+          className="small-btn text"
           title={t("steps.undo_tooltip")}
           disabled={!steps.length || props.busy}
           onClick={(e) => {
@@ -40,7 +40,8 @@ export function StepsPanel(props: {
             props.onUndo();
           }}
         >
-          ↩ {t("steps.undo")}
+          <Icon name="undo" />
+          {t("steps.undo")}
         </button>
       </header>
       {open && (
@@ -79,9 +80,9 @@ export function Pagination(props: {
   return (
     <div className="pagination">
       <button className="icon" title={t("pagination.first")} disabled={page <= 1 || props.busy} onClick={() => props.onPage(1)}>
-        ⏮
+        <Icon name="first" />
       </button>
-      <button disabled={page <= 1 || props.busy} onClick={() => props.onPage(page - 1)}>
+      <button className="text" disabled={page <= 1 || props.busy} onClick={() => props.onPage(page - 1)}>
         {t("btn.previous")}
       </button>
       <span className="row">
@@ -96,7 +97,7 @@ export function Pagination(props: {
         />
         <span className="nowrap">/ {totalPages.toLocaleString("en-US")}</span>
       </span>
-      <button disabled={page >= totalPages || props.busy} onClick={() => props.onPage(page + 1)}>
+      <button className="text" disabled={page >= totalPages || props.busy} onClick={() => props.onPage(page + 1)}>
         {t("btn.next")}
       </button>
       <button
@@ -105,7 +106,7 @@ export function Pagination(props: {
         disabled={page >= totalPages || props.busy}
         onClick={() => props.onPage(totalPages)}
       >
-        ⏭
+        <Icon name="last" />
       </button>
       <span className="spacer" />
       <span className="muted nowrap">{t("pagination.range", { first, last, total_rows: totalRows })}</span>
@@ -141,24 +142,22 @@ export function TabBar(props: {
         >
           <span className="tab-name">{tab.name}</span>
           {(tab.pending_edits > 0 || tab.steps.length > 0) && (
-            <span className="dirty" title={t("tabs.unsaved")}>
-              ●
-            </span>
+            <span className="dirty" title={t("tabs.unsaved")} />
           )}
           <button
-            className="tab-close"
+            className="icon tab-close"
             title={t("tabs.close")}
             onClick={(e) => {
               e.stopPropagation();
               props.onClose(tab.id);
             }}
           >
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </div>
       ))}
-      <button className="tab-add" title={t("tabs.add")} onClick={props.onAdd}>
-        ＋
+      <button className="icon tab-add" title={t("tabs.add")} onClick={props.onAdd}>
+        <Icon name="plus" />
       </button>
     </nav>
   );
@@ -188,10 +187,11 @@ export function Welcome(props: {
             onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && path.trim() && props.onOpen(path.trim())}
           />
-          <button onClick={() => path.trim() && props.onOpen(path.trim())} disabled={!path.trim()}>
+          <button className="outlined" onClick={() => path.trim() && props.onOpen(path.trim())} disabled={!path.trim()}>
             {t("btn.reload")}
           </button>
           <button className="primary" onClick={props.onBrowse}>
+            <Icon name="open" />
             {t("welcome.open")}
           </button>
         </div>

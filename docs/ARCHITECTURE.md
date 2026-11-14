@@ -94,4 +94,4 @@ Settings, recent files, themes and translations, all stored in `~/.ParVu` in the
 | `src/dialogs/` | One file per dialog, each opened with `openXxx(ui, args)` |
 | `src/lib/i18n.ts` | Translation lookup with Python-style `{name:,}` placeholders |
 
-Strings shown to users always go through `t(key)`. Colours and fonts come only from the `--pv-*` theme variables.
+Strings shown to users always go through `t(key)`. Colours and fonts come only from the `--pv-*` theme variables and the Material Design 3 `--md-*` tokens derived from them in `ui/src/styles.css` (surface tints, outlines, state layers, elevation, shapes). `--pv-derived-on-accent` (black or white, computed in Rust) is the text colour on the accent colour.

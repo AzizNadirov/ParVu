@@ -2,6 +2,7 @@
 // single-line input triggers onSubmit when given.
 import { useEffect, useRef } from "react";
 import type { ReactNode, CSSProperties } from "react";
+import { Icon } from "./Icon";
 
 export interface DialogProps {
   title: ReactNode;
@@ -53,8 +54,8 @@ export function Dialog({ title, children, footer, onClose, onSubmit, width, heig
       >
         <div className="dialog-title">
           <span>{title}</span>
-          <button className="icon close" aria-label="Close" onClick={onClose}>
-            ✕
+          <button className="icon close no-ripple" aria-label="Close" onClick={onClose}>
+            <Icon name="close" />
           </button>
         </div>
         <div className="dialog-body grow">{children}</div>

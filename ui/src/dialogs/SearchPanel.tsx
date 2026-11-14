@@ -7,6 +7,7 @@ import { useUi } from "../lib/ui";
 import { SearchNavigator, previewValue } from "./logic";
 import type { SearchParams, SearchStep } from "./logic";
 import "./dialogs.css";
+import { Icon } from "../components/Icon";
 
 export interface SearchPanelProps {
   tabId: number;
@@ -165,7 +166,7 @@ export function SearchPanel(props: SearchPanelProps): JSX.Element {
       <div className="dialog-title">
         <span>{t("search.title")}</span>
         <button className="icon close" aria-label={t("btn.close")} title={t("findbar.tooltip.close")} onClick={props.onClose}>
-          ✕
+          <Icon name="close" />
         </button>
       </div>
       <div className="dialog-body">
