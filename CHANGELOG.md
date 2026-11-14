@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **MCP server:** `parvu mcp --allow-dir <folder>` lets AI clients (Claude Code, Claude Desktop, VS Code) open data files and query them through ParVu, with read-only SQL checks and session-only changes. See [docs/MCP.md](docs/MCP.md).
+
 ## [1.0.0-alpha.2]
 
 ### Added

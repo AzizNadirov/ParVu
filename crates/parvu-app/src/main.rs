@@ -3,6 +3,7 @@
 
 mod commands;
 mod error;
+mod mcp;
 mod state;
 
 use std::path::PathBuf;
@@ -74,6 +75,11 @@ fn load_config() -> Config {
 fn main() {
     let _log_guard = init_logging();
     install_crash_hook();
+    // `parvu mcp …`: an MCP server on stdin/stdout, without a window.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("mcp") {
+        std::process::exit(mcp::run(args[1..].to_vec()));
+    }
     let crash = take_crash_report();
     let initial_files: Vec<PathBuf> =
         std::env::args_os().skip(1).map(PathBuf::from).filter(|p| p.is_file()).collect();

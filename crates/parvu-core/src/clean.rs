@@ -14,6 +14,7 @@ use crate::sql::{quote_ident as q, quote_literal};
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CondOp {
     Eq,
@@ -65,6 +66,7 @@ impl CondOp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Condition {
     pub column: String,
     pub op: CondOp,
@@ -79,6 +81,7 @@ pub struct Condition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Combine {
     #[default]
@@ -198,6 +201,7 @@ pub(crate) fn filter(ctx: &OpContext, conditions: &[Condition], combine: Combine
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum FillMethod {
     Value,
@@ -285,6 +289,7 @@ fn default_true() -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SortKey {
     pub column: String,
     #[serde(default = "default_true")]
@@ -331,6 +336,7 @@ pub(crate) fn select_columns(ctx: &OpContext, columns: &[String]) -> Result<(Str
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum SliceMode {
     Head,
@@ -432,6 +438,7 @@ pub(crate) fn split_column(
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum BinMethod {
     /// `bins` intervals of equal width between the minimum and maximum (pandas `cut`).

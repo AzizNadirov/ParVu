@@ -20,7 +20,7 @@ use crate::engine::{QueryEngine, describe};
 use crate::error::{CoreError, Result};
 use crate::export::{ExportOptions, export};
 use crate::format::{FileFormat, register_source};
-use crate::ops::{Operation, OpContext, StepLabel};
+use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
 use crate::search::{SearchHit, SearchOptions, find_next};
 use crate::sql::{quote_ident, slugify_name};
@@ -66,6 +66,17 @@ fn source_view(name: &str) -> String {
 
 fn excel_table(name: &str) -> String {
     format!("__pv_xlsx_{name}")
+}
+
+/// Result of [`Workspace::preview_op`].
+#[derive(Debug, Clone, Serialize)]
+pub struct OpPreview {
+    pub label: StepLabel,
+    pub sql: String,
+    pub rows_before: u64,
+    pub rows_after: u64,
+    pub columns: Vec<crate::page::ColumnMeta>,
+    pub rows: Vec<Vec<crate::page::Cell>>,
 }
 
 /// Everything the UI shows about a tab apart from the data itself.
@@ -337,34 +348,71 @@ impl Workspace {
         self.run_sql(id, &wrapped, Some(label))
     }
 
+    /// The SQL and step label an operation would produce on the tab, without
+    /// applying it.
+    pub fn build_op(&self, id: TabId, op: &Operation) -> Result<BuiltOp> {
+        let t = self.tab(id)?;
+        let columns = t.engine.columns(&self.conn)?;
+        let other = |name: &str| self.current_query_of(name);
+        // A sort right after another sort replaces it instead of wrapping
+        // it: stacked ORDER BYs make DuckDB sort the whole result twice.
+        // The earlier sort stays in the history, so undo still returns to it.
+        let last_was_sort = t.steps.last().is_some_and(|s| {
+            s.kind == StepKind::Sql && (s.label.key == "step.sort" || s.label.key == "step.sort_by")
+        });
+        let is_sort = matches!(op, Operation::Sort { .. } | Operation::SortBy { .. });
+        let source = match (is_sort, last_was_sort, t.engine.previous_query()) {
+            (true, true, Some(before_sort)) => before_sort,
+            _ => t.engine.current_query(),
+        };
+        let conn = &self.conn;
+        let query = |sql: &str| crate::page::format_batches(&crate::engine::query_batches(conn, sql)?);
+        op.build(&OpContext {
+            table: &t.name,
+            current_query: source,
+            columns: &columns,
+            other_query: &other,
+            query: &query,
+        })
+    }
+
     /// Apply a table operation as a new step.
     pub fn apply(&mut self, id: TabId, op: &Operation) -> Result<StepLabel> {
-        let built = {
-            let t = self.tab(id)?;
-            let columns = t.engine.columns(&self.conn)?;
-            let other = |name: &str| self.current_query_of(name);
-            // A sort right after another sort replaces it instead of wrapping
-            // it: stacked ORDER BYs make DuckDB sort the whole result twice.
-            // The earlier sort stays in the history, so undo still returns to it.
-            let last_was_sort = t.steps.last().is_some_and(|s| {
-                s.kind == StepKind::Sql && (s.label.key == "step.sort" || s.label.key == "step.sort_by")
-            });
-            let is_sort = matches!(op, Operation::Sort { .. } | Operation::SortBy { .. });
-            let source = match (is_sort, last_was_sort, t.engine.previous_query()) {
-                (true, true, Some(before_sort)) => before_sort,
-                _ => t.engine.current_query(),
-            };
-            let conn = &self.conn;
-            let query = |sql: &str| crate::page::format_batches(&crate::engine::query_batches(conn, sql)?);
-            op.build(&OpContext {
-                table: &t.name,
-                current_query: source,
-                columns: &columns,
-                other_query: &other,
-                query: &query,
-            })?
-        };
+        let built = self.build_op(id, op)?;
         self.run_sql(id, &built.sql, Some(built.label))
+    }
+
+    /// What applying `op` would do: its label and SQL, the row count before
+    /// and after, and the first `sample` rows of the result. Nothing changes.
+    pub fn preview_op(&self, id: TabId, op: &Operation, sample: usize) -> Result<OpPreview> {
+        let built = self.build_op(id, op)?;
+        let t = self.tab(id)?;
+        let conn = &self.conn;
+        let limited = format!("SELECT * FROM ({}) LIMIT {sample}", built.sql);
+        Ok(OpPreview {
+            rows_before: t.engine.total_rows(),
+            rows_after: crate::engine::count_rows(conn, &built.sql)?,
+            columns: crate::engine::describe(conn, &built.sql)?,
+            rows: crate::page::format_batches(&crate::engine::query_batches(conn, &limited)?)?,
+            label: built.label,
+            sql: built.sql,
+        })
+    }
+
+    /// A read-only snapshot of every tab's current result on a separate
+    /// connection, for the AI assistant and the MCP server. Hold the
+    /// workspace only while creating it.
+    pub fn read_session(&self) -> Result<crate::readonly::ReadSession> {
+        let tables = self
+            .tabs
+            .iter()
+            .map(|t| crate::readonly::SessionTable {
+                name: t.name.clone(),
+                query: t.engine.current_query().to_string(),
+                steps: t.steps.iter().map(|s| s.label.clone()).collect(),
+            })
+            .collect();
+        crate::readonly::ReadSession::new(self.clone_connection()?, tables)
     }
 
     /// Undo the most recent step (a transform or a cell edit).

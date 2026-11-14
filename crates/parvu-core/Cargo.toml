@@ -11,6 +11,8 @@ default = []
 # builds use this (build.sh). Without it, the DuckDB crate downloads the
 # official prebuilt library, so everyday builds and tests compile no C++.
 bundled = ["duckdb/bundled", "duckdb/json", "duckdb/parquet"]
+# JSON schemas for the operation types, used as AI / MCP tool schemas.
+schema = ["dep:schemars"]
 
 [dependencies]
 duckdb.workspace = true
@@ -23,6 +25,7 @@ rust_xlsxwriter.workspace = true
 chrono.workspace = true
 regex.workspace = true
 tempfile.workspace = true
+schemars = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
