@@ -27,7 +27,7 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 ### Expression Language (DSL)
 - **Two editor modes** - switch between SQL and expression mode
 - **Column assignment** - `data[new_col] = data[old_col] * 2` adds or overwrites a column
-- **Built-in functions** - `ABS`, `UPPER`, `LEN`, `ROUND`, `REPLACE`, `DROP_DUPLICATES`, `DROP_NULL` and more
+- **Built-in functions** - text (`UPPER`, `SPLIT_PART`, `LEFT`, `LPAD`, `REGEX_EXTRACT`…), dates (`YEAR`, `QUARTER`, `DATE_TRUNC`, `STRFTIME`…), math (`ROUND`, `LN`, `MOD`…), conditionals (`IF`, `IFNULL`, `GREATEST`), and table functions `DROP_DUPLICATES`, `DROP_NULL`, `REPLACE`
 - **Auto-completion** for tables, columns, functions and methods, with function documentation
 - **Live SQL preview** of what the expression compiles to
 
@@ -71,7 +71,11 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 - Progress bar and cancel for large exports
 
 ### AI clients (MCP)
-- **`parvu mcp`** turns ParVu into an MCP server, so Claude Code, Claude Desktop, VS Code and other AI clients can open your data files and query them with DuckDB. Only folders you allow are reachable, queries are read-only, and nothing is written unless you add `--allow-write`. See [docs/MCP.md](docs/MCP.md).
+- **`parvu mcp`** turns ParVu into an MCP server, so Claude Code, Claude Desktop, VS Code and other AI clients can open your data files and query them with DuckDB:
+  ```bash
+  claude mcp add -s user parvu -- parvu mcp --allow-dir ~/Documents
+  ```
+- Only folders you allow are reachable, queries are read-only, operations change only the session's copy, and nothing is written unless you add `--allow-write`. See [docs/MCP.md](docs/MCP.md).
 
 ### User Interface
 - **Themes** - Material Design 3 interface with 5 built-in themes (Material Light, Material Dark, ParVu Light, Excel, ParVu Black), plus custom themes you can import and export
@@ -95,13 +99,13 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --prebuilt   # latest release
   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash                    # build from source
   ```
-- **Windows**: download and run `parvu_<version>_x64-setup.exe`. It adds a Start menu entry and file associations.
+- **Windows**: download and run `ParVu_<version>_x64-setup.exe`. It adds a Start menu entry and file associations.
 
 See [RELEASES.md](RELEASES.md) for details.
 
 ### For Developers
 
-Requirements: [Rust](https://rustup.rs/) and Node.js 20 or newer. On Debian/Ubuntu also:
+Requirements: [Rust](https://rustup.rs/) 1.88 or newer and Node.js 22.12 or newer. On Debian/Ubuntu also:
 
 ```bash
 sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
@@ -129,7 +133,8 @@ Build the installer (`.deb` on Linux, `setup.exe` on Windows):
 Run the tests:
 
 ```bash
-cargo test -p parvu-core -p parvu-dsl -p parvu-config
+cargo test -p parvu-core -p parvu-dsl -p parvu-config --features parvu-core/schema
+cargo test -p parvu-app          # MCP server
 npm --prefix ui test
 ```
 
@@ -137,10 +142,10 @@ Tests and development builds use the prebuilt DuckDB library. Installer builds c
 
 | Path | Contents |
 |------|----------|
-| `crates/parvu-core` | DuckDB engine, tabs, cell edits, operations, export, statistics, search |
+| `crates/parvu-core` | DuckDB engine: tabs, cell edits, operations, charts, export, statistics, search, read-only access for AI tools |
 | `crates/parvu-dsl` | Expression language parser and compiler |
 | `crates/parvu-config` | Settings, recent files, translations, themes |
-| `crates/parvu-app` | Tauri app: windows and commands |
+| `crates/parvu-app` | Tauri app: windows and commands; the `parvu mcp` server |
 | `ui/` | React UI |
 
 See [docs/BUILDING.md](docs/BUILDING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for more.
@@ -152,6 +157,7 @@ See [docs/BUILDING.md](docs/BUILDING.md) and [docs/ARCHITECTURE.md](docs/ARCHITE
 ```bash
 parvu
 parvu path/to/file.parquet another.csv
+parvu mcp --allow-dir ~/data      # MCP server for AI clients, no window
 ```
 
 ### Basic Workflow
@@ -162,14 +168,16 @@ parvu path/to/file.parquet another.csv
 4. **Expression mode** - switch the editor to Expression and write, for example:
    - `sales[discount] = sales[price] * 0.1` to add a computed column
    - `DROP_DUPLICATES(sales[id], sales[name], 'first')` to deduplicate
-5. **Column menu** - right-click a header to sort, rename, change type, duplicate, remove, copy values, see unique values or statistics, replace values or drop nulls
-6. **Cell menu** - right-click cells to copy them as TSV, CSV or Markdown, filter by a value, or set it to NULL
-7. **Edit** - type into a cell; edits are highlighted and listed as steps
-8. **Undo** - `Ctrl+Z` or the Undo button in Applied Steps
-9. **Save** - `Ctrl+S` writes edits and transforms to the file; Applied Steps clears afterwards
-10. **Export** - File → Export (`Ctrl+E`)
-11. **Search** - `Ctrl+F` searches every row on every page
-12. **Theme and language** - View → Theme / Language
+5. **Data and Reshape menus** - filter rows, fill missing values, sort by several columns, group by, pivot, unpivot, value counts, describe; Operations has running totals, ranks and rolling values
+6. **Column menu** - right-click a header to sort, filter, see value counts, a chart or statistics, fill missing values, transform (rename, change type, split, bin…), freeze columns or add conditional formatting
+7. **Cell menu** - right-click cells to copy them as TSV, CSV or Markdown, filter by a value or a condition, fill down, or set a value to NULL
+8. **Edit** - type into a cell; edits are highlighted and listed as steps
+9. **Undo** - `Ctrl+Z` or the Undo button in Applied Steps
+10. **Save** - `Ctrl+S` writes edits and transforms to the file; Applied Steps clears afterwards
+11. **Export** - File → Export (`Ctrl+E`)
+12. **Search** - `Ctrl+F` searches every row on every page
+13. **Charts** - View → Chart (`Ctrl+Shift+C`)
+14. **Theme and language** - View → Theme / Language
 
 ## Expression Language Examples
 
@@ -244,6 +252,9 @@ A: Parquet, CSV and JSON files are queried in place by DuckDB, and only the visi
 
 **Q: What changed from the Python version?**
 A: The app is about six times smaller (82 MB installed instead of 483 MB), opens files faster, and switches pages in milliseconds. It also opens Excel files, writes Excel on export, and fixes several bugs in the expression language and in join and append.
+
+**Q: Can I use it with AI?**
+A: Yes, through MCP: `parvu mcp` lets Claude Code, Claude Desktop, VS Code and other MCP clients open and query your files with ParVu's tools, using your own AI subscription. See [docs/MCP.md](docs/MCP.md). A built-in assistant is planned ([plans/AI_PLAN.md](plans/AI_PLAN.md)).
 
 **Q: Can I create my own themes?**
 A: Yes. Export a theme as a template, edit the JSON, and import it back. See [docs/THEMES.md](docs/THEMES.md).

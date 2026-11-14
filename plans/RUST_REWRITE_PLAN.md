@@ -1,6 +1,6 @@
 # ParVu Rust Rewrite — Plan
 
-> Status: phases 0–6 done; Phase 7 cutover done on the `rust-rewrite` branch (Python code removed), beta testing and merge pending. See [§12](#12-implementation-status).
+> Status: done. The Rust app is on `main` and released as `1.0.0-alpha.1` / `1.0.0-alpha.2` pre-releases; the Python code is removed. See [§12](#12-implementation-status). Later work: [FEATURES_PLAN.md](FEATURES_PLAN.md) (done), [AI_PLAN.md](AI_PLAN.md).
 > Target: ParVu 1.0 as a Rust application, replacing the Python/PyQt6 app.
 > Owner: @AzizNadirov.
 > Last revised: 2026-11-12.

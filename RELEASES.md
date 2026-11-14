@@ -5,7 +5,7 @@
 | Platform | File | Size |
 |---|---|---|
 | Linux (Ubuntu/Debian, 64-bit) | `parvu_X.Y.Z_amd64.deb` | about 30 MB |
-| Windows 10/11 (64-bit) | `parvu_X.Y.Z_x64-setup.exe` | about 15 MB |
+| Windows 10/11 (64-bit) | `ParVu_X.Y.Z_x64-setup.exe` | about 15 MB |
 
 ## Linux
 
@@ -30,13 +30,17 @@ The package replaces any earlier ParVu `.deb`, including the Python versions (0.
 
 Uninstall with `sudo apt remove parvu`.
 
+### Using ParVu from AI clients
+
+The `parvu` command also runs an MCP server for Claude Code, Claude Desktop and VS Code (`parvu mcp --allow-dir <folder>`). See [docs/MCP.md](docs/MCP.md).
+
 ### Beta builds
 
-Beta packages are named `parvu-next` and install next to `parvu`, so you can try a new version without removing the current one. Start the beta with `parvu-next`. Both share `~/.ParVu`.
+Beta packages are named `parvu-next` and install next to `parvu`, so you can try a new version without removing the current one. Start the beta with `parvu-next`; it has its own menu entry. Both share `~/.ParVu`. Remove the beta with `sudo apt remove parvu-next`.
 
 ## Windows
 
-Run `parvu_X.Y.Z_x64-setup.exe` and follow the wizard. It adds a Start menu entry and registers ParVu for Parquet, CSV, JSON and Excel files. Uninstall from **Settings → Apps**.
+Run `ParVu_X.Y.Z_x64-setup.exe` and follow the wizard. It adds a Start menu entry and registers ParVu for Parquet, CSV, JSON and Excel files. Uninstall from **Settings → Apps**.
 
 ParVu uses Microsoft Edge WebView2, which is part of Windows 10 and 11. If it is missing, the installer downloads it.
 
@@ -59,10 +63,10 @@ sha256sum parvu_*.deb
 ```
 
 ```powershell
-Get-FileHash parvu_*.exe -Algorithm SHA256
+Get-FileHash ParVu_*.exe -Algorithm SHA256
 ```
 
-Compare with the checksum in the release notes.
+Compare with the checksum in the release notes or in `SHA256SUMS.txt`. In release file names, the Debian version's `~` appears as `-` (`parvu_1.0.0-alpha.2_amd64.deb`); the package itself keeps `1.0.0~alpha.2`.
 
 ## Building a release
 
