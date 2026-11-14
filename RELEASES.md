@@ -16,6 +16,16 @@ parvu
 
 `apt` installs the two system libraries ParVu needs (WebKitGTK and GTK) if they are missing. `sudo dpkg -i` also works when they are already installed.
 
+### Installer script
+
+`install.sh` works on Debian, Ubuntu and their derivatives (Debian 12 / Ubuntu 22.04 or newer):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --prebuilt
+```
+
+downloads the latest release, checks its SHA-256 and installs it. Without `--prebuilt` it builds from source instead: it installs the build packages with apt, Rust (in `~/.cargo`) and Node.js (in `~/.cache/parvu/node`) when they are missing or too old, clones the repository to `~/.cache/parvu/src`, runs `build.sh` and installs the result. Run from a checkout (`./install.sh`), it builds that checkout. Other options: `--beta` (build `parvu-next`), `--ref <branch or tag>`, `--src <dir>`, `--dry-run`. The first source build compiles DuckDB and takes 10–20 minutes.
+
 The package replaces any earlier ParVu `.deb`, including the Python versions (0.x). Settings, recent files and themes in `~/.ParVu` are kept.
 
 Uninstall with `sudo apt remove parvu`.
