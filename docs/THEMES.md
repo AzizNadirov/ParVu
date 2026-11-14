@@ -11,20 +11,28 @@ ParVu features a comprehensive theme system that allows you to customize:
 
 ## Built-in Themes
 
-ParVu comes with 3 professionally designed themes:
+ParVu comes with 5 built-in themes. The interface follows Material Design 3 in all of them; a theme sets the colours, fonts and sizes, and the Material surfaces, outlines and state colours are derived from those.
 
-### 1. ParVu Light (Default)
-- Clean, modern light theme
+### Material Light (Default)
+- Material Design 3 baseline light colours (purple primary)
+- Roboto and Roboto Mono, bundled with the app
+
+### Material Dark
+- Material Design 3 baseline dark colours
+- Text on accent-coloured buttons switches to black automatically for contrast
+
+### ParVu Light
+- The original ParVu light theme
 - Blue and green accents
 - Optimized for long viewing sessions
 
-### 2. Excel
+### Excel
 - Microsoft Excel-inspired design
 - Classic green color scheme
 - Familiar layout for Excel users
 - Professional business appearance
 
-### 3. ParVu Black
+### ParVu Black
 - Dark theme based on Visual Studio Code
 - Easy on the eyes in low-light environments
 - Syntax colors optimized for code readability
@@ -87,7 +95,7 @@ The theme selector shows:
 3. Click **Delete**
 4. Confirm deletion
 
-**Note:** Built-in themes (ParVu Light, Excel, ParVu Black) cannot be deleted.
+**Note:** Built-in themes (Material Light, Material Dark, ParVu Light, Excel, ParVu Black) cannot be deleted.
 
 ## Creating Custom Themes
 

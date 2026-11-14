@@ -71,7 +71,7 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 - Progress bar and cancel for large exports
 
 ### User Interface
-- **Themes** - 3 built-in themes (ParVu Light, Excel, ParVu Black), plus custom themes you can import and export
+- **Themes** - Material Design 3 interface with 5 built-in themes (Material Light, Material Dark, ParVu Light, Excel, ParVu Black), plus custom themes you can import and export
 - **Languages** - English, Russian and Azerbaijani, switchable at any time
 - **Multiple tabs and windows** (`Ctrl+N` opens a new window)
 - **Shortcut cheatsheet** - `Ctrl+/`
@@ -212,11 +212,13 @@ Settings are stored in `~/.ParVu/settings/settings.json` and can be changed in F
 
 ### Themes
 
-- **ParVu Light** - default light theme
+- **Material Light** - default; Material Design 3 light colours with Roboto
+- **Material Dark** - Material Design 3 dark colours
+- **ParVu Light** - the original light theme
 - **Excel** - Excel-inspired green theme
 - **ParVu Black** - dark theme
 
-Custom themes live in `~/.ParVu/themes`. See [docs/THEMES.md](docs/THEMES.md).
+Every theme uses the same Material components (buttons, fields, dialogs, menus), drawn in the theme's colours. Custom themes live in `~/.ParVu/themes`. See [docs/THEMES.md](docs/THEMES.md).
 
 ### Languages
 

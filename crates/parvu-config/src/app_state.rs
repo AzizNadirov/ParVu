@@ -26,7 +26,7 @@ impl Default for AppState {
             current_query: String::new(),
             is_loading: false,
             status_message: "Ready".into(),
-            current_theme_name: "ParVu Light".into(),
+            current_theme_name: crate::themes::DEFAULT_THEME_NAME.into(),
             session_id: String::new(),
             log_file: None,
         }

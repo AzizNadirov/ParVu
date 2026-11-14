@@ -6,6 +6,7 @@ import { Dialog } from "../components/Dialog";
 import { ColumnSelect, RichText } from "./common";
 import { buildFilterOp, condArity, condIsTextual, emptyCondition, isTextType } from "./logic";
 import "./dialogs.css";
+import { Icon } from "../components/Icon";
 
 interface Args {
   table: string;
@@ -96,7 +97,7 @@ function FilterDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null
                 disabled={conds.length === 1}
                 onClick={() => setConds((l) => l.filter((_, j) => j !== i))}
               >
-                ✕
+                <Icon name="close" />
               </button>
             </div>
           );

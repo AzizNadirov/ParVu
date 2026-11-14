@@ -12,7 +12,7 @@
     "result_pagination_rows_per_page":"500",
     "save_file_history":"true",
     "max_rows": "1000",
-    "current_theme": "ParVu Light",
+    "current_theme": "Material Light",
     "current_language": "en",
     "enable_large_dataset_warning": true,
     "warning_criteria": "rows",
