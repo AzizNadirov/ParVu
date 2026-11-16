@@ -15,8 +15,9 @@ import {
   type Theme,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
-import type { Cell, ColumnMeta, Page } from "../lib/api";
-import { cssVar } from "../lib/theme";
+import type { Cell, ColumnMeta, Page, SourceColumn } from "../lib/api";
+import { cssVar, resolvedColor } from "../lib/theme";
+import { headerIconName, headerIcons } from "../lib/types";
 import { cellBackground, type FormatColor, type FormatRule } from "../lib/format";
 
 const NUMERIC = /^(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|UTINYINT|USMALLINT|UINTEGER|UBIGINT|UHUGEINT|FLOAT|DOUBLE|REAL|DECIMAL)(\(|$)/i;
@@ -55,7 +56,12 @@ export interface DataGridProps {
   formats: FormatRule[];
   /** Minimum and maximum of the columns with a colour scale. */
   ranges: Record<string, { min: number; max: number }>;
+  /** How each column of a CSV file is read (marks guessed date orders). */
+  sourceColumns?: SourceColumn[];
 }
+
+/** Type icons for the column headers (built once). */
+const HEADER_ICONS = headerIcons();
 
 const NO_RULES: FormatRule[] = [];
 
@@ -95,6 +101,9 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
       textMedium: cssVar("--pv-colors-table-foreground", "#737383"),
       textLight: cssVar("--pv-colors-status-foreground", "#999"),
       textHeader: cssVar("--pv-colors-table-header-foreground", "#313139"),
+      // Type icons in the headers: muted glyph, no box behind it.
+      fgIconHeader: resolvedColor("var(--md-on-surface-variant)", "#6b6b74"),
+      bgIconHeader: "rgba(0,0,0,0)",
       textHeaderSelected: cssVar("--pv-derived-on-accent", "#ffffff"),
       bgCell: cssVar("--pv-colors-table-background", "#ffffff"),
       bgCellMedium: cssVar("--pv-derived-table-alternate-row", "#fafafb"),
@@ -143,13 +152,15 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
     const charPx = 7.2;
     return page.columns.map((c, i) => {
       const arrow = sort && sort.column === c.name ? (sort.ascending ? " ▲" : " ▼") : "";
+      const source = props.sourceColumns?.find((s) => s.name === c.name);
       return {
         id: c.name,
         title: c.name + arrow,
+        icon: headerIconName(c, source),
         width: widths[c.name] ?? estimateWidth(c, page.rows, i, charPx),
       };
     });
-  }, [page, sort, widths]);
+  }, [page, sort, widths, props.sourceColumns]);
 
   const numeric = useMemo(() => (page?.columns ?? []).map((c) => isNumericType(c.dtype)), [page]);
 
@@ -275,6 +286,7 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         key={`${page.page}:${page.total_rows}:${page.columns.length}`}
         ref={editor}
         columns={columns}
+        headerIcons={HEADER_ICONS}
         rows={page.rows.length}
         getCellContent={getCellContent}
         onCellEdited={onCellEdited}

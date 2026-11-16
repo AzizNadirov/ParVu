@@ -2,32 +2,30 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.3]
+
+AI comes to ParVu: use your Claude subscription through Claude Desktop or Claude Code, or chat in the new assistant panel with an API key or a local model. Every change the AI wants to make needs your approval. Also: smarter charts, and CSV columns that get the right types (with a fix for files that broke on a bad value far down).
+
 ### Added
+- **MCP server:** `parvu mcp --allow-dir <folder>` lets AI clients (Claude Code, Claude Desktop, VS Code) open data files and query them through ParVu, with read-only SQL checks and session-only changes. See [docs/MCP.md](docs/MCP.md).
+- **AI assistant panel** (`Ctrl+Shift+A`): ask about your tables with an Anthropic, OpenAI, Gemini, OpenRouter or Groq API key, or a local Ollama / LM Studio model. It inspects and queries the data with the same read-only tools as the MCP server; changes go through approval cards. Keys are stored in the system keychain. See [docs/AI.md](docs/AI.md).
+- **AI → Connect an AI client:** Claude Desktop, Claude Code and other MCP clients connect to the running window (`parvu mcp --attach`) and work with its open tabs, using your own Claude subscription. Their changes appear as approval cards with a preview and become normal undoable steps. The status bar shows connected clients. If ParVu isn't running, `parvu mcp --attach` opens it.
 - **Column types for CSV files.** ParVu checks DuckDB's types against its own detection on the first 10,000 rows and reads more than DuckDB does:
   - numbers like `1.234,56`, `1 234,5` or `1,234.5`;
   - yes/no words (also in Russian and Azerbaijani);
   - a second date format in the same file;
   - JSON.
 
-  Ambiguous dates such as `03/04/2024` are read day-first, and the column is marked so a later version can let you flip it. Columns DuckDB already types correctly keep its fast reader.
+  Columns DuckDB already types correctly keep its fast reader.
+- **Type icons in the column headers** (number, text, yes/no, date, time, JSON…). Dates such as `03/04/2024`, where the day and month order is a guess, show a calendar with a question mark.
+- **Read as** in the column menu of a CSV file: read a column as text, a whole number, a number with `,` or `.` decimals, yes/no, a date in one of several formats, a time or JSON. "Read dates day first / month first" flips a guessed date column in one click. The change is a step you can undo, cell editing stays available, and ParVu remembers it for that file (until the file changes).
+- **Settings → Column types:** turn type detection off, and choose how dates such as `03/04/2024` are read (automatic from the language, day first or month first).
 
 ### Fixed
 - **A bad value far down a CSV file no longer breaks the table.** DuckDB guesses types from the start of the file, so a value like `oops` in a number column 100,000 rows down used to make every sort, sum, chart or export fail. ParVu now re-reads that column safely, and the value becomes empty.
-- **Change type** on a CSV column could still fail on a bad value, despite the earlier fix, because DuckDB's `type_pushdown` optimizer made the safe cast strict. ParVu turns that rule off.
-- **Change type** no longer breaks the table when a value doesn't convert: the value becomes empty instead of making a later page, sort or export fail.
+- **Change type** no longer breaks the table when a value doesn't convert: the value becomes empty instead of making a later page, sort or export fail. (ParVu also turns off DuckDB's `type_pushdown` optimizer, which made this safe conversion strict for CSV columns.)
 - **Export** with a per-column type writes values that don't convert as empty instead of stopping halfway with a partial file.
 - **Split column** without a number of parts counts them on the first 10,000 rows instead of reading the whole table first.
-
-## [1.0.0-alpha.3]
-
-AI comes to ParVu: use your Claude subscription through Claude Desktop or Claude Code, or chat in the new assistant panel with an API key or a local model. Every change the AI wants to make needs your approval.
-
-### Added
-- **MCP server:** `parvu mcp --allow-dir <folder>` lets AI clients (Claude Code, Claude Desktop, VS Code) open data files and query them through ParVu, with read-only SQL checks and session-only changes. See [docs/MCP.md](docs/MCP.md).
-- **AI assistant panel** (`Ctrl+Shift+A`): ask about your tables with an Anthropic, OpenAI, Gemini, OpenRouter or Groq API key, or a local Ollama / LM Studio model. It inspects and queries the data with the same read-only tools as the MCP server; changes go through approval cards. Keys are stored in the system keychain. See [docs/AI.md](docs/AI.md).
-- **AI → Connect an AI client:** Claude Desktop, Claude Code and other MCP clients connect to the running window (`parvu mcp --attach`) and work with its open tabs, using your own Claude subscription. Their changes appear as approval cards with a preview and become normal undoable steps. The status bar shows connected clients. If ParVu isn't running, `parvu mcp --attach` opens it.
-
-### Fixed
 - `install.sh` installs a fresh build even when its version matches the installed one (before, apt kept the old program).
 - Windows installer builds in CI: the prebuilt DuckDB library is downloaded again before each build.
 

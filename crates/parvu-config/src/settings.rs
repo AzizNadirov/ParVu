@@ -139,6 +139,30 @@ pub enum WarningCriteria {
     Filesize,
 }
 
+/// `date_order` setting: how to read dates such as `03/04/2024` when both
+/// day-first and month-first fit every value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DateOrderSetting {
+    /// From the interface language: month first for English, day first
+    /// otherwise.
+    #[default]
+    Auto,
+    DayFirst,
+    MonthFirst,
+}
+
+impl DateOrderSetting {
+    /// True when dates are read day first for interface language `language`.
+    pub fn day_first(self, language: &str) -> bool {
+        match self {
+            DateOrderSetting::DayFirst => true,
+            DateOrderSetting::MonthFirst => false,
+            DateOrderSetting::Auto => !language.starts_with("en"),
+        }
+    }
+}
+
 /// Application settings. Field names are the JSON keys.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -180,6 +204,12 @@ pub struct Settings {
     // AI clients
     /// Let AI clients (MCP, `parvu mcp --attach`) connect to the running app.
     pub mcp_allow_clients: bool,
+
+    // Column types
+    /// Detect the column types of CSV files when they open.
+    pub detect_column_types: bool,
+    /// How to read dates such as `03/04/2024` (see [`DateOrderSetting`]).
+    pub date_order: DateOrderSetting,
 
     // Legacy colours, kept for backward compatibility
     #[serde(rename = "colour_browseButton")]
@@ -227,6 +257,8 @@ impl Default for Settings {
             bug_report_email: "eziznadirov@gmail.com".into(),
             enable_crash_reporting: true,
             mcp_allow_clients: false,
+            detect_column_types: true,
+            date_order: DateOrderSetting::Auto,
             colour_browse_button: "#E8F5E9".into(),
             colour_sql_edit: "#FFF9C4".into(),
             colour_execute_button: "#E1F5FE".into(),
@@ -548,6 +580,8 @@ fn known_keys() -> Vec<&'static str> {
         "bug_report_email",
         "enable_crash_reporting",
         "mcp_allow_clients",
+        "detect_column_types",
+        "date_order",
         "colour_browseButton",
         "colour_sqlEdit",
         "colour_executeButton",

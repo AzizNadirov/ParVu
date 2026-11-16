@@ -38,6 +38,8 @@ export interface SettingsForm {
   bugEmail: string;
   warningEnabled: boolean;
   criteria: WarningCriteria;
+  detectTypes: boolean;
+  dateOrder: Settings["date_order"];
   rowsThreshold: string;
   cellsThreshold: string;
   sizeThreshold: string;
@@ -77,6 +79,8 @@ export function settingsToForm(s: Settings, language: string, theme: string): Se
     bugEmail: s.bug_report_email ?? "",
     warningEnabled: !!s.enable_large_dataset_warning,
     criteria: s.warning_criteria ?? "rows",
+    detectTypes: s.detect_column_types ?? true,
+    dateOrder: s.date_order ?? "auto",
     rowsThreshold: String(toInt(s.warning_threshold_rows, 1_000_000)),
     cellsThreshold: String(toInt(s.warning_threshold_cells, 10_000_000)),
     sizeThreshold: String(toInt(s.warning_threshold_filesize_mb, 100)),
@@ -113,6 +117,8 @@ export function formToValues(f: SettingsForm): Partial<Settings> {
     bug_report_email: f.bugEmail.trim(),
     enable_large_dataset_warning: f.warningEnabled,
     warning_criteria: f.criteria,
+    detect_column_types: f.detectTypes,
+    date_order: f.dateOrder,
     warning_threshold_rows: n("rowsThreshold"),
     warning_threshold_cells: n("cellsThreshold"),
     warning_threshold_filesize_mb: n("sizeThreshold"),
@@ -272,6 +278,21 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
         <div className="form-grid">
           {field(t("settings.label.copy_sample"), num("copySample", t("settings.suffix.rows")))}
         </div>
+      </fieldset>
+      <fieldset>
+        <legend>{t("settings.group.column_types")}</legend>
+        {check("detectTypes", t("settings.label.detect_types"), t("settings.tooltip.detect_types"))}
+        <div className="form-grid" style={{ marginTop: 6 }}>
+          {field(
+            t("settings.label.date_order"),
+            <select value={form.dateOrder} onChange={(e) => set("dateOrder", e.target.value as Settings["date_order"])}>
+              <option value="auto">{t("settings.date_order.auto")}</option>
+              <option value="day_first">{t("settings.date_order.day_first")}</option>
+              <option value="month_first">{t("settings.date_order.month_first")}</option>
+            </select>,
+          )}
+        </div>
+        <div className="muted small">{t("settings.hint.column_types")}</div>
       </fieldset>
       <fieldset>
         <legend>{t("settings.group.performance")}</legend>
