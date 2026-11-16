@@ -95,6 +95,8 @@ fn main() {
         .manage(AppState::new(load_config(), initial_files, crash))
         .setup(|app| {
             build_window(app.handle(), "main")?;
+            mcp::clear_stale_run_file();
+            mcp::mark_app_running();
             let state = app.state::<AppState>();
             state.attach.set_active_window("main");
             let allow_clients = state.config.lock().map(|c| c.settings.settings().mcp_allow_clients).unwrap_or(false);
@@ -167,6 +169,7 @@ fn main() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 mcp_attach::stop(app);
+                mcp::clear_app_running();
             }
         });
 }

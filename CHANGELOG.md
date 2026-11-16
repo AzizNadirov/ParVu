@@ -5,7 +5,7 @@
 ### Added
 - **MCP server:** `parvu mcp --allow-dir <folder>` lets AI clients (Claude Code, Claude Desktop, VS Code) open data files and query them through ParVu, with read-only SQL checks and session-only changes. See [docs/MCP.md](docs/MCP.md).
 - **AI assistant panel** (`Ctrl+Shift+A`): ask about your tables with an Anthropic, OpenAI, Gemini, OpenRouter or Groq API key, or a local Ollama / LM Studio model. It inspects and queries the data with the same read-only tools as the MCP server; changes go through approval cards. Keys are stored in the system keychain. See [docs/AI.md](docs/AI.md).
-- **AI → Connect an AI client:** Claude Desktop, Claude Code and other MCP clients connect to the running window (`parvu mcp --attach`) and work with its open tabs, using your own Claude subscription. Their changes appear as approval cards with a preview and become normal undoable steps. The status bar shows connected clients.
+- **AI → Connect an AI client:** Claude Desktop, Claude Code and other MCP clients connect to the running window (`parvu mcp --attach`) and work with its open tabs, using your own Claude subscription. Their changes appear as approval cards with a preview and become normal undoable steps. The status bar shows connected clients. If ParVu isn't running, `parvu mcp --attach` opens it.
 
 ## [1.0.0-alpha.2]
 
