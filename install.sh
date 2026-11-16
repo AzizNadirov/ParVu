@@ -89,7 +89,10 @@ install_deb() {
   say "Installing $(basename "$deb")"
   # apt needs a path with a slash to treat the argument as a file.
   [[ "$deb" == */* ]] || deb="./$deb"
-  run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "$deb"
+  # --reinstall: a fresh build of the same version (development builds keep
+  # the version until the next release) would otherwise be skipped as
+  # "already the newest version", leaving the old program installed.
+  run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades --reinstall "$deb"
 }
 
 # ---------------------------------------------------------------------------
@@ -222,7 +225,7 @@ build_args=()
 [[ $BETA -eq 1 ]] && build_args+=(--beta)
 if [[ $DRY_RUN -eq 1 ]]; then
   run "cd $SRC && ./build.sh ${build_args[*]}"
-  run "$SUDO apt-get install ./target/release/bundle/deb/<package>.deb"
+  run "$SUDO apt-get install --reinstall ./target/release/bundle/deb/<package>.deb"
   exit 0
 fi
 (cd "$SRC" && ./build.sh "${build_args[@]}")
