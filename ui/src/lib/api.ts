@@ -66,7 +66,16 @@ export type ColumnFn =
   | { fn: "age"; unit: TimeUnitName }
   | { fn: "add_time"; n: number; unit: TimeUnitName }
   | { fn: "format_date"; format: string }
-  | { fn: "is_weekend" };
+  | { fn: "is_weekend" }
+  | { fn: "json_path"; path: string; text: boolean }
+  | { fn: "list_length" }
+  | { fn: "join_list"; separator: string };
+
+/** A key of a JSON object column and the type its values get. */
+export interface JsonKey {
+  name: string;
+  dtype: string;
+}
 
 /** Where a column function writes. */
 export type FnOutput = { to: "in_place" } | { to: "new"; name: string };
@@ -152,6 +161,9 @@ export type Operation =
   | { op: "column_transform"; column: string; func: ColumnFn; output: FnOutput }
   | { op: "merge_columns"; columns: string[]; separator: string; name: string; keep_columns: boolean }
   | { op: "date_diff"; start: string; end: string; unit: TimeUnitName; name: string }
+  | { op: "expand_json"; column: string; keys: JsonKey[]; keep_original: boolean }
+  | { op: "expand_struct"; column: string }
+  | { op: "to_rows"; column: string }
   | { op: "date_range"; column: string; range: RelativeRange }
   | { op: "conversion_errors"; column: string; to: Reading; keep: boolean }
   | { op: "duplicate"; column: string }
@@ -626,6 +638,7 @@ export const api = {
     call<{ before: Cell; after: Cell; failed: boolean }[]>("preview_conversion", { id, column, to, n }),
   previewColumnFn: (id: number, column: string, func: ColumnFn, values: Cell[]) =>
     call<[Cell, Cell][]>("preview_column_fn", { id, column, func, values }),
+  jsonKeys: (id: number, column: string, full: boolean) => call<JsonKey[]>("json_keys", { id, column, full }),
   suggestReading: (id: number, column: string) => call<Reading>("suggest_reading", { id, column }),
   conversionErrorCount: (id: number, column: string, to: Reading, full: boolean) =>
     call<{ errors: number; checked: number; complete: boolean }>("conversion_error_count", { id, column, to, full }),

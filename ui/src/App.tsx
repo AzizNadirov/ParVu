@@ -82,6 +82,7 @@ import {
   openMergeColumns,
   openDateDiff,
   openLastN,
+  openExpandJson,
   openTableInfo,
   openThemeSelector,
   openTranspose,
@@ -637,6 +638,40 @@ export function App({ boot }: { boot: Bootstrap }) {
     if (op) await applyOp(op);
   };
 
+  /** JSON, list and struct columns: expand, extract, to rows, length, join. */
+  const nestedMenu = (column: string, family: "json" | "list" | "struct"): MenuEntry[] => {
+    if (family === "struct")
+      return [{ label: t("json.expand_struct"), onSelect: () => void applyOp({ op: "expand_struct", column }) }, { type: "separator" }];
+    const listItems: MenuEntry[] = [
+      { label: t("json.to_rows"), onSelect: () => void applyOp({ op: "to_rows", column }) },
+      {
+        label: t("fn.list_length"),
+        onSelect: () => void applyOp({ op: "column_transform", column, func: { fn: "list_length" }, output: { to: "new", name: "" } }),
+      },
+      { label: `${t("fn.join_list")}…`, onSelect: () => void runColumnFn(column, "join_list") },
+    ];
+    if (family === "list") return [...listItems, { type: "separator" }];
+    return [
+      {
+        label: t("menu.col.json"),
+        submenu: [
+          {
+            label: `${t("json.expand.title")}…`,
+            onSelect: async () => {
+              if (!activeTab) return;
+              const op = await openExpandJson(ui, { tabId: activeTab.id, table: activeTab.name, column });
+              if (op) await applyOp(op);
+            },
+          },
+          { label: `${t("fn.json_path")}…`, onSelect: () => void runColumnFn(column, "json_path") },
+          { type: "separator" as const },
+          ...listItems,
+        ],
+      },
+      { type: "separator" },
+    ];
+  };
+
   /** Date and time columns: parts, names, start/end of, age, shifts, differences, relative filters. */
   const dateMenu = (column: string, timeOnly: boolean): MenuEntry[] => {
     const family = page?.columns.find((c) => c.name === column)?.family;
@@ -757,6 +792,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         { type: "separator" },
       ];
     if (isDateFamily(family) || family === "time") return dateMenu(column, family === "time");
+    if (family === "json" || family === "list" || family === "struct") return nestedMenu(column, family);
     if (family === "boolean")
       return [
         { label: t("fn.invert"), onSelect: () => inPlace({ fn: "invert" }) },

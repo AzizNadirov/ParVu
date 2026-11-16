@@ -21,7 +21,7 @@ use crate::error::{CoreError, Result};
 use crate::export::{ExportOptions, export};
 use crate::format::{FileFormat, register_source};
 use crate::types::{DetectOptions, Reading, SourceColumn};
-use crate::colfn::ColumnFn;
+use crate::colfn::{ColumnFn, JsonKey};
 use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
 use crate::search::{SearchHit, SearchOptions, find_next};
@@ -572,6 +572,22 @@ impl Workspace {
             .query_map([], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(out)
+    }
+
+    /// The keys of the JSON objects in `column` and their types, from the
+    /// first `limit` rows (or all), for "Expand into columns".
+    pub fn json_keys(&self, id: TabId, column: &str, limit: Option<u64>) -> Result<Vec<JsonKey>> {
+        let sql = self.with_ctx(id, |ctx| {
+            ctx.require(column)?;
+            let c = quote_ident(column);
+            let source = match limit {
+                Some(n) => format!("SELECT {c} FROM ({}) LIMIT {n}", ctx.current_query),
+                None => format!("SELECT {c} FROM ({})", ctx.current_query),
+            };
+            Ok(format!("SELECT CAST(json_group_structure(TRY_CAST({c} AS JSON)) AS VARCHAR) FROM ({source})"))
+        })?;
+        let structure: Option<String> = self.conn.query_row(&sql, [], |r| r.get(0))?;
+        Ok(structure.map(|s| JsonKey::from_structure(&s)).unwrap_or_default())
     }
 
     /// SQL counting the values of `column` that don't convert as `to`:

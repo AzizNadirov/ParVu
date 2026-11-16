@@ -50,3 +50,15 @@ describe("date functions", () => {
     expect(buildFn("format_date", initialValues("format_date"))).toEqual({ fn: "format_date", format: "%d.%m.%Y" });
   });
 });
+
+describe("JSON functions", () => {
+  it("builds path and join functions and has labels", () => {
+    expect(buildFn("json_path", initialValues("json_path"))).toBeNull();
+    expect(buildFn("json_path", { path: "$.a.b", as_text: true })).toEqual({ fn: "json_path", path: "$.a.b", text: true });
+    expect(buildFn("json_path", { path: "a.b", as_text: false })).toBeNull();
+    expect(buildFn("join_list", { separator: "" })).toEqual({ fn: "join_list", separator: "" });
+    for (const k of ["fn.json_path", "fn.list_length", "fn.join_list", "json.to_rows", "json.expand.title", "fn.field.path", "fn.field.as_text"])
+      expect(has(k), k).toBe(true);
+    for (const t of ["bigint", "double", "boolean", "varchar", "json"]) expect(has(`json.type.${t}`), t).toBe(true);
+  });
+});

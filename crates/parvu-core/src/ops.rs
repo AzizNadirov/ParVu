@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::clean::{BinMethod, Combine, Condition, FillMethod, SliceMode, SortKey};
-use crate::colfn::{ColumnFn, Output, RelativeRange, TimeUnit};
+use crate::colfn::{ColumnFn, JsonKey, Output, RelativeRange, TimeUnit};
 use crate::error::{CoreError, Result};
 use crate::page::{Cell, ColumnMeta};
 use crate::reshape::{AggFunc, Aggregation};
@@ -102,6 +102,21 @@ pub enum Operation {
         #[serde(default)]
         output: Output,
     },
+    /// Turn chosen keys of a JSON object column into columns (typed by
+    /// `keys`), at the column's place; keys missing from a row give empty
+    /// cells. The keys usually come from a sample (`Workspace::json_keys`).
+    ExpandJson {
+        column: String,
+        keys: Vec<JsonKey>,
+        /// Keep the JSON column before the new ones.
+        #[serde(default)]
+        keep_original: bool,
+    },
+    /// Turn the fields of a struct column into columns, at its place.
+    ExpandStruct { column: String },
+    /// One row per item of a list or JSON array column; rows with an empty
+    /// or missing list are kept, with an empty cell.
+    ToRows { column: String },
     /// Whole `unit`s from `start` to `end` (two date columns), into the new
     /// column `name` right after `end`.
     DateDiff { start: String, end: String, unit: TimeUnit, name: String },
@@ -450,6 +465,10 @@ impl Operation {
                     (ctx.query)(&format!("SELECT regexp_extract('', {}, {group})", quote_literal(pattern)))
                         .map_err(|e| CoreError::invalid(format!("Invalid pattern: {e}")))?;
                 }
+                if let ColumnFn::JsonPath { path, .. } = func {
+                    (ctx.query)(&format!("SELECT json_extract('{{}}', {})", quote_literal(path)))
+                        .map_err(|e| CoreError::invalid(format!("Invalid JSON path: {e}")))?;
+                }
                 let label = StepLabel::new(func.key(), &[("column", column)]);
                 match output {
                     Output::InPlace => (
@@ -470,6 +489,93 @@ impl Operation {
                         (format!("SELECT {} FROM ({cur})", items.join(", ")), label)
                     }
                 }
+            }
+            Operation::ExpandJson { column, keys, keep_original } => {
+                let fam = TypeFamily::of(&ctx.column(column)?.dtype);
+                if !matches!(fam, TypeFamily::Json | TypeFamily::Text) {
+                    return Err(CoreError::invalid(format!("\"{column}\" is not a JSON column")));
+                }
+                if keys.is_empty() {
+                    return Err(CoreError::invalid("Choose at least one key"));
+                }
+                let c = q(column);
+                let mut taken: Vec<String> =
+                    ctx.columns.iter().map(|m| m.name.clone()).filter(|n| *keep_original || n != column).collect();
+                let mut new_cols = Vec::new();
+                for k in keys {
+                    let path = quote_literal(&k.path());
+                    let expr = match k.dtype.as_str() {
+                        "JSON" => format!("json_extract({c}, {path})"),
+                        "VARCHAR" => format!("json_extract_string({c}, {path})"),
+                        "BIGINT" | "DOUBLE" | "BOOLEAN" => format!("TRY_CAST(json_extract_string({c}, {path}) AS {})", k.dtype),
+                        other => return Err(CoreError::invalid(format!("Invalid type for a JSON key: {other}"))),
+                    };
+                    // The key's own name, or "column.key" when that is taken.
+                    let wanted = if taken.contains(&k.name) { format!("{column}.{}", k.name) } else { k.name.clone() };
+                    let name = unique_name(&taken, &wanted);
+                    taken.push(name.clone());
+                    new_cols.push(format!("{expr} AS {}", q(&name)));
+                }
+                let mut items = Vec::new();
+                for m in ctx.columns {
+                    if m.name != *column {
+                        items.push(q(&m.name));
+                        continue;
+                    }
+                    if *keep_original {
+                        items.push(q(&m.name));
+                    }
+                    items.extend(new_cols.iter().cloned());
+                }
+                (
+                    format!("SELECT {} FROM ({cur})", items.join(", ")),
+                    StepLabel::new("step.expand_json", &[("column", column), ("count", &keys.len().to_string())]),
+                )
+            }
+            Operation::ExpandStruct { column } => {
+                let fam = TypeFamily::of(&ctx.column(column)?.dtype);
+                if fam != TypeFamily::Struct {
+                    return Err(CoreError::invalid(format!("\"{column}\" is not a struct column")));
+                }
+                let c = q(column);
+                let fields: Vec<String> = (ctx.query)(&format!("SELECT column_name FROM (DESCRIBE SELECT {c}.* FROM ({cur}))"))?
+                    .into_iter()
+                    .filter_map(|r| r.into_iter().next().flatten())
+                    .collect();
+                let mut taken: Vec<String> = ctx.columns.iter().map(|m| m.name.clone()).filter(|n| n != column).collect();
+                let mut items = Vec::new();
+                for m in ctx.columns {
+                    if m.name != *column {
+                        items.push(q(&m.name));
+                        continue;
+                    }
+                    for f in &fields {
+                        let wanted = if taken.contains(f) { format!("{column}.{f}") } else { f.clone() };
+                        let name = unique_name(&taken, &wanted);
+                        taken.push(name.clone());
+                        items.push(format!("struct_extract({c}, {}) AS {}", quote_literal(f), q(&name)));
+                    }
+                }
+                (format!("SELECT {} FROM ({cur})", items.join(", ")), StepLabel::new("step.expand_struct", &[("column", column)]))
+            }
+            Operation::ToRows { column } => {
+                let fam = TypeFamily::of(&ctx.column(column)?.dtype);
+                let c = q(column);
+                let list = match fam {
+                    TypeFamily::List => c.clone(),
+                    TypeFamily::Json | TypeFamily::Text => format!("try(from_json({c}, '[\"JSON\"]'))"),
+                    _ => return Err(CoreError::invalid(format!("\"{column}\" is not a list or JSON column"))),
+                };
+                // unnest drops rows whose list is empty or missing; keep them
+                // as one row with an empty cell.
+                let items = ctx.select_each(|n| {
+                    if n == column {
+                        format!("unnest(CASE WHEN len({list}) > 0 THEN {list} ELSE [NULL] END) AS {c}")
+                    } else {
+                        q(n)
+                    }
+                });
+                (items, StepLabel::new("step.to_rows", &[("column", column)]))
             }
             Operation::DateDiff { start, end, unit, name } => {
                 for c in [start, end] {

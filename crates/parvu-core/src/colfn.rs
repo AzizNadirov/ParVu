@@ -181,6 +181,59 @@ pub enum ColumnFn {
     FormatDate { format: String },
     /// Saturday or Sunday.
     IsWeekend,
+    /// The value at a JSON path such as `$.address.city`, as JSON or text.
+    JsonPath {
+        path: String,
+        #[serde(default)]
+        text: bool,
+    },
+    /// Number of items of a list or JSON array.
+    ListLength,
+    /// The items of a list or JSON array joined into text.
+    JoinList {
+        #[serde(default = "comma")]
+        separator: String,
+    },
+}
+
+fn comma() -> String {
+    ", ".into()
+}
+
+/// A key of a JSON object column and the type its values get.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct JsonKey {
+    pub name: String,
+    /// BIGINT, DOUBLE, BOOLEAN, VARCHAR, or JSON for nested values.
+    pub dtype: String,
+}
+
+impl JsonKey {
+    /// The keys of a `json_group_structure` result for objects; empty when
+    /// the values are not objects.
+    pub fn from_structure(structure: &str) -> Vec<JsonKey> {
+        let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(structure) else {
+            return Vec::new();
+        };
+        map.into_iter()
+            .map(|(name, v)| {
+                let dtype = match v.as_str() {
+                    Some("UBIGINT" | "BIGINT") => "BIGINT",
+                    Some("DOUBLE") => "DOUBLE",
+                    Some("BOOLEAN") => "BOOLEAN",
+                    Some("VARCHAR" | "NULL") => "VARCHAR",
+                    _ => "JSON",
+                };
+                JsonKey { name, dtype: dtype.to_string() }
+            })
+            .collect()
+    }
+
+    /// The JSON path of this key (`$."my key"`).
+    pub fn path(&self) -> String {
+        format!("$.\"{}\"", self.name.replace('\\', "\\\\").replace('"', "\\\""))
+    }
 }
 
 fn zero() -> String {
@@ -221,6 +274,9 @@ impl ColumnFn {
             ColumnFn::AddTime { .. } => "step.fn.add_time",
             ColumnFn::FormatDate { .. } => "step.fn.format_date",
             ColumnFn::IsWeekend => "step.fn.is_weekend",
+            ColumnFn::JsonPath { .. } => "step.fn.json_path",
+            ColumnFn::ListLength => "step.fn.list_length",
+            ColumnFn::JoinList { .. } => "step.fn.join_list",
         }
     }
 
@@ -247,6 +303,9 @@ impl ColumnFn {
             ColumnFn::StartOf { .. } => "start",
             ColumnFn::EndOf { .. } => "end",
             ColumnFn::AddTime { .. } => "shifted",
+            ColumnFn::JsonPath { .. } => "value",
+            ColumnFn::ListLength => "count",
+            ColumnFn::JoinList { .. } => "joined",
             _ => "text",
         }
     }
@@ -261,6 +320,9 @@ impl ColumnFn {
             return Ok(format!("(NOT {c})"));
         }
         if let Some(e) = self.date_expr(column, &c, dtype)? {
+            return Ok(e);
+        }
+        if let Some(e) = self.nested_expr(column, &c, dtype)? {
             return Ok(e);
         }
         // Text functions read any column as text.
@@ -334,6 +396,41 @@ impl ColumnFn {
             ColumnFn::Invert => unreachable!("handled above"),
             _ => unreachable!("date functions are handled by date_expr"),
         })
+    }
+
+    /// The expression of a JSON or list function, `None` for other functions.
+    fn nested_expr(&self, column: &str, c: &str, dtype: &str) -> Result<Option<String>> {
+        let family = TypeFamily::of(dtype);
+        let list = family == TypeFamily::List;
+        // JSON functions also read JSON stored as text.
+        let json = matches!(family, TypeFamily::Json | TypeFamily::Text);
+        let need = |ok: bool, what: &str| {
+            if ok { Ok(()) } else { Err(CoreError::invalid(format!("\"{column}\" is not {what}"))) }
+        };
+        Ok(Some(match self {
+            ColumnFn::JsonPath { path, text } => {
+                need(json, "a JSON column")?;
+                if !path.starts_with('$') {
+                    return Err(CoreError::invalid("A JSON path starts with $, e.g. $.address.city"));
+                }
+                let f = if *text { "json_extract_string" } else { "json_extract" };
+                format!("{f}({c}, {})", quote_literal(path))
+            }
+            ColumnFn::ListLength => {
+                need(list || json, "a list or JSON column")?;
+                if list { format!("len({c})") } else { format!("try(json_array_length({c}))") }
+            }
+            ColumnFn::JoinList { separator } => {
+                need(list || json, "a list or JSON column")?;
+                let sep = quote_literal(separator);
+                if list {
+                    format!("array_to_string({c}, {sep})")
+                } else {
+                    format!("try(array_to_string(from_json({c}, '[\"VARCHAR\"]'), {sep}))")
+                }
+            }
+            _ => return Ok(None),
+        }))
     }
 
     /// The expression of a date function, `None` for other functions.
