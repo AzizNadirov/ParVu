@@ -4,6 +4,8 @@
 //! never waits on DuckDB. Each window has its own workspace, found by the
 //! calling window's label.
 
+use crate::column_types::ColumnTypes;
+use parvu_core::types::{Reading, SourceColumn};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -142,11 +144,13 @@ pub fn update_settings(
     }
     let page_size = cfg.settings.settings().rows_per_page();
     let memory_mb = cfg.settings.settings().query_memory_limit_mb.max(0) as u64;
+    let detect = crate::state::detect_options(cfg.settings.settings());
     drop(cfg);
     let env_limit = std::env::var_os("PARVU_MEMORY_LIMIT_MB").is_some();
     for ws in lock(&state.workspaces).values() {
         let mut ws = lock(ws);
         ws.set_page_size(page_size);
+        ws.set_detect_options(detect);
         if !env_limit {
             ws.set_memory_limit_mb(memory_mb)?;
         }
@@ -179,7 +183,12 @@ pub fn set_language(app: AppHandle, state: State<'_, AppState>, code: String) ->
     values.insert("current_language".into(), code.clone().into());
     cfg.settings.update(values)?;
     let change = LanguageChange { language: code.clone(), translations: I18n::catalog(&code).clone() };
+    // The automatic date order follows the language.
+    let detect = crate::state::detect_options(cfg.settings.settings());
     drop(cfg);
+    for ws in lock(&state.workspaces).values() {
+        lock(ws).set_detect_options(detect);
+    }
     let _ = app.emit("language-changed", &code);
     Ok(change)
 }
@@ -284,6 +293,11 @@ pub async fn open_file(
     let p = path.clone();
     let summary = with_ws(state.clone(), window, move |ws| {
         let id = ws.open(&p)?;
+        // Types the user chose for this file before ("Read as").
+        let chosen = ColumnTypes::load(&ColumnTypes::file()).for_file(&p);
+        if let Err(e) = ws.apply_source_readings(id, &chosen) {
+            tracing::warn!("could not apply the column types chosen for {}: {e}", p.display());
+        }
         Ok(ws.summary(id)?)
     })
     .await?;
@@ -435,6 +449,40 @@ pub async fn apply_op(
     .await
 }
 
+/// How each column of a tab's CSV file is read (empty for other formats).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn source_columns(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+) -> ApiResult<Vec<SourceColumn>> {
+    with_ws(state, window, move |ws| Ok(ws.source_columns(id)?.to_vec())).await
+}
+
+/// Read a column of the tab's CSV file another way ("Read as" in the column
+/// menu), and remember the choice for this file.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_source_reading(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+    reading: Reading,
+) -> ApiResult<TabSummary> {
+    with_ws(state, window, move |ws| {
+        ws.set_source_reading(id, &column, reading.clone())?;
+        let summary = ws.summary(id)?;
+        let file = ColumnTypes::file();
+        let mut store = ColumnTypes::load(&file);
+        store.remember(&summary.path, &column, reading);
+        if let Err(e) = store.save(&file) {
+            tracing::warn!("could not save {}: {e}", file.display());
+        }
+        Ok(summary)
+    })
+    .await
+}
+
 /// Math operation dialog: add column `name` computed by expression `text`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn add_computed_column(
@@ -493,7 +541,19 @@ pub struct Undone {
 pub async fn undo(state: State<'_, AppState>, window: WebviewWindow, id: TabId) -> ApiResult<Undone> {
     with_ws(state, window, move |ws| {
         let label = ws.undo(id)?;
-        Ok(Undone { label, summary: ws.summary(id)? })
+        let summary = ws.summary(id)?;
+        // Undoing "Read as" also forgets the choice for this file.
+        if label.key == "step.source_type"
+            && let Some(column) = label.args.get("column")
+        {
+            let file = ColumnTypes::file();
+            let mut store = ColumnTypes::load(&file);
+            store.forget(&summary.path, column);
+            if let Err(e) = store.save(&file) {
+                tracing::warn!("could not save {}: {e}", file.display());
+            }
+        }
+        Ok(Undone { label, summary })
     })
     .await
 }

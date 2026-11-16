@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ai_assistant;
+mod column_types;
 mod commands;
 mod error;
 mod mcp;
@@ -138,6 +139,8 @@ fn main() {
             commands::run_expression,
             commands::preview_expression,
             commands::apply_op,
+            commands::source_columns,
+            commands::set_source_reading,
             commands::add_computed_column,
             commands::replace_values,
             commands::undo,

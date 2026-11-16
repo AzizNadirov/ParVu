@@ -9,7 +9,10 @@
   - a second date format in the same file;
   - JSON.
 
-  Ambiguous dates such as `03/04/2024` are read day-first, and the column is marked so a later version can let you flip it. Columns DuckDB already types correctly keep its fast reader.
+  Columns DuckDB already types correctly keep its fast reader.
+- **Type icons in the column headers** (number, text, yes/no, date, time, JSON…). Dates such as `03/04/2024`, where the day and month order is a guess, show a calendar with a question mark.
+- **Read as** in the column menu of a CSV file: read a column as text, a whole number, a number with `,` or `.` decimals, yes/no, a date in one of several formats, a time or JSON. "Read dates day first / month first" flips a guessed date column in one click. The change is a step you can undo, cell editing stays available, and ParVu remembers it for that file (until the file changes).
+- **Settings → Column types:** turn type detection off, and choose how dates such as `03/04/2024` are read (automatic from the language, day first or month first).
 
 ### Fixed
 - **A bad value far down a CSV file no longer breaks the table.** DuckDB guesses types from the start of the file, so a value like `oops` in a number column 100,000 rows down used to make every sort, sum, chart or export fail. ParVu now re-reads that column safely, and the value becomes empty.

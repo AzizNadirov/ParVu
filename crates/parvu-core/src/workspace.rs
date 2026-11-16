@@ -20,7 +20,7 @@ use crate::engine::{QueryEngine, describe};
 use crate::error::{CoreError, Result};
 use crate::export::{ExportOptions, export};
 use crate::format::{FileFormat, register_source};
-use crate::types::{DetectOptions, SourceColumn};
+use crate::types::{DetectOptions, Reading, SourceColumn};
 use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
 use crate::search::{SearchHit, SearchOptions, find_next};
@@ -36,6 +36,9 @@ enum StepKind {
     /// Several cells edited at once (fill down); keeps each cell's previous
     /// pending edit so undo restores it exactly.
     CellEdits { previous: Vec<(u64, String, Option<CellEdit>)> },
+    /// A column of the CSV file is read another way; keeps the previous
+    /// reading for undo. The query is unchanged, so cell edits stay allowed.
+    SourceReading { previous: SourceColumn },
 }
 
 #[derive(Debug, Clone)]
@@ -199,6 +202,74 @@ impl Workspace {
             }
         }
         healed
+    }
+
+    /// Read `column` of a tab's CSV file as `reading` (the column type
+    /// menu). Undoable. Fails, changing nothing, when the current query or
+    /// pending cell edits don't work with the new type.
+    pub fn set_source_reading(&mut self, id: TabId, column: &str, reading: Reading) -> Result<StepLabel> {
+        let tab = self.tab(id)?;
+        if tab.format != FileFormat::Csv {
+            return Err(CoreError::invalid("Only columns of CSV files can be read another way"));
+        }
+        let previous = tab
+            .source
+            .iter()
+            .find(|c| c.name == column)
+            .cloned()
+            .ok_or_else(|| CoreError::invalid(format!("No column \"{column}\" in the file")))?;
+        let next = SourceColumn { name: column.to_string(), reading, native: false, ambiguous: false };
+        let label = StepLabel::new("step.source_type", &[("column", column), ("type", next.reading.dtype())]);
+        self.replace_source_columns(id, std::slice::from_ref(&next))?;
+        let tab = self.tab_mut(id)?;
+        tab.steps.push(Step { label: label.clone(), kind: StepKind::SourceReading { previous } });
+        Ok(label)
+    }
+
+    /// Read some columns of a tab's CSV file another way without a step
+    /// (types the user chose for this file before). Unknown columns are
+    /// skipped; a set that doesn't work changes nothing.
+    pub fn apply_source_readings(&mut self, id: TabId, readings: &[(String, Reading)]) -> Result<()> {
+        let tab = self.tab(id)?;
+        if tab.format != FileFormat::Csv {
+            return Ok(());
+        }
+        let next: Vec<SourceColumn> = readings
+            .iter()
+            .filter(|(name, _)| tab.source.iter().any(|c| &c.name == name))
+            .map(|(name, reading)| SourceColumn { name: name.clone(), reading: reading.clone(), native: false, ambiguous: false })
+            .collect();
+        if next.is_empty() {
+            return Ok(());
+        }
+        self.replace_source_columns(id, &next)
+    }
+
+    /// Swap in `columns` (by name), rebuild the source and edit views, and
+    /// check the current query still runs; restore everything otherwise.
+    fn replace_source_columns(&mut self, id: TabId, columns: &[SourceColumn]) -> Result<()> {
+        let conn = &self.conn;
+        let tab = self.tabs.iter_mut().find(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
+        let before = tab.source.clone();
+        for c in columns {
+            if let Some(slot) = tab.source.iter_mut().find(|s| s.name == c.name) {
+                *slot = c.clone();
+            }
+        }
+        let rebuild = |tab: &mut Tab| -> Result<()> {
+            let select = crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source);
+            conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(&tab.source_view())))?;
+            rebuild_overlay(conn, tab)?;
+            crate::engine::validate(conn, tab.engine.current_query())
+        };
+        if let Err(e) = rebuild(tab) {
+            tab.source = before;
+            if let Err(e2) = rebuild(tab) {
+                tracing::warn!("could not restore the file's column types: {e2}");
+            }
+            return Err(e);
+        }
+        Ok(())
     }
 
     /// Run `f`, healing and retrying when it fails on an unparsable CSV
@@ -516,7 +587,11 @@ impl Workspace {
                     return Err(e);
                 }
             }
+            StepKind::SourceReading { previous } => {
+                self.replace_source_columns(id, std::slice::from_ref(previous))?;
+            }
         }
+        let tab = self.tab_mut(id)?;
         tab.steps.pop();
         Ok(step.label)
     }
