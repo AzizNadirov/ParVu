@@ -491,16 +491,17 @@ The original plan for A:
 
 ---
 
-## 16. Open questions
+## 16. Decisions
 
-1. **Default provider for new users.** Recommendation: none preselected. The providers dialog lists Anthropic first (`claude-opus-5-5`) and offers "Use a local model (Ollama)" as the privacy option.
-2. **Server-side fallback on Anthropic refusals.** Recommendation: on by default (it retries a declined request on another model inside the same call), with a setting to turn it off.
-3. **No keychain available.** An environment variable only (this plan), or also a passphrase-encrypted file?
-4. **Chat history.** Recommendation: memory only for the first release; saving per file later, opt-in.
-5. **Separate chat per tab, or one per window?** Recommendation: per tab, since questions are about one table.
-6. **Build order.** Recommendation: MCP server first (milestones A then E1–E2). It gives AI access to ParVu data quickly, with no provider or key handling in ParVu, then the built-in assistant (B–D).
+Decided on 2026-11-16:
 
----
+1. **Providers in the first release:** Anthropic (native Messages API) plus one OpenAI-compatible client, which covers OpenAI, Gemini, OpenRouter, Groq, Ollama and LM Studio. No provider is preselected. The providers dialog lists Anthropic first (`claude-opus-5-5`) and offers a local model (Ollama) as the private option.
+2. **Refusals:** Anthropic's server-side fallback (`fallbacks: "default"`) is on by default, with a setting to turn it off.
+3. **No keychain:** a provider can name an environment variable for its key instead (`ANTHROPIC_API_KEY`…). There is no encrypted key file.
+4. **Chat history:** in memory only for the first release.
+5. **Scope of a chat:** one per tab.
+6. **Build order:** the MCP server came first (A, E1–E3). The built-in assistant follows (B–D).
+7. **Tools:** the built-in assistant uses the attached MCP server's tools in-process, through an in-memory MCP connection, instead of defining its own. Its changes go through the same approval cards, and a tool added for MCP clients reaches the assistant too. This replaces the `DataTools` trait of §4.1: `parvu-ai` sees a generic `ToolBackend` (list tools, call a tool), implemented in `parvu-app` over that connection.
 
 ## 17. Risks
 
