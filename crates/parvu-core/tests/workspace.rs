@@ -411,8 +411,9 @@ fn excel_dates_and_timestamps_are_real_dates() {
     ws.export(id, &ExportOptions::for_path(&xlsx)).unwrap();
     let ix = ws.open(&xlsx).unwrap();
     let types: Vec<String> = ws.columns(ix).unwrap().into_iter().map(|c| c.dtype).collect();
-    // Excel cannot store dates before 1900, so those are written as text.
-    assert_eq!(types, ["BIGINT", "TIMESTAMP", "VARCHAR"]);
+    // Excel cannot store dates before 1900, so those are written as text;
+    // detection on open reads that text back as a date.
+    assert_eq!(types, ["BIGINT", "TIMESTAMP", "DATE"]);
     assert_eq!(cell(&ws, ix, 1, 1, 1).as_deref(), Some("2024-05-06 08:08:09"));
     assert_eq!(cell(&ws, ix, 1, 0, 2).as_deref(), Some("1850-01-01"));
 }

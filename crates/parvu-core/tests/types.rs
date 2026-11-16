@@ -262,3 +262,64 @@ fn readings_chosen_before_apply_without_a_step() {
     assert!(ws.summary(id).unwrap().is_base_query);
     assert!(!ws.has_unsaved_changes(id).unwrap());
 }
+
+#[test]
+fn text_columns_of_parquet_and_json_files_get_their_types() {
+    let dir = TempDir::new().unwrap();
+    let parquet = dir.path().join("pairs.parquet");
+    let ws0 = Workspace::new(100, None).unwrap();
+    ws0.connection()
+        .execute_batch(&format!(
+            "COPY (SELECT i AS id, \
+                strftime(TIMESTAMP '2026-08-19 15:44:20' + INTERVAL (i) MINUTE, '%Y-%m-%d %H:%M:%S') AS decided_at, \
+                strftime(DATE '2026-01-05' + CAST(i AS INTEGER), '%Y-%m-%d') AS date_created, \
+                CASE WHEN i % 3 = 0 THEN NULL WHEN i % 3 = 1 THEN '2026-07-01' ELSE '2026-07-01 12:30:00' END AS mixed, \
+                CAST(i % 2 AS VARCHAR) AS flag, 'title ' || i AS title, \
+                TIMESTAMP '2026-01-01 00:00:00' AS real_ts \
+             FROM range(3000) t(i)) TO '{}' (FORMAT PARQUET)",
+            parquet.display()
+        ))
+        .unwrap();
+    let mut ws = Workspace::new(100, None).unwrap();
+    let id = ws.open(&parquet).unwrap();
+    let types = dtypes(&ws, id);
+    let want: Vec<(String, String)> = [
+        ("id", "BIGINT"),
+        ("decided_at", "TIMESTAMP"),
+        ("date_created", "DATE"),
+        ("mixed", "TIMESTAMP"),
+        ("flag", "BIGINT"),
+        ("title", "VARCHAR"),
+        ("real_ts", "TIMESTAMP"),
+    ]
+    .iter()
+    .map(|(a, b)| (a.to_string(), b.to_string()))
+    .collect();
+    assert_eq!(types, want);
+    assert_eq!(first(&ws, id, "decided_at").as_deref(), Some("2026-08-19 15:44:20"));
+    let source = ws.source_columns(id).unwrap();
+    assert!(source.iter().find(|c| c.name == "real_ts").unwrap().native, "stored types stay as they are");
+    assert!(!source.iter().find(|c| c.name == "decided_at").unwrap().native);
+
+    // Read as works on Parquet too, and undo restores the detected reading.
+    ws.set_source_reading(id, "decided_at", Reading::Text).unwrap();
+    assert_eq!(dtypes(&ws, id)[1].1, "VARCHAR");
+    ws.undo(id).unwrap();
+    assert_eq!(dtypes(&ws, id)[1].1, "TIMESTAMP");
+    // A number column read as text: cast from its stored type.
+    ws.set_source_reading(id, "id", Reading::Text).unwrap();
+    assert_eq!(first(&ws, id, "id").as_deref(), Some("0"));
+
+    // JSON Lines: text that holds dates becomes dates.
+    let json = dir.path().join("events.json");
+    std::fs::write(&json, "{\"at\": \"05.01.2026\", \"n\": 1}\n{\"at\": \"17.02.2026\", \"n\": 2}\n").unwrap();
+    let jid = ws.open(&json).unwrap();
+    assert_eq!(dtypes(&ws, jid)[0], ("at".to_string(), "DATE".to_string()));
+    assert_eq!(first(&ws, jid, "at").as_deref(), Some("2026-01-05"));
+
+    // Detection off: the file's own types.
+    let mut plain = Workspace::new(100, None).unwrap();
+    plain.set_detect_options(DetectOptions { enabled: false, date_order: DateOrder::DayFirst });
+    let pid = plain.open(&parquet).unwrap();
+    assert_eq!(dtypes(&plain, pid)[1].1, "VARCHAR");
+}
