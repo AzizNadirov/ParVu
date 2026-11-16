@@ -5,6 +5,7 @@
 //! calling window's label.
 
 use crate::column_types::ColumnTypes;
+use parvu_core::colfn::ColumnFn;
 use parvu_core::types::{Reading, SourceColumn};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -516,6 +517,21 @@ pub async fn suggest_reading(
     column: String,
 ) -> ApiResult<Reading> {
     with_ws(state, window, move |ws| Ok(ws.suggest_reading(id, &column)?)).await
+}
+
+/// Preview of a column function over a few values from the page:
+/// `[before, after]` pairs.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn preview_column_fn(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+    func: ColumnFn,
+    values: Vec<Cell>,
+) -> ApiResult<Vec<(Cell, Cell)>> {
+    let values: Vec<Cell> = values.into_iter().take(20).collect();
+    with_ws(state, window, move |ws| Ok(ws.preview_column_fn(id, &column, &func, &values)?)).await
 }
 
 /// Rows checked when counting errors without `full`.

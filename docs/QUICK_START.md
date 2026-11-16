@@ -39,6 +39,8 @@ Every query and operation is listed under **Applied Steps**. `Ctrl+Z` undoes the
 
 Each column header shows an icon for its type: numbers, text, yes/no, dates, times, JSON. For CSV files, right-click a header and choose **Read as** to read the column another way, for example a number written `1.234,56`, or a date written `31.12.2024`. A calendar icon with a question mark means the day and month order was a guess; **Read dates day first / month first** in the same menu flips it. ParVu remembers your choice for that file. **Settings → Column types** sets the default date order.
 
+Text columns have **Text ▸** (trim, change case, remove accents, add a prefix…) and **Extract ▸** (first characters, text before a delimiter, a regular expression match…) in their menu. Yes/no columns have **Invert** and **Keep yes / no / empty**.
+
 To convert a column after other steps, or with more options, use **Change Type → Convert…** in its menu. ParVu suggests a type and previews the result. It also counts the values that don't convert, and **Show rows that don't convert** lists them so you can fix them.
 
 ## Analyse without SQL

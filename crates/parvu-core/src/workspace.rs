@@ -21,10 +21,11 @@ use crate::error::{CoreError, Result};
 use crate::export::{ExportOptions, export};
 use crate::format::{FileFormat, register_source};
 use crate::types::{DetectOptions, Reading, SourceColumn};
+use crate::colfn::ColumnFn;
 use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
 use crate::search::{SearchHit, SearchOptions, find_next};
-use crate::sql::{quote_ident, slugify_name};
+use crate::sql::{quote_ident, quote_literal, slugify_name};
 use crate::stats::{ColumnStats, SampleMode, column_sample, column_stats, unique_values};
 
 pub type TabId = u64;
@@ -545,6 +546,32 @@ impl Workspace {
             .query_map([], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, bool>(2)?)))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    /// `values` of `column` (as shown on the page) before and after `func`:
+    /// the preview of the column function dialogs. Runs over the values
+    /// alone, so it costs nothing whatever the size of the table.
+    pub fn preview_column_fn(&self, id: TabId, column: &str, func: &ColumnFn, values: &[Cell]) -> Result<Vec<(Cell, Cell)>> {
+        let dtype = self.with_ctx(id, |ctx| Ok(ctx.column(column)?.dtype.clone()))?;
+        if values.is_empty() {
+            return Ok(Vec::new());
+        }
+        let expr = func.expr(column, &dtype)?;
+        let ty = if crate::sql::is_safe_type_name(&dtype) { dtype.as_str() } else { "VARCHAR" };
+        let rows: Vec<String> = values
+            .iter()
+            .map(|v| format!("({})", v.as_deref().map(quote_literal).unwrap_or_else(|| "NULL".into())))
+            .collect();
+        let sql = format!(
+            "SELECT v, CAST({expr} AS VARCHAR) FROM (SELECT v, TRY_CAST(v AS {ty}) AS {c} FROM (VALUES {}) t(v))",
+            rows.join(", "),
+            c = quote_ident(column)
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let out = stmt
+            .query_map([], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(out)
     }
 
     /// SQL counting the values of `column` that don't convert as `to`:

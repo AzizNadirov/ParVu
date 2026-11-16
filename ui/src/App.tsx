@@ -14,6 +14,7 @@ import {
   type ApiError,
   type Bootstrap,
   type Cell,
+  type ColumnFn,
   type ColumnMeta,
   type AiRunEvent,
   type AiRunFinished,
@@ -28,6 +29,7 @@ import {
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
+import { EXTRACT_FNS, fnLabelKey, previewValues, TEXT_FNS, type FnName } from "./lib/colfn";
 import { applyThemeCss } from "./lib/theme";
 import { UiContext, type Closer, type MessageButton, type Ui } from "./lib/ui";
 import { formatRows, pythonTuple } from "./lib/copy";
@@ -74,6 +76,8 @@ import {
   openSort,
   openSplitColumn,
   openConvert,
+  openColumnFn,
+  openMergeColumns,
   openTableInfo,
   openThemeSelector,
   openTranspose,
@@ -621,6 +625,55 @@ export function App({ boot }: { boot: Bootstrap }) {
     if (op) await applyOp(op);
   };
 
+  const runColumnFn = async (column: string, name: FnName) => {
+    if (!activeTab || !page) return;
+    const i = page.columns.findIndex((c) => c.name === column);
+    const values = i >= 0 ? previewValues(page.rows, i) : [];
+    const op = await openColumnFn(ui, { tabId: activeTab.id, table: activeTab.name, column, name, values });
+    if (op) await applyOp(op);
+  };
+
+  /** Operations that fit the column's type (text, yes/no). */
+  const typeMenu = (column: string): MenuEntry[] => {
+    const family = page?.columns.find((c) => c.name === column)?.family;
+    const inPlace = (func: ColumnFn) => void applyOp({ op: "column_transform", column, func, output: { to: "in_place" } });
+    if (family === "text")
+      return [
+        {
+          label: t("menu.col.text"),
+          submenu: [
+            ...TEXT_FNS.map((f) => ({ label: t(fnLabelKey(f)), onSelect: () => inPlace(f) })),
+            { type: "separator" as const },
+            ...(["add_prefix", "add_suffix", "pad"] as FnName[]).map((n) => ({
+              label: `${t(`fn.${n}`)}…`,
+              onSelect: () => void runColumnFn(column, n),
+            })),
+          ],
+        },
+        {
+          label: t("menu.col.extract"),
+          submenu: EXTRACT_FNS.map((n) => ({
+            label: n === "length" ? t("fn.length") : `${t(`fn.${n}`)}…`,
+            onSelect: () =>
+              n === "length"
+                ? void applyOp({ op: "column_transform", column, func: { fn: "length" }, output: { to: "new", name: "" } })
+                : void runColumnFn(column, n),
+          })),
+        },
+        { label: t("menu.col.merge"), onSelect: () => void runOpDialog(openMergeColumns, column) },
+        { type: "separator" },
+      ];
+    if (family === "boolean")
+      return [
+        { label: t("fn.invert"), onSelect: () => inPlace({ fn: "invert" }) },
+        { label: t("menu.col.keep_true"), onSelect: () => void applyOp({ op: "filter_values", column, values: ["true"] }) },
+        { label: t("menu.col.keep_false"), onSelect: () => void applyOp({ op: "filter_values", column, values: ["false"] }) },
+        { label: t("menu.col.keep_empty"), onSelect: () => void applyOp({ op: "filter_values", column, values: [null] }) },
+        { type: "separator" },
+      ];
+    return [];
+  };
+
   const readAsMenu = (column: string): MenuEntry[] => {
     const src = sourceCols.find((c) => c.name === column);
     if (!src || !activeTab) return [];
@@ -653,6 +706,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     { label: t("context.copy_column"), onSelect: () => void copyText(column, t("status.copied_name")) },
     { type: "separator" },
     ...readAsMenu(column),
+    ...typeMenu(column),
     {
       label: t("context.change_type"),
       submenu: [
@@ -1166,6 +1220,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.operations.replace"), disabled: !activeTab, onSelect: () => void runReplace() },
         { type: "separator" },
         { label: t("menu.data.split"), disabled: !activeTab, onSelect: () => void runOpDialog(openSplitColumn) },
+        { label: t("menu.data.merge"), disabled: !activeTab, onSelect: () => void runOpDialog(openMergeColumns) },
         { label: t("menu.data.bin"), disabled: !activeTab, onSelect: () => void runOpDialog(openBin) },
       ],
     },
