@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Change type** no longer breaks the table when a value doesn't convert: the value becomes empty instead of making a later page, sort or export fail.
+- **Export** with a per-column type writes values that don't convert as empty instead of stopping halfway with a partial file.
+- **Split column** without a number of parts counts them on the first 10,000 rows instead of reading the whole table first.
+
 ## [1.0.0-alpha.3]
 
 AI comes to ParVu: use your Claude subscription through Claude Desktop or Claude Code, or chat in the new assistant panel with an API key or a local model. Every change the AI wants to make needs your approval.

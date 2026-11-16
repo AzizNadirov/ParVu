@@ -176,7 +176,9 @@ pub fn build_export_query(source: &str, o: &ExportOptions) -> Result<String> {
             if !is_safe_type_name(&spec.cast_to) {
                 return Err(CoreError::invalid(format!("Invalid type: {}", spec.cast_to)));
             }
-            format!("CAST({ident} AS {})", spec.cast_to)
+            // TRY_CAST so one bad value can't stop the export halfway and
+            // leave a partial file; it is written as empty instead.
+            format!("TRY_CAST({ident} AS {})", spec.cast_to)
         } else {
             ident.clone()
         };
@@ -426,8 +428,8 @@ mod tests {
         };
         assert_eq!(
             build_export_query("Q", &o).unwrap(),
-            "SELECT \"a\" AS \"a\", strftime(\"d\", '%d/%m/%Y') AS \"d\", CAST(\"t\" AS DATE) AS \"t\", \
-             CAST(\"n\" AS DOUBLE) AS \"n\" FROM (Q)"
+            "SELECT \"a\" AS \"a\", strftime(\"d\", '%d/%m/%Y') AS \"d\", TRY_CAST(\"t\" AS DATE) AS \"t\", \
+             TRY_CAST(\"n\" AS DOUBLE) AS \"n\" FROM (Q)"
         );
     }
 

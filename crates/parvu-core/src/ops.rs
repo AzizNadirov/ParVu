@@ -344,8 +344,12 @@ impl Operation {
                     return Err(CoreError::invalid(format!("Invalid type: {new_type}")));
                 }
                 (
+                    // TRY_CAST: a value that doesn't convert becomes NULL. A plain
+                    // CAST would let the step through (the first page and the row
+                    // count never touch that value) and then fail on a later
+                    // page, a sort or an export.
                     ctx.select_each(|c| {
-                        if c == column { format!("CAST({} AS {new_type}) AS {}", q(c), q(c)) } else { q(c) }
+                        if c == column { format!("TRY_CAST({} AS {new_type}) AS {}", q(c), q(c)) } else { q(c) }
                     }),
                     StepLabel::new("step.change_type", &[("column", column), ("type", new_type)]),
                 )
@@ -571,7 +575,7 @@ mod tests {
     #[test]
     fn change_type_validates() {
         let b = build(Operation::ChangeType { column: "id".into(), new_type: "VARCHAR".into() }).unwrap();
-        assert_eq!(b.sql, "SELECT CAST(\"id\" AS VARCHAR) AS \"id\", \"name\" FROM (Q)");
+        assert_eq!(b.sql, "SELECT TRY_CAST(\"id\" AS VARCHAR) AS \"id\", \"name\" FROM (Q)");
         assert!(build(Operation::ChangeType { column: "id".into(), new_type: "x); drop".into() }).is_err());
     }
 

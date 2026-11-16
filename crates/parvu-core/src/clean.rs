@@ -399,9 +399,15 @@ pub(crate) fn split_column(
     } else {
         format!("string_split(CAST({c} AS VARCHAR), {})", quote_literal(separator))
     };
+    const SPLIT_SAMPLE_ROWS: u32 = 10_000;
     let n = match parts {
         Some(n) => n,
-        None => (ctx.query)(&format!("SELECT MAX(LEN({split})) FROM ({})", ctx.current_query))?
+        // Count the parts on the first rows only: a full scan of a large file
+        // would take as long as reading all of it. Pass `parts` to be exact.
+        None => (ctx.query)(&format!(
+            "SELECT MAX(LEN({split})) FROM (SELECT * FROM ({}) LIMIT {SPLIT_SAMPLE_ROWS})",
+            ctx.current_query
+        ))?
             .first()
             .and_then(|r| r.first().cloned().flatten())
             .and_then(|s| s.parse::<u32>().ok())
