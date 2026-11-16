@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import type { Cell, Operation, Side } from "../lib/api";
 import { Dialog } from "../components/Dialog";
 import { RichText, SubmitOnEnter, useDebounced } from "./common";
-import { buildFn, FN_DIALOGS, initialValues, type FieldValues, type FnName } from "../lib/colfn";
+import { ADD_UNITS, buildFn, DATE_FORMATS, FN_DIALOGS, initialValues, type FieldValues, type FnName } from "../lib/colfn";
 import "./dialogs.css";
 
 interface Args {
@@ -95,6 +95,31 @@ function ColumnFnDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nu
               <>
                 <input type="checkbox" checked={!!values[f.key]} onChange={(e) => set(f.key, e.target.checked)} />
                 {t(`fn.field.${f.key}`)}
+              </>
+            )}
+            {f.kind === "unit" && (
+              <select className="grow" value={String(values[f.key])} onChange={(e) => set(f.key, e.target.value)}>
+                {ADD_UNITS.map((u) => (
+                  <option key={u} value={u}>
+                    {t(`unit.${u}`)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {f.kind === "format" && (
+              <>
+                <input
+                  type="text"
+                  className="grow pv-mono"
+                  list="pv-date-formats"
+                  value={String(values[f.key])}
+                  onChange={(e) => set(f.key, e.target.value)}
+                />
+                <datalist id="pv-date-formats">
+                  {DATE_FORMATS.map((d) => (
+                    <option key={d} value={d} />
+                  ))}
+                </datalist>
               </>
             )}
             {f.kind === "side" && (

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
 use crate::sql::{quote_ident, quote_literal};
+use crate::types::TypeFamily;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -15,6 +16,80 @@ pub enum Side {
     Both,
     Start,
     End,
+}
+
+/// A part of a date or time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum DatePart {
+    Year,
+    Quarter,
+    Month,
+    Day,
+    DayOfYear,
+    /// Monday = 1 … Sunday = 7.
+    DayOfWeek,
+    /// ISO week number.
+    Week,
+    Hour,
+    Minute,
+    Second,
+}
+
+impl DatePart {
+    fn sql(self) -> &'static str {
+        match self {
+            DatePart::Year => "year",
+            DatePart::Quarter => "quarter",
+            DatePart::Month => "month",
+            DatePart::Day => "day",
+            DatePart::DayOfYear => "dayofyear",
+            DatePart::DayOfWeek => "isodow",
+            DatePart::Week => "week",
+            DatePart::Hour => "hour",
+            DatePart::Minute => "minute",
+            DatePart::Second => "second",
+        }
+    }
+}
+
+/// A unit of time for truncating, adding and differences.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum TimeUnit {
+    Year,
+    Quarter,
+    Month,
+    Week,
+    Day,
+    Hour,
+    Minute,
+    Second,
+}
+
+impl TimeUnit {
+    pub fn sql(self) -> &'static str {
+        match self {
+            TimeUnit::Year => "year",
+            TimeUnit::Quarter => "quarter",
+            TimeUnit::Month => "month",
+            TimeUnit::Week => "week",
+            TimeUnit::Day => "day",
+            TimeUnit::Hour => "hour",
+            TimeUnit::Minute => "minute",
+            TimeUnit::Second => "second",
+        }
+    }
+
+    /// `n` of this unit as an INTERVAL (quarters as 3 months).
+    pub fn interval(self, n: i64) -> String {
+        match self {
+            TimeUnit::Quarter => format!("({} * INTERVAL 1 MONTH)", n * 3),
+            u => format!("({n} * INTERVAL 1 {})", u.sql().to_uppercase()),
+        }
+    }
 }
 
 /// A function of one column.
@@ -77,6 +152,35 @@ pub enum ColumnFn {
     },
     /// Yes ↔ no.
     Invert,
+    /// A part of a date or time, as a number.
+    DatePart { part: DatePart },
+    /// The month's name, from `names` (12, January first), so they come in
+    /// the user's language; DuckDB's English names when empty.
+    MonthName {
+        #[serde(default)]
+        names: Vec<String>,
+    },
+    /// The day's name, from `names` (7, Monday first).
+    DayName {
+        #[serde(default)]
+        names: Vec<String>,
+    },
+    /// The start of the year, quarter, month, week (Monday), day or hour.
+    StartOf { unit: TimeUnit },
+    /// The last day of the month, quarter or year.
+    EndOf { unit: TimeUnit },
+    /// The date of a timestamp.
+    DateOnly,
+    /// The time of a timestamp.
+    TimeOnly,
+    /// Whole days, months or years from the date until today.
+    Age { unit: TimeUnit },
+    /// Add `n` units (negative subtracts).
+    AddTime { n: i64, unit: TimeUnit },
+    /// The date as text, with a `strftime` format such as `%d.%m.%Y`.
+    FormatDate { format: String },
+    /// Saturday or Sunday.
+    IsWeekend,
 }
 
 fn zero() -> String {
@@ -106,6 +210,17 @@ impl ColumnFn {
             ColumnFn::Between { .. } => "step.fn.between",
             ColumnFn::RegexExtract { .. } => "step.fn.regex_extract",
             ColumnFn::Invert => "step.fn.invert",
+            ColumnFn::DatePart { .. } => "step.fn.date_part",
+            ColumnFn::MonthName { .. } => "step.fn.month_name",
+            ColumnFn::DayName { .. } => "step.fn.day_name",
+            ColumnFn::StartOf { .. } => "step.fn.start_of",
+            ColumnFn::EndOf { .. } => "step.fn.end_of",
+            ColumnFn::DateOnly => "step.fn.date_only",
+            ColumnFn::TimeOnly => "step.fn.time_only",
+            ColumnFn::Age { .. } => "step.fn.age",
+            ColumnFn::AddTime { .. } => "step.fn.add_time",
+            ColumnFn::FormatDate { .. } => "step.fn.format_date",
+            ColumnFn::IsWeekend => "step.fn.is_weekend",
         }
     }
 
@@ -121,6 +236,17 @@ impl ColumnFn {
             ColumnFn::Between { .. } => "between",
             ColumnFn::RegexExtract { .. } => "match",
             ColumnFn::Invert => "not",
+            ColumnFn::DatePart { part } => part.sql(),
+            ColumnFn::MonthName { .. } => "month_name",
+            ColumnFn::DayName { .. } => "day_name",
+            ColumnFn::DateOnly => "date",
+            ColumnFn::TimeOnly => "time",
+            ColumnFn::Age { .. } => "age",
+            ColumnFn::FormatDate { .. } => "text",
+            ColumnFn::IsWeekend => "weekend",
+            ColumnFn::StartOf { .. } => "start",
+            ColumnFn::EndOf { .. } => "end",
+            ColumnFn::AddTime { .. } => "shifted",
             _ => "text",
         }
     }
@@ -133,6 +259,9 @@ impl ColumnFn {
                 return Err(CoreError::invalid(format!("\"{column}\" is not a yes/no column")));
             }
             return Ok(format!("(NOT {c})"));
+        }
+        if let Some(e) = self.date_expr(column, &c, dtype)? {
+            return Ok(e);
         }
         // Text functions read any column as text.
         let x = if dtype.eq_ignore_ascii_case("VARCHAR") { c } else { format!("CAST({c} AS VARCHAR)") };
@@ -203,6 +332,134 @@ impl ColumnFn {
                 format!("NULLIF(regexp_extract({x}, {}, {group}), '')", lit(pattern))
             }
             ColumnFn::Invert => unreachable!("handled above"),
+            _ => unreachable!("date functions are handled by date_expr"),
+        })
+    }
+
+    /// The expression of a date function, `None` for other functions.
+    fn date_expr(&self, column: &str, c: &str, dtype: &str) -> Result<Option<String>> {
+        let family = TypeFamily::of(dtype);
+        let is_date = family == TypeFamily::Date;
+        let temporal = matches!(family, TypeFamily::Date | TypeFamily::Timestamp | TypeFamily::TimestampTz);
+        let has_time = matches!(family, TypeFamily::Timestamp | TypeFamily::TimestampTz | TypeFamily::Time);
+        let need = |ok: bool| {
+            if ok { Ok(()) } else { Err(CoreError::invalid(format!("\"{column}\" is not a date column"))) }
+        };
+        // DuckDB returns a TIMESTAMP for date_trunc and DATE + INTERVAL; a
+        // date column stays a date.
+        let keep = |e: String| if is_date { format!("CAST({e} AS DATE)") } else { e };
+        let names = |list: &[String], n: usize, idx: String, fallback: String| -> Result<String> {
+            if list.is_empty() {
+                return Ok(fallback);
+            }
+            if list.len() != n {
+                return Err(CoreError::invalid(format!("Expected {n} names")));
+            }
+            let arms: Vec<String> =
+                list.iter().enumerate().map(|(i, name)| format!("WHEN {} THEN {}", i + 1, quote_literal(name))).collect();
+            Ok(format!("CASE {idx} {} END", arms.join(" ")))
+        };
+        Ok(Some(match self {
+            ColumnFn::DatePart { part } => {
+                let time_part = matches!(part, DatePart::Hour | DatePart::Minute | DatePart::Second);
+                need(if time_part { has_time } else { temporal })?;
+                format!("{}({c})", part.sql())
+            }
+            ColumnFn::MonthName { names: list } => {
+                need(temporal)?;
+                names(list, 12, format!("month({c})"), format!("monthname({c})"))?
+            }
+            ColumnFn::DayName { names: list } => {
+                need(temporal)?;
+                names(list, 7, format!("isodow({c})"), format!("dayname({c})"))?
+            }
+            ColumnFn::StartOf { unit } => {
+                need(temporal)?;
+                keep(format!("date_trunc('{}', {c})", unit.sql()))
+            }
+            ColumnFn::EndOf { unit } => {
+                need(temporal)?;
+                let start = format!("date_trunc('{}', {c})", unit.sql());
+                match unit {
+                    TimeUnit::Month => format!("last_day({c})"),
+                    TimeUnit::Quarter | TimeUnit::Year => {
+                        format!("CAST({start} + {} - INTERVAL 1 DAY AS DATE)", unit.interval(1))
+                    }
+                    _ => return Err(CoreError::invalid("End of: month, quarter or year")),
+                }
+            }
+            ColumnFn::DateOnly => {
+                need(temporal)?;
+                format!("CAST({c} AS DATE)")
+            }
+            ColumnFn::TimeOnly => {
+                need(has_time && family != TypeFamily::Time)?;
+                format!("CAST({c} AS TIME)")
+            }
+            ColumnFn::Age { unit } => {
+                need(temporal)?;
+                format!("datesub('{}', CAST({c} AS DATE), current_date)", unit.sql())
+            }
+            ColumnFn::AddTime { n, unit } => {
+                need(temporal)?;
+                keep(format!("({c} + {})", unit.interval(*n)))
+            }
+            ColumnFn::FormatDate { format } => {
+                need(temporal || family == TypeFamily::Time)?;
+                if format.is_empty() {
+                    return Err(CoreError::invalid("Enter a format"));
+                }
+                format!("strftime({c}, {})", quote_literal(format))
+            }
+            ColumnFn::IsWeekend => {
+                need(temporal)?;
+                format!("(isodow({c}) >= 6)")
+            }
+            _ => return Ok(None),
+        }))
+    }
+}
+
+/// A range of dates relative to today, for filtering.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RelativeRange {
+    /// The last `n` days, weeks, months… up to and including today.
+    Last { n: u32, unit: TimeUnit },
+    /// This week (from Monday), month, quarter or year.
+    This { unit: TimeUnit },
+    /// The week, month, quarter or year before this one.
+    Previous { unit: TimeUnit },
+    /// From 1 January to today.
+    YearToDate,
+}
+
+impl RelativeRange {
+    /// `[from, to)` as SQL expressions. "Today" is evaluated when the query
+    /// runs, so the step keeps meaning "the last 7 days".
+    pub fn bounds(&self) -> Result<(String, String)> {
+        let tomorrow = "(current_date + INTERVAL 1 DAY)".to_string();
+        let calendar = |u: TimeUnit| matches!(u, TimeUnit::Day | TimeUnit::Week | TimeUnit::Month | TimeUnit::Quarter | TimeUnit::Year);
+        Ok(match self {
+            RelativeRange::Last { n, unit } => {
+                if *n == 0 || !calendar(*unit) {
+                    return Err(CoreError::invalid("Choose a number of days, weeks, months, quarters or years"));
+                }
+                (format!("(current_date - {} + INTERVAL 1 DAY)", unit.interval(i64::from(*n))), tomorrow)
+            }
+            RelativeRange::This { unit } | RelativeRange::Previous { unit } => {
+                if !calendar(*unit) {
+                    return Err(CoreError::invalid("Choose a day, week, month, quarter or year"));
+                }
+                let start = format!("date_trunc('{}', current_date)", unit.sql());
+                if matches!(self, RelativeRange::This { .. }) {
+                    (start.clone(), format!("({start} + {})", unit.interval(1)))
+                } else {
+                    (format!("({start} - {})", unit.interval(1)), start)
+                }
+            }
+            RelativeRange::YearToDate => ("date_trunc('year', current_date)".to_string(), tomorrow),
         })
     }
 }

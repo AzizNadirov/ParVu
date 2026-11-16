@@ -15,6 +15,17 @@
   - Each dialog shows a live preview over values from the page.
   - **Merge columns…** (also in the Data menu) joins several columns with a separator, skipping empty cells.
 - **Yes/no columns** get **Invert**, **Keep yes**, **Keep no** and **Keep empty**.
+- **Date and time columns** get these entries in their column menu:
+  - **Date ▸**: year, quarter, month, month name and day name (in the interface language), day, day of week, ISO week, day of year, is weekend.
+  - **Time ▸**: hour, minute, second, date only, time only.
+  - **Start of ▸** and **End of ▸** a period. Date columns stay dates.
+  - **Age until today** in days, months or years.
+  - **Add or subtract time…**
+  - **Format as text…**, with format presets.
+  - **Difference from another date…**, in whole days, months, years and so on.
+  - **Filter dates ▸**: last 7 or 30 days, this or the previous week, month, quarter or year, year to date, or the last N days, weeks, months, quarters or years.
+
+  "Today" is evaluated when the step runs, so "last 7 days" keeps meaning that. The filters are plain date ranges, so Parquet files skip the row groups outside them.
 
 ## [1.0.0-alpha.3]
 

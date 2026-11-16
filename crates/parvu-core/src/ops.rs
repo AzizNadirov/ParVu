@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::clean::{BinMethod, Combine, Condition, FillMethod, SliceMode, SortKey};
-use crate::colfn::{ColumnFn, Output};
+use crate::colfn::{ColumnFn, Output, RelativeRange, TimeUnit};
 use crate::error::{CoreError, Result};
 use crate::page::{Cell, ColumnMeta};
 use crate::reshape::{AggFunc, Aggregation};
@@ -102,6 +102,12 @@ pub enum Operation {
         #[serde(default)]
         output: Output,
     },
+    /// Whole `unit`s from `start` to `end` (two date columns), into the new
+    /// column `name` right after `end`.
+    DateDiff { start: String, end: String, unit: TimeUnit, name: String },
+    /// Keep the rows whose date falls in a range relative to today ("last 7
+    /// days", "this month"…). Today is when the query runs.
+    DateRange { column: String, range: RelativeRange },
     /// Join the text of several columns with `separator` into the new
     /// column `name`, right after the first of them; empty cells are skipped.
     MergeColumns {
@@ -464,6 +470,58 @@ impl Operation {
                         (format!("SELECT {} FROM ({cur})", items.join(", ")), label)
                     }
                 }
+            }
+            Operation::DateDiff { start, end, unit, name } => {
+                for c in [start, end] {
+                    let fam = TypeFamily::of(&ctx.column(c)?.dtype);
+                    if !matches!(fam, TypeFamily::Date | TypeFamily::Timestamp | TypeFamily::TimestampTz) {
+                        return Err(CoreError::invalid(format!("\"{c}\" is not a date column")));
+                    }
+                }
+                let name = name.trim();
+                if name.is_empty() {
+                    return Err(CoreError::invalid("Enter a name for the new column"));
+                }
+                let taken: Vec<String> = ctx.columns.iter().map(|c| c.name.clone()).collect();
+                let new = unique_name(&taken, name);
+                let expr = format!(
+                    "datesub('{}', CAST({} AS TIMESTAMP), CAST({} AS TIMESTAMP)) AS {}",
+                    unit.sql(),
+                    q(start),
+                    q(end),
+                    q(&new)
+                );
+                let items: Vec<String> = ctx
+                    .columns
+                    .iter()
+                    .flat_map(|c| if c.name == *end { vec![q(&c.name), expr.clone()] } else { vec![q(&c.name)] })
+                    .collect();
+                (
+                    format!("SELECT {} FROM ({cur})", items.join(", ")),
+                    StepLabel::new(&format!("step.date_diff_{}", unit.sql()), &[("start", start), ("end", end), ("name", &new)]),
+                )
+            }
+            Operation::DateRange { column, range } => {
+                let fam = TypeFamily::of(&ctx.column(column)?.dtype);
+                if !matches!(fam, TypeFamily::Date | TypeFamily::Timestamp | TypeFamily::TimestampTz) {
+                    return Err(CoreError::invalid(format!("\"{column}\" is not a date column")));
+                }
+                let (from, to) = range.bounds()?;
+                let c = q(column);
+                // The unit is part of the key, so each language words it properly.
+                let label = match range {
+                    RelativeRange::Last { n, unit } => StepLabel::new(
+                        &format!("step.date_range.last_{}", unit.sql()),
+                        &[("column", column), ("n", &n.to_string())],
+                    ),
+                    RelativeRange::This { unit } => StepLabel::new(&format!("step.date_range.this_{}", unit.sql()), &[("column", column)]),
+                    RelativeRange::Previous { unit } => {
+                        StepLabel::new(&format!("step.date_range.previous_{}", unit.sql()), &[("column", column)])
+                    }
+                    RelativeRange::YearToDate => StepLabel::new("step.date_range.ytd", &[("column", column)]),
+                };
+                // A plain range on the column: Parquet row groups outside it are skipped.
+                (format!("SELECT * FROM ({cur}) WHERE {c} >= {from} AND {c} < {to}"), label)
             }
             Operation::MergeColumns { columns, separator, name, keep_columns } => {
                 if columns.len() < 2 {

@@ -1,6 +1,6 @@
 // Column functions of the type-aware column menu: which take parameters,
 // the fields of their dialog, and building the function from those fields.
-import type { Cell, ColumnFn, FnOutput, Side } from "./api";
+import type { Cell, ColumnFn, FnOutput, RelativeRange, Side, TimeUnitName, TypeFamily } from "./api";
 
 export type FnName = ColumnFn["fn"];
 
@@ -22,7 +22,7 @@ export function fnLabelKey(f: ColumnFn): string {
   return f.fn === "trim" && f.side !== "both" ? `fn.trim_${f.side}` : `fn.${f.fn}`;
 }
 
-export type FieldKind = "text" | "number" | "bool" | "side";
+export type FieldKind = "text" | "number" | "bool" | "side" | "unit" | "format";
 
 export interface Field {
   key: string;
@@ -82,7 +82,38 @@ export const FN_DIALOGS: Partial<Record<FnName, { fields: Field[]; output: FnOut
     ],
     output: "new",
   },
+  add_time: {
+    fields: [
+      { key: "amount", kind: "number", initial: 1, min: -1_000_000 },
+      { key: "unit", kind: "unit", initial: "day" },
+    ],
+    output: "in_place",
+  },
+  format_date: { fields: [{ key: "format", kind: "format", initial: "%d.%m.%Y" }], output: "new" },
 };
+
+/** Units offered when adding time. */
+export const ADD_UNITS: TimeUnitName[] = ["day", "week", "month", "quarter", "year", "hour", "minute"];
+
+/** strftime presets for "Format as text". */
+export const DATE_FORMATS = ["%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d", "%d %B %Y", "%B %Y", "%Y-%m", "%d.%m.%Y %H:%M", "%H:%M"];
+
+export const isDateFamily = (f?: TypeFamily) => f === "date" || f === "timestamp" || f === "timestamp_tz";
+export const hasTime = (f?: TypeFamily) => f === "timestamp" || f === "timestamp_tz" || f === "time";
+
+/** Quick relative date filters (Filter dates ▸). */
+export const DATE_FILTERS: { key: string; range: RelativeRange }[] = [
+  { key: "dates.last_7_days", range: { kind: "last", n: 7, unit: "day" } },
+  { key: "dates.last_30_days", range: { kind: "last", n: 30, unit: "day" } },
+  { key: "dates.this_week", range: { kind: "this", unit: "week" } },
+  { key: "dates.previous_week", range: { kind: "previous", unit: "week" } },
+  { key: "dates.this_month", range: { kind: "this", unit: "month" } },
+  { key: "dates.previous_month", range: { kind: "previous", unit: "month" } },
+  { key: "dates.this_quarter", range: { kind: "this", unit: "quarter" } },
+  { key: "dates.this_year", range: { kind: "this", unit: "year" } },
+  { key: "dates.previous_year", range: { kind: "previous", unit: "year" } },
+  { key: "dates.year_to_date", range: { kind: "year_to_date" } },
+];
 
 /** Extract ▸ entries, in menu order. */
 export const EXTRACT_FNS: FnName[] = ["length", "first", "last", "range", "before", "after", "between", "regex_extract"];
@@ -124,6 +155,10 @@ export function buildFn(name: FnName, v: FieldValues): ColumnFn | null {
       return { fn: "between", start: str("start"), end: str("end") };
     case "regex_extract":
       return { fn: "regex_extract", pattern: str("pattern"), group: num("group") };
+    case "add_time":
+      return num("amount") === 0 ? null : { fn: "add_time", n: num("amount"), unit: v.unit as TimeUnitName };
+    case "format_date":
+      return { fn: "format_date", format: str("format") };
     default:
       return null;
   }
