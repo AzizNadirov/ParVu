@@ -16,6 +16,8 @@ import {
   type Cell,
   type ColumnFn,
   type ColumnMeta,
+  type DatePartName,
+  type TimeUnitName,
   type AiRunEvent,
   type AiRunFinished,
   type McpProposal,
@@ -29,7 +31,7 @@ import {
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
-import { EXTRACT_FNS, fnLabelKey, previewValues, TEXT_FNS, type FnName } from "./lib/colfn";
+import { DATE_FILTERS, EXTRACT_FNS, fnLabelKey, hasTime, isDateFamily, previewValues, TEXT_FNS, type FnName } from "./lib/colfn";
 import { applyThemeCss } from "./lib/theme";
 import { UiContext, type Closer, type MessageButton, type Ui } from "./lib/ui";
 import { formatRows, pythonTuple } from "./lib/copy";
@@ -78,6 +80,8 @@ import {
   openConvert,
   openColumnFn,
   openMergeColumns,
+  openDateDiff,
+  openLastN,
   openTableInfo,
   openThemeSelector,
   openTranspose,
@@ -633,6 +637,95 @@ export function App({ boot }: { boot: Bootstrap }) {
     if (op) await applyOp(op);
   };
 
+  /** Date and time columns: parts, names, start/end of, age, shifts, differences, relative filters. */
+  const dateMenu = (column: string, timeOnly: boolean): MenuEntry[] => {
+    const family = page?.columns.find((c) => c.name === column)?.family;
+    const toNew = (func: ColumnFn) => void applyOp({ op: "column_transform", column, func, output: { to: "new", name: "" } });
+    const inPlace = (func: ColumnFn) => void applyOp({ op: "column_transform", column, func, output: { to: "in_place" } });
+    const part = (p: DatePartName) => ({ label: t(`part.${p}`), onSelect: () => toNew({ fn: "date_part", part: p }) });
+    const names = (key: string, n: number) => Array.from({ length: n }, (_, i) => t(`${key}.${i + 1}`));
+    const timeEntries: MenuEntry[] = [part("hour"), part("minute"), part("second")];
+    if (timeOnly) return [{ label: t("menu.col.time"), submenu: timeEntries }, { type: "separator" }];
+    const dateCols = (page?.columns ?? []).filter((c) => isDateFamily(c.family)).map((c) => c.name);
+    return [
+      {
+        label: t("menu.col.date"),
+        submenu: [
+          part("year"),
+          part("quarter"),
+          part("month"),
+          { label: t("part.month_name"), onSelect: () => toNew({ fn: "month_name", names: names("date.month", 12) }) },
+          part("day"),
+          { label: t("part.day_name"), onSelect: () => toNew({ fn: "day_name", names: names("date.day", 7) }) },
+          part("day_of_week"),
+          part("week"),
+          part("day_of_year"),
+          { type: "separator" as const },
+          { label: t("fn.is_weekend"), onSelect: () => toNew({ fn: "is_weekend" }) },
+        ],
+      },
+      ...(hasTime(family)
+        ? [
+            {
+              label: t("menu.col.time"),
+              submenu: [
+                ...timeEntries,
+                { type: "separator" as const },
+                { label: t("fn.date_only"), onSelect: () => inPlace({ fn: "date_only" }) },
+                { label: t("fn.time_only"), onSelect: () => toNew({ fn: "time_only" }) },
+              ],
+            },
+          ]
+        : []),
+      {
+        label: t("menu.col.start_of"),
+        submenu: (["year", "quarter", "month", "week", "day", ...(hasTime(family) ? ["hour"] : [])] as TimeUnitName[]).map((u) => ({
+          label: t(`unit.${u}`),
+          onSelect: () => inPlace({ fn: "start_of", unit: u }),
+        })),
+      },
+      {
+        label: t("menu.col.end_of"),
+        submenu: (["month", "quarter", "year"] as TimeUnitName[]).map((u) => ({
+          label: t(`unit.${u}`),
+          onSelect: () => inPlace({ fn: "end_of", unit: u }),
+        })),
+      },
+      {
+        label: t("menu.col.age"),
+        submenu: (["day", "month", "year"] as TimeUnitName[]).map((u) => ({
+          label: t(`unit.${u}s`),
+          onSelect: () => toNew({ fn: "age", unit: u }),
+        })),
+      },
+      { label: `${t("fn.add_time")}…`, onSelect: () => void runColumnFn(column, "add_time") },
+      { label: `${t("fn.format_date")}…`, onSelect: () => void runColumnFn(column, "format_date") },
+      {
+        label: `${t("dates.diff.title")}…`,
+        onSelect: async () => {
+          if (!activeTab) return;
+          const op = await openDateDiff(ui, { table: activeTab.name, dates: dateCols, end: column });
+          if (op) await applyOp(op);
+        },
+      },
+      {
+        label: t("menu.col.filter_dates"),
+        submenu: [
+          ...DATE_FILTERS.map((f) => ({ label: t(f.key), onSelect: () => void applyOp({ op: "date_range", column, range: f.range }) })),
+          { type: "separator" as const },
+          {
+            label: t("dates.last_n.title"),
+            onSelect: async () => {
+              const op = await openLastN(ui, column);
+              if (op) await applyOp(op);
+            },
+          },
+        ],
+      },
+      { type: "separator" },
+    ];
+  };
+
   /** Operations that fit the column's type (text, yes/no). */
   const typeMenu = (column: string): MenuEntry[] => {
     const family = page?.columns.find((c) => c.name === column)?.family;
@@ -663,6 +756,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.col.merge"), onSelect: () => void runOpDialog(openMergeColumns, column) },
         { type: "separator" },
       ];
+    if (isDateFamily(family) || family === "time") return dateMenu(column, family === "time");
     if (family === "boolean")
       return [
         { label: t("fn.invert"), onSelect: () => inPlace({ fn: "invert" }) },

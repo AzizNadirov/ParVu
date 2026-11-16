@@ -34,6 +34,7 @@ export { openSplitColumn } from "./SplitColumnDialog";
 export { openConvert } from "./ConvertDialog";
 export { openColumnFn } from "./ColumnFnDialog";
 export { openMergeColumns } from "./MergeColumnsDialog";
+export { openDateDiff, openLastN } from "./DatesDialog";
 export { openBin } from "./BinDialog";
 export { openWindow } from "./WindowDialog";
 export { openConditionalFormat } from "./ConditionalFormatDialog";

@@ -25,6 +25,16 @@ export type TypeFamily =
 
 export type Side = "both" | "start" | "end";
 
+export type TimeUnitName = "year" | "quarter" | "month" | "week" | "day" | "hour" | "minute" | "second";
+export type DatePartName = "year" | "quarter" | "month" | "day" | "day_of_year" | "day_of_week" | "week" | "hour" | "minute" | "second";
+
+/** A range of dates relative to today (backend `RelativeRange`). */
+export type RelativeRange =
+  | { kind: "last"; n: number; unit: TimeUnitName }
+  | { kind: "this"; unit: TimeUnitName }
+  | { kind: "previous"; unit: TimeUnitName }
+  | { kind: "year_to_date" };
+
 /** A function of one column (backend `ColumnFn`). */
 export type ColumnFn =
   | { fn: "trim"; side: Side }
@@ -45,7 +55,18 @@ export type ColumnFn =
   | { fn: "after"; delimiter: string; last: boolean }
   | { fn: "between"; start: string; end: string }
   | { fn: "regex_extract"; pattern: string; group: number }
-  | { fn: "invert" };
+  | { fn: "invert" }
+  | { fn: "date_part"; part: DatePartName }
+  | { fn: "month_name"; names: string[] }
+  | { fn: "day_name"; names: string[] }
+  | { fn: "start_of"; unit: TimeUnitName }
+  | { fn: "end_of"; unit: TimeUnitName }
+  | { fn: "date_only" }
+  | { fn: "time_only" }
+  | { fn: "age"; unit: TimeUnitName }
+  | { fn: "add_time"; n: number; unit: TimeUnitName }
+  | { fn: "format_date"; format: string }
+  | { fn: "is_weekend" };
 
 /** Where a column function writes. */
 export type FnOutput = { to: "in_place" } | { to: "new"; name: string };
@@ -130,6 +151,8 @@ export type Operation =
   | { op: "convert"; column: string; to: Reading; on_error: string | null; keep_original: boolean }
   | { op: "column_transform"; column: string; func: ColumnFn; output: FnOutput }
   | { op: "merge_columns"; columns: string[]; separator: string; name: string; keep_columns: boolean }
+  | { op: "date_diff"; start: string; end: string; unit: TimeUnitName; name: string }
+  | { op: "date_range"; column: string; range: RelativeRange }
   | { op: "conversion_errors"; column: string; to: Reading; keep: boolean }
   | { op: "duplicate"; column: string }
   | { op: "drop_duplicates"; columns: string[]; keep: Keep }

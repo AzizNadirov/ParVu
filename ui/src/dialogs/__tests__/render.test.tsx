@@ -484,6 +484,21 @@ describe("column functions", () => {
     });
   });
 
+  it("date difference and last N days", async () => {
+    const ui = makeUi();
+    const p = D.openDateDiff(ui, { table: "t", dates: ["ordered", "shipped"], end: "shipped" });
+    await flush();
+    fireEvent.click(screen.getByText("btn.apply"));
+    await expect(p).resolves.toEqual({ op: "date_diff", start: "ordered", end: "shipped", unit: "day", name: "shipped_days" });
+    cleanup();
+    const q = D.openLastN(ui, "shipped");
+    await flush();
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "3" } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "month" } });
+    fireEvent.click(screen.getByText("btn.apply"));
+    await expect(q).resolves.toEqual({ op: "date_range", column: "shipped", range: { kind: "last", n: 3, unit: "month" } });
+  });
+
   it("merging needs two columns", async () => {
     const ui = makeUi();
     const p = D.openMergeColumns(ui, { table: "t", columns: [{ name: "a", dtype: "VARCHAR" }, { name: "b", dtype: "VARCHAR" }], selected: "a" });
