@@ -18,6 +18,7 @@ pub mod reshape;
 pub mod search;
 pub mod sql;
 pub mod stats;
+pub mod types;
 pub mod window;
 pub mod workspace;
 

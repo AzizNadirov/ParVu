@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
 use crate::sql::{quote_ident, quote_literal};
+use crate::types::{DetectOptions, SourceColumn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -85,11 +86,32 @@ pub fn supported_extensions() -> Vec<&'static str> {
 ///
 /// For Excel files the data is first copied into the table `excel_table`,
 /// which must be a name the caller owns; the view then reads from it.
-pub fn register_source(conn: &Connection, relation: &str, excel_table: &str, path: &Path) -> Result<()> {
+///
+/// CSV columns are typed by [`crate::types::detect`]; returns how each one
+/// is read (empty for other formats, whose types come from the file).
+pub fn register_source(
+    conn: &Connection,
+    relation: &str,
+    excel_table: &str,
+    path: &Path,
+    options: DetectOptions,
+) -> Result<Vec<SourceColumn>> {
     if !path.is_file() {
         return Err(CoreError::FileNotFound(path.display().to_string()));
     }
     let format = FileFormat::require(path)?;
+    if format == FileFormat::Csv {
+        let p = path.to_string_lossy();
+        match crate::types::detect(conn, &p, options) {
+            Ok(columns) => {
+                let select = crate::types::csv_select(&p, &columns);
+                conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(relation)))?;
+                return Ok(columns);
+            }
+            // Fall back to DuckDB's own typed reader.
+            Err(e) => tracing::warn!("type detection failed for {}: {e}", path.display()),
+        }
+    }
     let select = match format.reader_sql(path) {
         Some(sql) => sql,
         None => {
@@ -98,7 +120,7 @@ pub fn register_source(conn: &Connection, relation: &str, excel_table: &str, pat
         }
     };
     conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(relation)))?;
-    Ok(())
+    Ok(Vec::new())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

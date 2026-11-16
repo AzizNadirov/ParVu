@@ -20,6 +20,7 @@ use crate::engine::{QueryEngine, describe};
 use crate::error::{CoreError, Result};
 use crate::export::{ExportOptions, export};
 use crate::format::{FileFormat, register_source};
+use crate::types::{DetectOptions, SourceColumn};
 use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
 use crate::search::{SearchHit, SearchOptions, find_next};
@@ -52,6 +53,8 @@ struct Tab {
     engine: QueryEngine,
     edits: EditQueue,
     steps: Vec<Step>,
+    /// How each column of a CSV file is read (empty for other formats).
+    source: Vec<SourceColumn>,
 }
 
 impl Tab {
@@ -63,6 +66,7 @@ impl Tab {
 fn source_view(name: &str) -> String {
     format!("__pv_src_{name}")
 }
+
 
 fn excel_table(name: &str) -> String {
     format!("__pv_xlsx_{name}")
@@ -122,8 +126,20 @@ fn resource_settings() -> String {
     // cached in the allocator after a large query.
     format!(
         "SET threads = {threads}; SET memory_limit = '{limit}MB'; \
-         SET allocator_flush_threshold = '32MB'; SET allocator_background_threads = true;"
+         SET allocator_flush_threshold = '32MB'; SET allocator_background_threads = true; {SAFE_CASTS}"
     )
+}
+
+/// DuckDB's `type_pushdown` optimizer moves a `TRY_CAST` over a CSV text
+/// column into the CSV reader, which then parses the column strictly: one
+/// bad value fails the whole query instead of becoming NULL (DuckDB 2.0).
+/// ParVu's conversions rely on `TRY_CAST`, so the rule stays off.
+const SAFE_CASTS: &str = "SET disabled_optimizers = 'type_pushdown';";
+
+/// Settings every connection to the workspace's database needs.
+fn connection_settings(conn: &Connection) -> Result<()> {
+    conn.execute_batch(SAFE_CASTS)?;
+    Ok(())
 }
 
 pub struct Workspace {
@@ -131,6 +147,8 @@ pub struct Workspace {
     tabs: Vec<Tab>,
     next_id: TabId,
     page_size: u64,
+    /// How files opened from now on are typed.
+    detect: DetectOptions,
 }
 
 impl Workspace {
@@ -146,7 +164,53 @@ impl Workspace {
                 crate::sql::quote_literal(&dir.to_string_lossy())
             ))?;
         }
-        Ok(Self { conn, tabs: Vec::new(), next_id: 1, page_size: page_size.max(1) })
+        Ok(Self { conn, tabs: Vec::new(), next_id: 1, page_size: page_size.max(1), detect: DetectOptions::default() })
+    }
+
+    /// How files opened from now on are typed (detection on or off, the
+    /// order of day and month in ambiguous dates).
+    pub fn set_detect_options(&mut self, options: DetectOptions) {
+        self.detect = options;
+    }
+
+    /// How each column of a tab's CSV file is read; empty for other formats.
+    pub fn source_columns(&self, id: TabId) -> Result<&[SourceColumn]> {
+        Ok(&self.tab(id)?.source)
+    }
+
+    /// After a query failed because DuckDB couldn't parse a CSV value deep
+    /// in a file (past the rows its types were guessed from): switch that
+    /// column of that file to text + `TRY_CAST`, so the value becomes NULL.
+    /// Returns true when something changed and the query is worth retrying.
+    pub fn heal(&mut self, message: &str) -> bool {
+        let Some((file, column)) = crate::types::heal_target(message) else { return false };
+        let same = |p: &Path| p.to_string_lossy() == file || std::fs::canonicalize(p).ok() == std::fs::canonicalize(&file).ok();
+        let mut healed = false;
+        for tab in self.tabs.iter_mut().filter(|t| t.format == FileFormat::Csv && same(&t.path)) {
+            let Some(col) = tab.source.iter_mut().find(|c| c.name == column && c.native) else { continue };
+            col.native = false;
+            let select = crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source);
+            match self.conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(&source_view(&tab.name)))) {
+                Ok(()) => {
+                    tracing::info!("{}: column {column} now read as text (a value didn't parse)", tab.name);
+                    healed = true;
+                }
+                Err(e) => tracing::warn!("could not re-read {column} as text: {e}"),
+            }
+        }
+        healed
+    }
+
+    /// Run `f`, healing and retrying when it fails on an unparsable CSV
+    /// value (see [`Workspace::heal`]).
+    pub fn healing<T>(&mut self, mut f: impl FnMut(&mut Self) -> Result<T>) -> Result<T> {
+        let mut tries = 0;
+        loop {
+            match f(self) {
+                Err(e) if tries < 64 && self.heal(&e.to_string()) => tries += 1,
+                other => return other,
+            }
+        }
     }
 
     /// Change DuckDB's working-memory limit (MB, at least 128).
@@ -162,7 +226,9 @@ impl Workspace {
     /// A second connection to the same database, for work on another thread
     /// (exports, long statistics) while the UI keeps paging.
     pub fn clone_connection(&self) -> Result<Connection> {
-        Ok(self.conn.try_clone()?)
+        let conn = self.conn.try_clone()?;
+        connection_settings(&conn)?;
+        Ok(conn)
     }
 
     pub fn page_size(&self) -> u64 {
@@ -210,7 +276,13 @@ impl Workspace {
         }
 
         let src = source_view(&name);
-        register_source(&self.conn, &src, &excel_table(&name), &path)?;
+        let source = match register_source(&self.conn, &src, &excel_table(&name), &path, self.detect) {
+            Ok(s) => s,
+            Err(e) => {
+                self.drop_relations(&name);
+                return Err(e);
+            }
+        };
         let result = (|| {
             self.conn.execute_batch(&format!(
                 "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
@@ -229,7 +301,7 @@ impl Workspace {
         let id = self.next_id;
         self.next_id += 1;
         tracing::info!("opened {} as {name} ({} rows)", path.display(), engine.total_rows());
-        self.tabs.push(Tab { id, name, path, format, engine, edits: EditQueue::new(), steps: Vec::new() });
+        self.tabs.push(Tab { id, name, path, format, engine, edits: EditQueue::new(), steps: Vec::new(), source });
         Ok(id)
     }
 
@@ -595,7 +667,7 @@ impl Workspace {
     /// Point the tab at `path` again from scratch (after a save).
     fn reload(&mut self, id: TabId, name: &str, path: &Path) -> Result<()> {
         let src = source_view(name);
-        register_source(&self.conn, &src, &excel_table(name), path)?;
+        let source = register_source(&self.conn, &src, &excel_table(name), path, self.detect)?;
         self.conn.execute_batch(&format!(
             "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
             quote_ident(name),
@@ -608,6 +680,7 @@ impl Workspace {
         tab.format = FileFormat::require(path)?;
         tab.edits.clear();
         tab.steps.clear();
+        tab.source = source;
         Ok(())
     }
 

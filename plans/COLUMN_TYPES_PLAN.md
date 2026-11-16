@@ -36,25 +36,32 @@ The UI gets helpers (`isTemporal`, `isText`, `isNested`…) in `ui/src/lib/types
 
 ## 3. Type detection when a file opens
 
-### 3.1 Approach: read as text, type with `TRY_CAST`
+### 3.1 Approach: DuckDB's typed reader, text only where needed, healing
 
-Measured, 2M rows / 78 MB CSV, best of 3:
+*Revised after building it (phase 1a).* A first benchmark suggested reading every column as text and converting with `TRY_CAST` costs nothing. On a realistic file (2M rows / 98 MB: ids, amounts, dates, names, yes/no) it costs a lot, because DuckDB's typed reader parses straight into typed values:
 
-| Query | DuckDB typed read | Text read + `TRY_CAST` per column |
-|---|---|---|
-| First page (100 rows) | 57 ms | 46 ms |
-| `sum`, `max`, filtered count over all rows | 274 ms | 269 ms |
-| Sort all rows, top 100 | 310 ms | 305 ms |
-| Type sniff (`DESCRIBE`) | 42 ms | — |
-| Detection pass over 10,000 rows | — | 42 ms |
+| 2M rows / 98 MB | DuckDB typed read | All text + `TRY_CAST` | … with `trim()` |
+|---|---|---|---|
+| Count rows | 199 ms | 282 ms | 357 ms |
+| Sum a column | 207 ms | 332 ms | 473 ms |
+| Sort, first page | 347 ms | 534 ms | 942 ms |
 
-CSV parsing dominates, so wrapping costs nothing measurable. So, for CSV (and text columns from JSON and Excel):
+So for CSV:
 
-1. Sniff the file as today (`DESCRIBE SELECT * FROM read_csv(...)`, ~40 ms) to get DuckDB's guess, delimiter and header.
-2. Run ParVu's own detectors (§3.2) on the first 10,000 rows of the text columns.
-3. Create the source view from the text reader with one expression per column:
-   `CREATE VIEW "__pv_src_sales" AS SELECT TRY_CAST("id" AS BIGINT) AS "id", try_strptime("day", '%m/%d/%Y')::DATE AS "day", "name", … FROM read_csv(path, all_varchar = true)`
-   The raw text stays available as `__pv_raw_sales` for error counts and "show invalid rows".
+1. DuckDB sniffs the file (`DESCRIBE SELECT * FROM read_csv(...)`). ParVu's detectors (§3.2) run on the first 10,000 rows read as text.
+2. Where they agree, the column stays **native**: DuckDB's type at full speed.
+3. Where ParVu reads more (numbers like `1.234,5`, yes/no words DuckDB doesn't know, a second date format in the same file, an ambiguous date order, JSON), only that column is read as text (`read_csv(path, types = {'col': 'VARCHAR'})`) and converted (`TRY_CAST`, `try_strptime`, a `CASE`). No `trim()`: it costs as much as the conversion, and `TRY_CAST` already ignores spaces around numbers.
+4. **Healing.** A native column can still meet a value it can't parse past DuckDB's 20,480-row sniff. DuckDB then fails the query with `Error when converting column "qty"` and `file = …`. `Workspace::heal` switches just that column to text + `TRY_CAST` and rebuilds the source view; the caller retries:
+   - the UI repeats any command that returns error kind `healed`;
+   - MCP tools retry through `ParvuMcp::read`;
+   - background exports run again.
+
+   The column keeps its type, and the bad value becomes NULL.
+5. **DuckDB bug.** In DuckDB 2.0, the `type_pushdown` optimizer moves a `TRY_CAST` over a CSV text column into the CSV reader, which then parses strictly and fails. Every workspace connection runs `SET disabled_optimizers = 'type_pushdown'`. It is worth reporting upstream.
+
+Measured with `cargo test -p parvu-core --test types -- --ignored --nocapture open_speed` (same file, 2 threads):
+- **Opening** takes 495 ms against 217 ms for DuckDB alone. Detection is about 180 ms of that, and it reads only the sample, so it does not grow with the file.
+- **Sort** (validate, count, first page) takes 655 ms against 456 ms. The difference is converting a `dd.mm.yyyy` column that DuckDB leaves as text.
 
 Parquet keeps its stored types (no detection, nothing to break). A Parquet column stored as text can still go through the detectors on request ("Detect types" in the column and table menus).
 
@@ -66,7 +73,7 @@ A column gets a type only if **every** non-empty sample value parses. Otherwise 
 
 | Detector | Rule | Result |
 |---|---|---|
-| Identifier guard | all digits with a leading zero (`00123`), or longer than 15 digits | stays text (DuckDB already does this; keep it) |
+| Identifier guard | all digits with a leading zero (`00123`), or longer than 18 digits | stays text (DuckDB already does this; keep it) |
 | Integer / decimal | `TRY_CAST` succeeds | `BIGINT` / `DOUBLE` (or `DECIMAL(p,s)` if every value has the same number of decimals) |
 | Locale number | matches `1.234,56` or `1 234,56` | `DOUBLE` via `replace` of the separators; the separators are stored in the column's parse options |
 | Currency / percent | leading or trailing `$ € £ ₼ ₽ %` around a number | number (percent ÷ 100), symbol stored |
@@ -272,7 +279,8 @@ Each phase is one PR with tests, docs and changelog.
 | Phase | Content | Size |
 |---|---|---|
 | **0. Safety** | `ChangeType` and export use `TRY_CAST`; split column without a count reads a 10k-row sample; add `duckdb/icu` to `bundled` (measure the installer size) | S |
-| **1. Types on open** | `TypeFamily` in `ColumnMeta`; header badges; CSV read as text + `TRY_CAST` layer; detectors (§3.2); date-order and decimal settings; per-file remembered types; tests with deep bad values, ambiguous dates, locale numbers, yes/no, leading zeros | L |
+| **1a. Detection (engine)** | `TypeFamily` in `ColumnMeta`; detectors (§3.2); native columns plus text columns where needed; healing; `type_pushdown` off; tests with deep bad values, ambiguous dates, locale numbers, yes/no, leading zeros | M |
+| **1b. Types in the UI** | header badges; change a column's source type; date-order and decimal settings; per-file remembered types | M |
 | **2. Conversions** | `Convert` and `ConversionErrors`; the Convert dialog with preview; sample error count, background exact count, "Show invalid rows" | M |
 | **3. Text and boolean** | `ColumnTransform` + preview command; type-aware menu; text and boolean P0 | M |
 | **4. Dates** | date and time P0; relative date filters; translated month and day names | M |

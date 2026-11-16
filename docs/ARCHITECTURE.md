@@ -44,7 +44,7 @@ Dependencies only point down. `parvu-dsl` and `parvu-config` don't depend on Duc
 
 Opening `sales.parquet` creates:
 
-- `__pv_src_sales`: a view reading the file (for Excel, reading the table `__pv_xlsx_sales` loaded from it);
+- `__pv_src_sales`: a view reading the file (for Excel, reading the table `__pv_xlsx_sales` loaded from it). For CSV it types the columns (`parvu-core/src/types.rs`): DuckDB's typed reader where ParVu's detectors agree with it, and text + `TRY_CAST`/`try_strptime` only for columns DuckDB can't type (locale numbers, a second date format, ambiguous dates, JSON). When a query fails on a value DuckDB couldn't parse deep in the file, `Workspace::heal` re-reads that column as text and the caller retries (the UI on error kind `healed`). Workspace connections turn off DuckDB's `type_pushdown` optimizer, which otherwise makes `TRY_CAST` over CSV text strict;
 - `sales`: the view users query. Without edits it equals the source view. With pending cell edits it overlays them by row number, so queries, joins and saves see the edits without rewriting the file;
 - a `QueryEngine` whose current query starts as `SELECT * FROM "sales"`.
 
