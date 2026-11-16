@@ -409,6 +409,35 @@ impl ParvuMcp {
         tokio::task::spawn_blocking(f).await.map_err(|e| e.to_string())?
     }
 
+    /// Run `f` on a read-only snapshot, off the async runtime. When it fails
+    /// on a CSV value DuckDB couldn't parse, the workspace re-reads that
+    /// column as text (see `Workspace::heal`) and `f` runs again.
+    async fn read<T: Send + 'static>(
+        &self,
+        f: impl Fn(&ReadSession) -> parvu_core::Result<T> + Send + 'static,
+    ) -> Result<T, String> {
+        let ws = self.workspace()?;
+        Self::blocking(move || {
+            let mut tries = 0;
+            loop {
+                let ro = ws.lock().unwrap_or_else(|p| p.into_inner()).read_session().map_err(|e| e.to_string())?;
+                match f(&ro) {
+                    Ok(v) => return Ok(v),
+                    Err(e) => {
+                        let message = e.to_string();
+                        drop(ro);
+                        if tries < 8 && ws.lock().unwrap_or_else(|p| p.into_inner()).heal(&message) {
+                            tries += 1;
+                            continue;
+                        }
+                        return Err(message);
+                    }
+                }
+            }
+        })
+        .await
+    }
+
     /// `path` canonicalised, if it lies inside an allowed folder.
     fn allowed(&self, path: &Path) -> Result<PathBuf, String> {
         if self.allow_dirs().is_empty() {
@@ -624,9 +653,8 @@ fn display_name(i: &Implementation) -> String {
 impl ParvuMcp {
     #[tool(description = "List the open tables with their row and column counts.")]
     async fn list_tables(&self) -> Result<CallToolResult, ErrorData> {
-        let ro = try_tool!(self.session());
         let out = try_tool!(
-            Self::blocking(move || {
+            self.read(|ro| {
                 ro.tables()
                     .iter()
                     .map(|t| {
@@ -634,7 +662,6 @@ impl ParvuMcp {
                             .map(|i| json!({ "table": i.name, "rows": i.rows, "columns": i.columns.len(), "steps": i.steps.len() }))
                     })
                     .collect::<parvu_core::Result<Vec<_>>>()
-                    .map_err(|e| e.to_string())
             })
             .await
         );
@@ -660,43 +687,35 @@ impl ParvuMcp {
 
     #[tool(description = "Columns with types, row count and applied steps of a table.")]
     async fn describe_table(&self, Parameters(args): Parameters<TableArgs>) -> Result<CallToolResult, ErrorData> {
-        let ro = try_tool!(self.session());
-        let info = try_tool!(Self::blocking(move || ro.describe_table(&args.table).map_err(|e| e.to_string())).await);
+        let info = try_tool!(self.read(move |ro| ro.describe_table(&args.table)).await);
         let steps: Vec<_> = info.steps.iter().map(|s| json!({ "step": s.key, "args": s.args })).collect();
         ok(json!({ "table": info.name, "rows": info.rows, "columns": columns_json(&info.columns), "steps": steps }))
     }
 
     #[tool(description = "First, last or random rows of a table.")]
     async fn sample_rows(&self, Parameters(args): Parameters<SampleArgs>) -> Result<CallToolResult, ErrorData> {
-        let ro = try_tool!(self.session());
         let n = args.n.clamp(1, MAX_SAMPLE_ROWS);
-        let rows = try_tool!(Self::blocking(move || ro.sample(&args.table, args.mode, n).map_err(|e| e.to_string())).await);
+        let rows = try_tool!(self.read(move |ro| ro.sample(&args.table, args.mode, n)).await);
         ok(rows_json(&rows))
     }
 
     #[tool(description = "Statistics for one column: rows, nulls, distinct values, min, max, mean and standard deviation.")]
     async fn column_stats(&self, Parameters(args): Parameters<ColumnArgs>) -> Result<CallToolResult, ErrorData> {
-        let ro = try_tool!(self.session());
-        let stats =
-            try_tool!(Self::blocking(move || ro.column_stats(&args.table, &args.column).map_err(|e| e.to_string())).await);
+        let stats = try_tool!(self.read(move |ro| ro.column_stats(&args.table, &args.column)).await);
         ok(serde_json::to_value(stats).unwrap_or_default())
     }
 
     #[tool(description = "The most frequent values of a column with their counts.")]
     async fn value_counts(&self, Parameters(args): Parameters<ValueCountsArgs>) -> Result<CallToolResult, ErrorData> {
-        let ro = try_tool!(self.session());
         let k = args.k.clamp(1, MAX_SAMPLE_ROWS);
-        let rows =
-            try_tool!(Self::blocking(move || ro.value_counts(&args.table, &args.column, k).map_err(|e| e.to_string())).await);
+        let rows = try_tool!(self.read(move |ro| ro.value_counts(&args.table, &args.column, k)).await);
         ok(rows_json(&rows))
     }
 
     #[tool(description = "Run one read-only DuckDB SELECT over the open tables (referenced by table name) and return the rows. Joins, CTEs, window functions and aggregates work; reading other files does not.")]
     async fn query(&self, Parameters(args): Parameters<QueryArgs>) -> Result<CallToolResult, ErrorData> {
-        let ro = try_tool!(self.session());
         let max = args.max_rows.clamp(1, MAX_QUERY_ROWS);
-        let rows =
-            try_tool!(Self::blocking(move || ro.query(&args.sql, max, Some(QUERY_TIMEOUT)).map_err(|e| e.to_string())).await);
+        let rows = try_tool!(self.read(move |ro| ro.query(&args.sql, max, Some(QUERY_TIMEOUT))).await);
         ok(rows_json(&rows))
     }
 

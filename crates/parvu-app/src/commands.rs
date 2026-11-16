@@ -39,7 +39,15 @@ where
     let ws = ws_of(&state, &window)?;
     tauri::async_runtime::spawn_blocking(move || {
         let mut guard = lock(&ws);
-        f(&mut guard)
+        let result = f(&mut guard);
+        // A CSV value deep in the file didn't parse: the workspace re-reads
+        // that column as text, and the UI repeats the call (kind "healed").
+        if let Err(e) = &result
+            && guard.heal(&e.message)
+        {
+            return Err(ApiError::new("healed", e.message.clone()));
+        }
+        result
     })
     .await
     .map_err(|e| ApiError::new("app", e.to_string()))?
@@ -659,9 +667,9 @@ pub fn start_export(
     id: TabId,
     options: ExportOptions,
 ) -> ApiResult<u64> {
+    let ws_arc = ws_of(&state, &window)?;
     let (conn, query) = {
-        let ws = ws_of(&state, &window)?;
-        let ws = lock(&ws);
+        let ws = lock(&ws_arc);
         (ws.clone_connection()?, ws.current_query(id)?)
     };
     conn.set_query_progress_tracking(true).map_err(|e| ApiError::new("query", e.to_string()))?;
@@ -685,7 +693,17 @@ pub fn start_export(
     }
     let app = window.app_handle().clone();
     std::thread::spawn(move || {
-        let result = parvu_core::export::export(&conn, &query, &options);
+        // A CSV value deep in the file that doesn't parse: re-read that
+        // column as text (Workspace::heal) and write the file again.
+        let mut result = parvu_core::export::export(&conn, &query, &options);
+        let mut tries = 0;
+        while let Err(e) = &result {
+            if tries >= 8 || cancelled.load(Ordering::Relaxed) || !lock(&ws_arc).heal(&e.to_string()) {
+                break;
+            }
+            tries += 1;
+            result = parvu_core::export::export(&conn, &query, &options);
+        }
         done.store(true, Ordering::Relaxed);
         let was_cancelled = cancelled.load(Ordering::Relaxed);
         let finished = match result {

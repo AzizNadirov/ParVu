@@ -2,7 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+- **Column types for CSV files.** ParVu checks DuckDB's types against its own detection on the first 10,000 rows and reads more than DuckDB does:
+  - numbers like `1.234,56`, `1 234,5` or `1,234.5`;
+  - yes/no words (also in Russian and Azerbaijani);
+  - a second date format in the same file;
+  - JSON.
+
+  Ambiguous dates such as `03/04/2024` are read day-first, and the column is marked so a later version can let you flip it. Columns DuckDB already types correctly keep its fast reader.
+
 ### Fixed
+- **A bad value far down a CSV file no longer breaks the table.** DuckDB guesses types from the start of the file, so a value like `oops` in a number column 100,000 rows down used to make every sort, sum, chart or export fail. ParVu now re-reads that column safely, and the value becomes empty.
+- **Change type** on a CSV column could still fail on a bad value, despite the earlier fix, because DuckDB's `type_pushdown` optimizer made the safe cast strict. ParVu turns that rule off.
 - **Change type** no longer breaks the table when a value doesn't convert: the value becomes empty instead of making a later page, sort or export fail.
 - **Export** with a per-column type writes values that don't convert as empty instead of stopping halfway with a partial file.
 - **Split column** without a number of parts counts them on the first 10,000 rows instead of reading the whole table first.

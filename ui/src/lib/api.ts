@@ -4,9 +4,30 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type Cell = string | null;
 
+/** What kind of values a column holds (from the backend's `TypeFamily`). */
+export type TypeFamily =
+  | "integer"
+  | "decimal"
+  | "float"
+  | "text"
+  | "boolean"
+  | "date"
+  | "timestamp"
+  | "timestamp_tz"
+  | "time"
+  | "interval"
+  | "json"
+  | "list"
+  | "struct"
+  | "map"
+  | "binary"
+  | "other";
+
 export interface ColumnMeta {
   name: string;
   dtype: string;
+  /** Sent by the backend for every column; optional for hand-made metadata. */
+  family?: TypeFamily;
 }
 
 export interface Page {
@@ -501,7 +522,21 @@ export interface AiRunFinished {
   cancelled: boolean;
 }
 
-const call = <T>(cmd: string, args?: Record<string, unknown>) => invoke<T>(cmd, args);
+/**
+ * Invoke a backend command. "healed" means a CSV value deep in a file didn't
+ * parse and the backend now reads that column as text, so the same call is
+ * worth repeating (a few times: another column may follow).
+ */
+async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await invoke<T>(cmd, args);
+    } catch (e) {
+      if (attempt < 8 && (e as { kind?: string } | null)?.kind === "healed") continue;
+      throw e;
+    }
+  }
+}
 
 export const api = {
   bootstrap: () => call<Bootstrap>("bootstrap"),

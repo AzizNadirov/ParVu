@@ -8,17 +8,21 @@ use duckdb::arrow::util::display::{ArrayFormatter, FormatOptions};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
+use crate::types::TypeFamily;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColumnMeta {
     pub name: String,
     /// DuckDB type name, e.g. `BIGINT`, `VARCHAR`, `DECIMAL(18,4)`.
     pub dtype: String,
+    /// What kind of values the column holds (menus, icons, alignment).
+    pub family: TypeFamily,
 }
 
 impl ColumnMeta {
     pub fn new(name: impl Into<String>, dtype: impl Into<String>) -> Self {
-        Self { name: name.into(), dtype: dtype.into() }
+        let dtype = dtype.into();
+        Self { name: name.into(), family: TypeFamily::of(&dtype), dtype }
     }
 
     /// True for numeric DuckDB types (the UI right-aligns these).
