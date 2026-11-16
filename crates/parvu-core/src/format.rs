@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
 use crate::sql::{quote_ident, quote_literal};
-use crate::types::{DetectOptions, SourceColumn};
+use crate::types::{CsvOptions, DetectOptions, SourceColumn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -95,6 +95,7 @@ pub fn register_source(
     excel_table: &str,
     path: &Path,
     options: DetectOptions,
+    csv: &CsvOptions,
 ) -> Result<Vec<SourceColumn>> {
     if !path.is_file() {
         return Err(CoreError::FileNotFound(path.display().to_string()));
@@ -102,14 +103,19 @@ pub fn register_source(
     let format = FileFormat::require(path)?;
     if format == FileFormat::Csv {
         let p = path.to_string_lossy();
-        match crate::types::detect(conn, &p, options) {
+        match crate::types::detect(conn, &p, options, csv) {
             Ok(columns) => {
-                let select = crate::types::csv_select(&p, &columns);
+                let select = crate::types::csv_select(&p, &columns, csv)?;
                 conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(relation)))?;
                 return Ok(columns);
             }
-            // Fall back to DuckDB's own typed reader.
-            Err(e) => tracing::warn!("type detection failed for {}: {e}", path.display()),
+            // Fall back to DuckDB's own typed reader (with the options).
+            Err(e) => {
+                tracing::warn!("type detection failed for {}: {e}", path.display());
+                let select = format!("SELECT * FROM read_csv({}{})", quote_literal(&p), csv.params()?);
+                conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(relation)))?;
+                return Ok(Vec::new());
+            }
         }
     }
     let select = match format.reader_sql(path) {

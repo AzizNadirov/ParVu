@@ -203,7 +203,7 @@ fn open_speed() {
                 println!("  {:8} native={} {:?}", c.name, c.native, c.reading);
             }
             let t = Instant::now();
-            parvu_core::types::detect(ws.connection(), &path.to_string_lossy(), DetectOptions::default()).unwrap();
+            parvu_core::types::detect(ws.connection(), &path.to_string_lossy(), DetectOptions::default(), &Default::default()).unwrap();
             println!("  detection alone: {:?}", t.elapsed());
         }
         let t = Instant::now();

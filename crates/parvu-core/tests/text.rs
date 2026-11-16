@@ -125,3 +125,28 @@ fn preview_runs_on_the_given_values() {
     let flags = ws.preview_column_fn(id, "paid", &ColumnFn::Invert, &[Some("true".into())]).unwrap();
     assert_eq!(flags[0].1.as_deref(), Some("false"));
 }
+
+#[test]
+fn split_into_rows_and_matches() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("tags.csv");
+    std::fs::write(&path, "id,tags\n1,\"red, Blue\"\n2,\n3,green\n").unwrap();
+    let mut ws = Workspace::new(100, None).unwrap();
+    let id = ws.open(&path).unwrap();
+
+    use parvu_core::colfn::MatchHow;
+    let m = |how, ignore_case| ColumnFn::Matches { text: "blue".into(), how, ignore_case };
+    apply(&mut ws, id, "tags", m(MatchHow::Contains, true), Output::New { name: "blue".into() });
+    assert_eq!(column(&ws, id, "blue"), s(&[Some("true"), None, Some("false")]));
+    ws.undo(id).unwrap();
+    apply(&mut ws, id, "tags", m(MatchHow::Contains, false), Output::New { name: "blue".into() });
+    assert_eq!(column(&ws, id, "blue")[0].as_deref(), Some("false"), "case matters unless ignored");
+    ws.undo(id).unwrap();
+    apply(&mut ws, id, "tags", ColumnFn::Matches { text: "^r".into(), how: MatchHow::Regex, ignore_case: false }, Output::New { name: "r".into() });
+    assert_eq!(column(&ws, id, "r")[0].as_deref(), Some("true"));
+    ws.undo(id).unwrap();
+
+    ws.apply(id, &Operation::SplitToRows { column: "tags".into(), delimiter: ",".into(), trim: true }).unwrap();
+    assert_eq!(column(&ws, id, "tags"), s(&[Some("red"), Some("Blue"), None, Some("green")]));
+    assert!(ws.apply(id, &Operation::SplitToRows { column: "tags".into(), delimiter: String::new(), trim: false }).is_err());
+}

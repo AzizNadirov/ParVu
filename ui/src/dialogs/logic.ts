@@ -16,6 +16,7 @@ import type {
   WindowSpec,
   ColumnSpec,
   ColumnStats,
+  CsvOptions,
   ExportFormat,
   ExportOptions,
   FunctionDef,
@@ -28,6 +29,7 @@ import type {
   SearchHit,
   SearchOptions,
 } from "../lib/api";
+import type { Translate } from "../lib/i18n";
 
 // ---------------------------------------------------------------- operations
 
@@ -771,4 +773,43 @@ export function conversionSummary(
   const args = { errors: n(count.errors), checked: n(count.checked) };
   if (count.errors === 0) return { key: count.complete ? "dialog.convert.no_errors_all" : "dialog.convert.no_errors_sample", args };
   return { key: count.complete ? "dialog.convert.errors_all" : "dialog.convert.errors_sample", args };
+}
+
+// ---------- Open with options ----------
+
+export interface OpenForm {
+  /** "auto", a delimiter, or "custom" (then `custom`). */
+  delimiter: string;
+  custom: string;
+  header: "auto" | "yes" | "no";
+  /** Rows to skip; empty: automatic. */
+  skip: string;
+  /** "auto" (a point) or ",". */
+  decimal: string;
+  /** "auto" (UTF-8) or an encoding. */
+  encoding: string;
+}
+
+/** The parsing options of the form, or null while a field is invalid. */
+export function csvOptionsFrom(f: OpenForm): CsvOptions | null {
+  const delimiter = f.delimiter === "auto" ? null : f.delimiter === "custom" ? f.custom : f.delimiter;
+  if (delimiter !== null && (delimiter.length === 0 || delimiter.length > 4)) return null;
+  let skip: number | null = null;
+  if (f.skip.trim()) {
+    skip = Number(f.skip);
+    if (!Number.isInteger(skip) || skip < 0) return null;
+  }
+  return {
+    delimiter,
+    header: f.header === "auto" ? null : f.header === "yes",
+    skip,
+    decimal_separator: f.decimal === "auto" ? null : f.decimal,
+    encoding: f.encoding === "auto" ? null : f.encoding,
+  };
+}
+
+/** A delimiter for people: "Semicolon (;)", "Tab". */
+export function delimiterLabel(d: string, t: Translate): string {
+  const named: Record<string, string> = { ",": "comma", ";": "semicolon", "\t": "tab", "|": "pipe", " ": "space" };
+  return named[d] ? t(`open_options.delim.${named[d]}`) : d;
 }

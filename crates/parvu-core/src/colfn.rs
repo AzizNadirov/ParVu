@@ -181,6 +181,15 @@ pub enum ColumnFn {
     FormatDate { format: String },
     /// Saturday or Sunday.
     IsWeekend,
+    /// Yes when the text contains `text` (or starts / ends with it, or
+    /// matches it as a regular expression).
+    Matches {
+        text: String,
+        #[serde(default)]
+        how: MatchHow,
+        #[serde(default)]
+        ignore_case: bool,
+    },
     /// The value at a JSON path such as `$.address.city`, as JSON or text.
     JsonPath {
         path: String,
@@ -198,6 +207,18 @@ pub enum ColumnFn {
 
 fn comma() -> String {
     ", ".into()
+}
+
+/// How [`ColumnFn::Matches`] compares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum MatchHow {
+    #[default]
+    Contains,
+    StartsWith,
+    EndsWith,
+    Regex,
 }
 
 /// A key of a JSON object column and the type its values get.
@@ -274,6 +295,7 @@ impl ColumnFn {
             ColumnFn::AddTime { .. } => "step.fn.add_time",
             ColumnFn::FormatDate { .. } => "step.fn.format_date",
             ColumnFn::IsWeekend => "step.fn.is_weekend",
+            ColumnFn::Matches { .. } => "step.fn.matches",
             ColumnFn::JsonPath { .. } => "step.fn.json_path",
             ColumnFn::ListLength => "step.fn.list_length",
             ColumnFn::JoinList { .. } => "step.fn.join_list",
@@ -303,6 +325,7 @@ impl ColumnFn {
             ColumnFn::StartOf { .. } => "start",
             ColumnFn::EndOf { .. } => "end",
             ColumnFn::AddTime { .. } => "shifted",
+            ColumnFn::Matches { .. } => "matches",
             ColumnFn::JsonPath { .. } => "value",
             ColumnFn::ListLength => "count",
             ColumnFn::JoinList { .. } => "joined",
@@ -386,6 +409,25 @@ impl ColumnFn {
                 let (s, e) = (lit(start), lit(end));
                 let rest = format!("{x}[strpos({x}, {s}) + length({s}):]");
                 format!("CASE WHEN strpos({x}, {s}) > 0 AND strpos({rest}, {e}) > 0 THEN left({rest}, strpos({rest}, {e}) - 1) END")
+            }
+            ColumnFn::Matches { text, how, ignore_case } => {
+                if text.is_empty() {
+                    return Err(CoreError::invalid("Enter the text to look for"));
+                }
+                let (v, t) = if *ignore_case && *how != MatchHow::Regex {
+                    (format!("lower({x})"), format!("lower({})", lit(text)))
+                } else {
+                    (x.clone(), lit(text))
+                };
+                match how {
+                    MatchHow::Contains => format!("contains({v}, {t})"),
+                    MatchHow::StartsWith => format!("starts_with({v}, {t})"),
+                    MatchHow::EndsWith => format!("ends_with({v}, {t})"),
+                    MatchHow::Regex => {
+                        let flags = if *ignore_case { ", 'i'" } else { "" };
+                        format!("regexp_matches({x}, {t}{flags})")
+                    }
+                }
             }
             ColumnFn::RegexExtract { pattern, group } => {
                 if pattern.is_empty() {

@@ -285,7 +285,12 @@ Each phase is one PR with tests, docs and changelog.
 | **3. Text and boolean** (done) | `ColumnTransform` (`ColumnFn` in `colfn.rs`, in place or a new column after the source) and `MergeColumns`; preview over the page's own values (a `VALUES` list, free on any table size); Text ▸ / Extract ▸ / Merge columns… for text, Invert / Keep yes / no / empty for yes/no. Text P0 plus the cheap P1 items (collapse spaces, pad, range, between, regex, remove accents). Still open: split by positions, split into rows, contains-as-yes/no, similarity | M |
 | **4. Dates** (done) | date and time functions in `ColumnFn` (parts, translated month and day names, start/end of, date/time only, age, add time, format, is weekend), `DateDiff` (whole units, `datesub`), `DateRange` (last N, this, previous, year to date as plain ranges); step labels carry the unit in their key so every language words them properly. Still open: time zones (needs ICU in installers) and combining date + time columns | M |
 | **5. JSON and nested** (done) | `ExpandJson` (keys typed from `json_group_structure` over the first 2,000 rows, or all rows on request; a key that clashes becomes `column.key`), `ExpandStruct`, `ToRows` (empty lists kept as one empty row), `JsonPath`, `ListLength`, `JoinList` (`from_json` for JSON arrays); bad JSON paths are refused when applied. Still open: keys of an object as a column, MAP columns | M |
-| **6. Rest** | P1/P2 items, Open with options… dialog, invalid-cell colouring, DSL functions | M |
+| **6. Rest** (done in part) | Open with options… (`CsvOptions`: delimiter, header, skip, decimal comma, encoding; kept per tab through detection, healing and Read as; remembered per file); Split into rows; Contains / starts / ends / regex as a yes/no column; 12 expression functions | M |
+
+**Still open after phase 6:**
+- Showing cells that didn't convert in the error colour in the grid. That needs the raw value of every visible cell next to the typed one.
+- Time-zone conversion. It needs DuckDB's ICU extension in the installers, which means a CMake-based DuckDB build; that should get its own PR, checked with a full installer build.
+- Text similarity (Levenshtein, Jaro-Winkler), split by positions, keys of a JSON object as a column, MAP columns, combining a date column and a time column.
 
 **Performance gates for every phase:**
 - Opening a file stays within +50 ms of today.

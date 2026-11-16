@@ -5385,6 +5385,216 @@
     "description": "Drop rows where a column equals the null sentinel. With no sentinel, drops SQL NULLs. With a sentinel value, drops only rows whose column equals that value (real NULLs are kept).",
     "example": "DROP_NULL(sales[note])  or  DROP_NULL(sales[score], -1)",
     "sql_name": null
+   },
+   {
+    "name": "LTRIM",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Remove leading whitespace.",
+    "example": "LTRIM(products[name])",
+    "sql_name": "LTRIM"
+   },
+   {
+    "name": "RTRIM",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Remove trailing whitespace.",
+    "example": "RTRIM(products[name])",
+    "sql_name": "RTRIM"
+   },
+   {
+    "name": "STRIP_ACCENTS",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Remove accents: Ş becomes S, é becomes e.",
+    "example": "STRIP_ACCENTS(people[city])",
+    "sql_name": "STRIP_ACCENTS"
+   },
+   {
+    "name": "CONCAT_WS",
+    "params": [
+     {
+      "name": "separator",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "values",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Join values with a separator, skipping empty ones.",
+    "example": "CONCAT_WS(', ', people[city], people[country])",
+    "sql_name": "CONCAT_WS"
+   },
+   {
+    "name": "POSITION",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "search",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Position of the first occurrence (1 is the first character; 0 when absent).",
+    "example": "POSITION(people[email], '@')",
+    "sql_name": "STRPOS"
+   },
+   {
+    "name": "TRY_STRPTIME",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "format",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TIMESTAMP",
+    "description": "Parse text with a format such as '%d.%m.%Y'; empty when it doesn't match.",
+    "example": "TRY_STRPTIME(sales[day_text], '%d.%m.%Y')",
+    "sql_name": "TRY_STRPTIME"
+   },
+   {
+    "name": "MONTHNAME",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "English name of the month.",
+    "example": "MONTHNAME(sales[day])",
+    "sql_name": "MONTHNAME"
+   },
+   {
+    "name": "DAYNAME",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "English name of the day.",
+    "example": "DAYNAME(sales[day])",
+    "sql_name": "DAYNAME"
+   },
+   {
+    "name": "LAST_DAY",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "DATE",
+    "description": "Last day of the month.",
+    "example": "LAST_DAY(sales[day])",
+    "sql_name": "LAST_DAY"
+   },
+   {
+    "name": "EPOCH",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "TIMESTAMP",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Seconds since 1970-01-01 (Unix time).",
+    "example": "EPOCH(events[at])",
+    "sql_name": "EPOCH"
+   },
+   {
+    "name": "JSON_EXTRACT",
+    "params": [
+     {
+      "name": "json",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "path",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The JSON value at a path such as '$.address.city'.",
+    "example": "JSON_EXTRACT(events[payload], '$.user')",
+    "sql_name": "JSON_EXTRACT"
+   },
+   {
+    "name": "JSON_EXTRACT_STRING",
+    "params": [
+     {
+      "name": "json",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "path",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The value at a JSON path, as text.",
+    "example": "JSON_EXTRACT_STRING(events[payload], '$.address.city')",
+    "sql_name": "JSON_EXTRACT_STRING"
    }
   ],
   "methods": [

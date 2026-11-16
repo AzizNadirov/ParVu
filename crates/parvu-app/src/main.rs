@@ -140,6 +140,7 @@ fn main() {
             commands::preview_expression,
             commands::apply_op,
             commands::source_columns,
+            commands::preview_csv,
             commands::set_source_reading,
             commands::preview_conversion,
             commands::suggest_reading,

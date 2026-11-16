@@ -243,3 +243,7 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 
 /* Column functions */
 .pv-fn-output label { white-space: nowrap; }
+
+/* Open with options */
+.pv-open-grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
+.pv-open-grid select, .pv-open-grid input[type="number"] { justify-self: start; min-width: 180px; }

@@ -56,6 +56,7 @@ export const openMergeColumns = deferred("openMergeColumns");
 export const openDateDiff = deferred("openDateDiff");
 export const openLastN = deferred("openLastN");
 export const openExpandJson = deferred("openExpandJson");
+export const openOpenOptions = deferred("openOpenOptions");
 export const openBin = deferred("openBin");
 export const openWindow = deferred("openWindow");
 export const openConditionalFormat = deferred("openConditionalFormat");

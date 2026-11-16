@@ -673,6 +673,104 @@ impl FunctionRegistry {
             None,
         );
 
+        // Added with the column type operations
+        add(
+            "LTRIM",
+            vec![p("text", LT::Text)],
+            LT::Text,
+            "Remove leading whitespace.",
+            "LTRIM(products[name])",
+            Some("LTRIM"),
+        );
+        add(
+            "RTRIM",
+            vec![p("text", LT::Text)],
+            LT::Text,
+            "Remove trailing whitespace.",
+            "RTRIM(products[name])",
+            Some("RTRIM"),
+        );
+        add(
+            "STRIP_ACCENTS",
+            vec![p("text", LT::Text)],
+            LT::Text,
+            "Remove accents: Ş becomes S, é becomes e.",
+            "STRIP_ACCENTS(people[city])",
+            Some("STRIP_ACCENTS"),
+        );
+        add(
+            "CONCAT_WS",
+            vec![p("separator", LT::Text), p("values", LT::Text)],
+            LT::Text,
+            "Join values with a separator, skipping empty ones.",
+            "CONCAT_WS(', ', people[city], people[country])",
+            Some("CONCAT_WS"),
+        );
+        add(
+            "POSITION",
+            vec![p("text", LT::Text), p("search", LT::Text)],
+            LT::Numeric,
+            "Position of the first occurrence (1 is the first character; 0 when absent).",
+            "POSITION(people[email], '@')",
+            Some("STRPOS"),
+        );
+        add(
+            "TRY_STRPTIME",
+            vec![p("text", LT::Text), p("format", LT::Text)],
+            LT::Timestamp,
+            "Parse text with a format such as '%d.%m.%Y'; empty when it doesn't match.",
+            "TRY_STRPTIME(sales[day_text], '%d.%m.%Y')",
+            Some("TRY_STRPTIME"),
+        );
+        add(
+            "MONTHNAME",
+            vec![p("date", LT::Date)],
+            LT::Text,
+            "English name of the month.",
+            "MONTHNAME(sales[day])",
+            Some("MONTHNAME"),
+        );
+        add(
+            "DAYNAME",
+            vec![p("date", LT::Date)],
+            LT::Text,
+            "English name of the day.",
+            "DAYNAME(sales[day])",
+            Some("DAYNAME"),
+        );
+        add(
+            "LAST_DAY",
+            vec![p("date", LT::Date)],
+            LT::Date,
+            "Last day of the month.",
+            "LAST_DAY(sales[day])",
+            Some("LAST_DAY"),
+        );
+        add(
+            "EPOCH",
+            vec![p("date", LT::Timestamp)],
+            LT::Numeric,
+            "Seconds since 1970-01-01 (Unix time).",
+            "EPOCH(events[at])",
+            Some("EPOCH"),
+        );
+        add(
+            "JSON_EXTRACT",
+            vec![p("json", LT::Unknown), p("path", LT::Text)],
+            LT::Unknown,
+            "The JSON value at a path such as '$.address.city'.",
+            "JSON_EXTRACT(events[payload], '$.user')",
+            Some("JSON_EXTRACT"),
+        );
+        add(
+            "JSON_EXTRACT_STRING",
+            vec![p("json", LT::Unknown), p("path", LT::Text)],
+            LT::Text,
+            "The value at a JSON path, as text.",
+            "JSON_EXTRACT_STRING(events[payload], '$.address.city')",
+            Some("JSON_EXTRACT_STRING"),
+        );
+
         // Method mappings
         for lt in LogicalType::ALL {
             for method in methods_for_type(lt) {
@@ -689,7 +787,7 @@ mod tests {
     #[test]
     fn defaults() {
         let r = FunctionRegistry::default();
-        assert_eq!(r.all_functions().len(), 33 + 25);
+        assert_eq!(r.all_functions().len(), 33 + 25 + 12);
         assert_eq!(r.lookup("sum").unwrap().name, "SUM");
         assert_eq!(
             r.lookup("countd").unwrap().sql_name.as_deref(),

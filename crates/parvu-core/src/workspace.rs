@@ -20,7 +20,7 @@ use crate::engine::{QueryEngine, describe};
 use crate::error::{CoreError, Result};
 use crate::export::{ExportOptions, export};
 use crate::format::{FileFormat, register_source};
-use crate::types::{DetectOptions, Reading, SourceColumn};
+use crate::types::{CsvOptions, DetectOptions, Reading, SourceColumn};
 use crate::colfn::{ColumnFn, JsonKey};
 use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
@@ -59,6 +59,8 @@ struct Tab {
     steps: Vec<Step>,
     /// How each column of a CSV file is read (empty for other formats).
     source: Vec<SourceColumn>,
+    /// How the CSV file is parsed ("Open with options").
+    csv: CsvOptions,
 }
 
 impl Tab {
@@ -103,6 +105,15 @@ pub struct TabSummary {
     pub current_query: String,
     pub steps: Vec<StepLabel>,
     pub pending_edits: usize,
+}
+
+/// What "Open with options" shows before opening.
+#[derive(Debug, Clone, Serialize)]
+pub struct CsvPreview {
+    pub columns: Vec<ColumnMeta>,
+    pub rows: Vec<Vec<Cell>>,
+    /// DuckDB's own guess (delimiter, header, rows to skip), when it has one.
+    pub detected: Option<CsvOptions>,
 }
 
 /// Default cap on DuckDB's working memory. Larger sorts, joins and
@@ -193,7 +204,13 @@ impl Workspace {
         for tab in self.tabs.iter_mut().filter(|t| t.format == FileFormat::Csv && same(&t.path)) {
             let Some(col) = tab.source.iter_mut().find(|c| c.name == column && c.native) else { continue };
             col.native = false;
-            let select = crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source);
+            let select = match crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source, &tab.csv) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!("could not re-read {column} as text: {e}");
+                    continue;
+                }
+            };
             match self.conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(&source_view(&tab.name)))) {
                 Ok(()) => {
                     tracing::info!("{}: column {column} now read as text (a value didn't parse)", tab.name);
@@ -203,6 +220,28 @@ impl Workspace {
             }
         }
         healed
+    }
+
+    /// The first `n` rows of the CSV file at `path` read with `csv`, for the
+    /// "Open with options" preview, and what DuckDB detects on its own.
+    pub fn preview_csv(&self, path: &Path, csv: &CsvOptions, n: u64) -> Result<CsvPreview> {
+        let p = quote_literal(&path.to_string_lossy());
+        let query = format!("SELECT * FROM read_csv({p}{}) LIMIT {n}", csv.params()?);
+        let columns = crate::engine::describe(&self.conn, &query)?;
+        let rows = crate::page::format_batches(&crate::engine::query_batches(&self.conn, &query)?)?;
+        let detected = self
+            .conn
+            .query_row(&format!("SELECT Delimiter, HasHeader, SkipRows FROM sniff_csv({p})"), [], |r| {
+                Ok(CsvOptions {
+                    delimiter: r.get::<_, Option<String>>(0)?,
+                    header: r.get::<_, Option<bool>>(1)?,
+                    skip: r.get::<_, Option<i64>>(2)?.map(|v| v.max(0) as u32),
+                    decimal_separator: None,
+                    encoding: None,
+                })
+            })
+            .ok();
+        Ok(CsvPreview { columns, rows, detected })
     }
 
     /// Read `column` of a tab's CSV file as `reading` (the column type
@@ -258,7 +297,7 @@ impl Workspace {
             }
         }
         let rebuild = |tab: &mut Tab| -> Result<()> {
-            let select = crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source);
+            let select = crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source, &tab.csv)?;
             conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(&tab.source_view())))?;
             rebuild_overlay(conn, tab)?;
             crate::engine::validate(conn, tab.engine.current_query())
@@ -333,6 +372,12 @@ impl Workspace {
     /// Open `path` as a new tab. The table name is the slugified file stem,
     /// made unique with `_2`, `_3`, ... when needed.
     pub fn open(&mut self, path: &Path) -> Result<TabId> {
+        self.open_with(path, &CsvOptions::default())
+    }
+
+    /// Open `path` like [`Workspace::open`], reading a CSV file with `csv`
+    /// (delimiter, header, rows to skip…; ignored for other formats).
+    pub fn open_with(&mut self, path: &Path, csv: &CsvOptions) -> Result<TabId> {
         let path = path.to_path_buf();
         if !path.is_file() {
             return Err(CoreError::FileNotFound(path.display().to_string()));
@@ -348,7 +393,7 @@ impl Workspace {
         }
 
         let src = source_view(&name);
-        let source = match register_source(&self.conn, &src, &excel_table(&name), &path, self.detect) {
+        let source = match register_source(&self.conn, &src, &excel_table(&name), &path, self.detect, csv) {
             Ok(s) => s,
             Err(e) => {
                 self.drop_relations(&name);
@@ -373,7 +418,7 @@ impl Workspace {
         let id = self.next_id;
         self.next_id += 1;
         tracing::info!("opened {} as {name} ({} rows)", path.display(), engine.total_rows());
-        self.tabs.push(Tab { id, name, path, format, engine, edits: EditQueue::new(), steps: Vec::new(), source });
+        self.tabs.push(Tab { id, name, path, format, engine, edits: EditQueue::new(), steps: Vec::new(), source, csv: csv.clone() });
         Ok(id)
     }
 
@@ -846,7 +891,8 @@ impl Workspace {
     /// Point the tab at `path` again from scratch (after a save).
     fn reload(&mut self, id: TabId, name: &str, path: &Path) -> Result<()> {
         let src = source_view(name);
-        let source = register_source(&self.conn, &src, &excel_table(name), path, self.detect)?;
+        // ParVu writes standard files, so the parsing options no longer apply.
+        let source = register_source(&self.conn, &src, &excel_table(name), path, self.detect, &CsvOptions::default())?;
         self.conn.execute_batch(&format!(
             "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
             quote_ident(name),
@@ -860,6 +906,7 @@ impl Workspace {
         tab.edits.clear();
         tab.steps.clear();
         tab.source = source;
+        tab.csv = CsvOptions::default();
         Ok(())
     }
 

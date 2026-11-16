@@ -24,6 +24,23 @@ export type TypeFamily =
   | "other";
 
 export type Side = "both" | "start" | "end";
+export type MatchHow = "contains" | "starts_with" | "ends_with" | "regex";
+
+/** How to parse a CSV file ("Open with options"); null lets DuckDB detect it. */
+export interface CsvOptions {
+  delimiter: string | null;
+  header: boolean | null;
+  skip: number | null;
+  decimal_separator: string | null;
+  encoding: string | null;
+}
+
+/** First rows of a CSV file with options, and what DuckDB detects on its own. */
+export interface CsvPreview {
+  columns: ColumnMeta[];
+  rows: Cell[][];
+  detected: CsvOptions | null;
+}
 
 export type TimeUnitName = "year" | "quarter" | "month" | "week" | "day" | "hour" | "minute" | "second";
 export type DatePartName = "year" | "quarter" | "month" | "day" | "day_of_year" | "day_of_week" | "week" | "hour" | "minute" | "second";
@@ -67,6 +84,7 @@ export type ColumnFn =
   | { fn: "add_time"; n: number; unit: TimeUnitName }
   | { fn: "format_date"; format: string }
   | { fn: "is_weekend" }
+  | { fn: "matches"; text: string; how: MatchHow; ignore_case: boolean }
   | { fn: "json_path"; path: string; text: boolean }
   | { fn: "list_length" }
   | { fn: "join_list"; separator: string };
@@ -164,6 +182,7 @@ export type Operation =
   | { op: "expand_json"; column: string; keys: JsonKey[]; keep_original: boolean }
   | { op: "expand_struct"; column: string }
   | { op: "to_rows"; column: string }
+  | { op: "split_to_rows"; column: string; delimiter: string; trim: boolean }
   | { op: "date_range"; column: string; range: RelativeRange }
   | { op: "conversion_errors"; column: string; to: Reading; keep: boolean }
   | { op: "duplicate"; column: string }
@@ -660,7 +679,8 @@ export const api = {
   clearRecents: () => call<void>("clear_recents"),
   newWindow: () => call<string>("new_window"),
 
-  openFile: (path: string) => call<TabSummary>("open_file", { path }),
+  openFile: (path: string, options?: CsvOptions) => call<TabSummary>("open_file", { path, options: options ?? null }),
+  previewCsv: (path: string, options: CsvOptions) => call<CsvPreview>("preview_csv", { path, options }),
   closeTab: (id: number) => call<void>("close_tab", { id }),
   tabs: () => call<TabSummary[]>("tabs"),
   tabSummary: (id: number) => call<TabSummary>("tab_summary", { id }),

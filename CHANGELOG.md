@@ -32,6 +32,11 @@
   - **Items to rows**: rows whose list is empty are kept.
   - **Number of items** and **Join items into text…**.
   - Struct columns, for example from JSON files: **Expand into columns** in one click.
+- **File → Open with Options…** for CSV files: delimiter, whether the first row holds the column names, lines to skip at the top, decimal comma, and encoding (UTF-8, UTF-16, Latin-1).
+  - The dialog shows what DuckDB detects on its own and a preview of the first rows.
+  - ParVu remembers the options for that file, so opening it again (also from Recent files) uses them, until the file changes.
+- **Text ▸ Split into rows…** (one row per piece), and **Extract ▸ Contains (yes/no)**: contains, starts with, ends with, or matches a regular expression, optionally ignoring case.
+- **Expression functions:** LTRIM, RTRIM, STRIP_ACCENTS, CONCAT_WS, POSITION, TRY_STRPTIME, MONTHNAME, DAYNAME, LAST_DAY, EPOCH, JSON_EXTRACT, JSON_EXTRACT_STRING.
 
 ## [1.0.0-alpha.3]
 

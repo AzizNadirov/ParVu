@@ -41,6 +41,8 @@ Each column header shows an icon for its type: numbers, text, yes/no, dates, tim
 
 Text columns have **Text ▸** (trim, change case, remove accents, add a prefix…) and **Extract ▸** (first characters, text before a delimiter, a regular expression match…) in their menu. Yes/no columns have **Invert** and **Keep yes / no / empty**. Date columns have **Date ▸** (year, month name, day of week…), **Start of / End of ▸**, **Age**, **Difference from another date…** and **Filter dates ▸** (last 7 days, this month, year to date…). JSON columns have **JSON ▸**: expand keys into columns, extract a value by path, items to rows. List and struct columns have the same entries where they apply.
 
+A CSV file with a semicolon, title lines above the table or decimal commas opens with **File → Open with Options…**, which previews the rows. ParVu remembers the options for that file.
+
 To convert a column after other steps, or with more options, use **Change Type → Convert…** in its menu. ParVu suggests a type and previews the result. It also counts the values that don't convert, and **Show rows that don't convert** lists them so you can fix them.
 
 ## Analyse without SQL

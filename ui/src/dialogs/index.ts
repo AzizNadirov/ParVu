@@ -36,6 +36,7 @@ export { openColumnFn } from "./ColumnFnDialog";
 export { openMergeColumns } from "./MergeColumnsDialog";
 export { openDateDiff, openLastN } from "./DatesDialog";
 export { openExpandJson } from "./ExpandJsonDialog";
+export { openOpenOptions } from "./OpenOptionsDialog";
 export { openBin } from "./BinDialog";
 export { openWindow } from "./WindowDialog";
 export { openConditionalFormat } from "./ConditionalFormatDialog";

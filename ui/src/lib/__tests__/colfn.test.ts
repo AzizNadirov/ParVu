@@ -62,3 +62,16 @@ describe("JSON functions", () => {
     for (const t of ["bigint", "double", "boolean", "varchar", "json"]) expect(has(`json.type.${t}`), t).toBe(true);
   });
 });
+
+describe("text tests", () => {
+  it("builds the contains test", () => {
+    expect(buildFn("matches", initialValues("matches"))).toBeNull();
+    expect(buildFn("matches", { how: "starts_with", find: "AB", ignore_case: false })).toEqual({
+      fn: "matches",
+      text: "AB",
+      how: "starts_with",
+      ignore_case: false,
+    });
+    for (const k of ["fn.matches", "fn.field.how", "fn.field.find", "fn.how.regex", "split_rows.title"]) expect(has(k), k).toBe(true);
+  });
+});

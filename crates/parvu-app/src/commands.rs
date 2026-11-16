@@ -6,7 +6,8 @@
 
 use crate::column_types::ColumnTypes;
 use parvu_core::colfn::{ColumnFn, JsonKey};
-use parvu_core::types::{Reading, SourceColumn};
+use parvu_core::types::{CsvOptions, Reading, SourceColumn};
+use parvu_core::workspace::CsvPreview;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -290,10 +291,25 @@ pub async fn open_file(
     state: State<'_, AppState>,
     window: WebviewWindow,
     path: PathBuf,
+    options: Option<CsvOptions>,
 ) -> ApiResult<TabSummary> {
     let p = path.clone();
     let summary = with_ws(state.clone(), window, move |ws| {
-        let id = ws.open(&p)?;
+        // Options given now ("Open with options") are remembered for the
+        // file; otherwise the ones remembered before apply.
+        let file = ColumnTypes::file();
+        let mut store = ColumnTypes::load(&file);
+        let csv = match options {
+            Some(o) => {
+                store.remember_csv(&p, o.clone());
+                if let Err(e) = store.save(&file) {
+                    tracing::warn!("could not save {}: {e}", file.display());
+                }
+                o
+            }
+            None => store.csv_for(&p).unwrap_or_default(),
+        };
+        let id = ws.open_with(&p, &csv)?;
         // Types the user chose for this file before ("Read as").
         let chosen = ColumnTypes::load(&ColumnTypes::file()).for_file(&p);
         if let Err(e) = ws.apply_source_readings(id, &chosen) {
@@ -448,6 +464,17 @@ pub async fn apply_op(
         Ok(ws.summary(id)?)
     })
     .await
+}
+
+/// The first rows of a CSV file read with `options`, for "Open with options".
+#[tauri::command(rename_all = "snake_case")]
+pub async fn preview_csv(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    path: PathBuf,
+    options: CsvOptions,
+) -> ApiResult<CsvPreview> {
+    with_ws(state, window, move |ws| Ok(ws.preview_csv(&path, &options, 50)?)).await
 }
 
 /// How each column of a tab's CSV file is read (empty for other formats).
