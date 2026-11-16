@@ -1,6 +1,40 @@
 # Using ParVu from AI clients (MCP)
 
-`parvu mcp` runs ParVu as a [Model Context Protocol](https://modelcontextprotocol.io) server. AI clients such as Claude Code, Claude Desktop or VS Code start it and use its tools to open your data files and query them with DuckDB. No window opens, and ParVu needs no API key: the client brings its own model.
+ParVu works with AI clients that speak the [Model Context Protocol](https://modelcontextprotocol.io): Claude Desktop, Claude Code, VS Code and others. ParVu needs no API key, because the client brings its own model, for example your Claude subscription. There are two ways to connect:
+
+| | Connect to the ParVu window | Standalone server |
+|---|---|---|
+| Command | `parvu mcp --attach` | `parvu mcp --allow-dir <folder>` |
+| Tables | The tabs open in your ParVu window, with your filters and steps | Files the client opens itself |
+| Changes | Appear in your window after you approve them | Stay in the server's session |
+| ParVu window | Must be open, with AI → Connect an AI client switched on | Not needed |
+
+## Connect to the ParVu window
+
+1. In ParVu, choose **AI → Connect an AI client…** and switch on **Allow AI clients to connect**. The setting is remembered.
+2. Add ParVu to your client once. The dialog shows the exact commands with a **Copy** button:
+   - **Claude Code:** `claude mcp add -s user parvu-app -- parvu mcp --attach`
+   - **Claude Desktop:** in `claude_desktop_config.json` (Settings → Developer → Edit Config), then restart Claude Desktop:
+     ```json
+     { "mcpServers": { "parvu-app": { "command": "parvu", "args": ["mcp", "--attach"] } } }
+     ```
+3. Ask about your tables, for example "Which region had the most sales in my sales tab?" or "Keep only 2024 orders and group them by month."
+
+The client can list, describe, sample and query the open tables freely. When it wants to change a table (`apply_operation`, `undo`), ParVu shows a card with:
+- the step;
+- the client's reason;
+- the row count before and after;
+- a preview of the result and the SQL.
+
+**Apply** adds a normal step to Applied Steps, which `Ctrl+Z` undoes. **Reject** tells the client no. Opening and saving files stays with you: in this mode the client has no `open_file` or `export` tool.
+
+While a client is connected, the status bar shows **AI clients: N**. With several ParVu windows open, the client works on the window you used last. Switching the setting off disconnects every client.
+
+How it works: ParVu listens on `127.0.0.1` on a random port and accepts only connections that present a random token. The port and token are in `~/.ParVu/run/mcp.json`, which only your user account can read. `parvu mcp --attach` reads that file and relays the client's messages, so nothing is reachable from the network.
+
+## Standalone server
+
+`parvu mcp` runs ParVu as a server without a window. The client starts it and uses its tools to open your data files and query them with DuckDB.
 
 ```
 parvu mcp [--allow-dir DIR]... [--allow-write] [FILE]...
@@ -12,7 +46,7 @@ parvu mcp [--allow-dir DIR]... [--allow-write] [FILE]...
 | `--allow-write` | Lets the `export` tool write files, only inside the allowed folders and never over an existing file unless asked. Off by default. |
 | `FILE` | Files to open at start. |
 
-## Setting up a client
+### Setting up a client
 
 The examples allow `~/data`; use your own folders, which must exist. With the beta package, the command is `parvu-next`.
 
@@ -47,7 +81,7 @@ claude mcp get parvu        # should say ✔ Connected
 
 Then ask, for example: "Open sales.parquet from my data folder and show revenue by region for 2024."
 
-## Tools
+### Tools
 
 | Tool | What it does |
 |---|---|
@@ -62,7 +96,7 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 | `undo` | Revert the last step on a table |
 | `export` | Write a table to a file (needs `--allow-write`) |
 
-## Safety
+### Safety
 
 - **Files:** the client can open files only from the allowed folders. Paths are resolved first, so `..` and symbolic links can't escape them.
 - **Queries:** `query` runs one `SELECT` and reads only the open tables. Statements that change anything (`INSERT`, `COPY`, `ATTACH`, `PRAGMA`, …) are refused. So are DuckDB functions that read files (`read_csv`, `read_text`, `glob`, …) and file paths used as table names, so a query can't reach files you didn't allow. The same check applies to expressions inside `apply_operation`.
@@ -73,6 +107,10 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 Logs go to ParVu's usual log folder (`~/.ParVu/logs`), never to the protocol stream.
 
 ## Troubleshooting
+
+**`parvu mcp --attach`: "ParVu is not running with AI clients allowed".** Open ParVu, switch on AI → Connect an AI client, then reconnect the server in your client (Claude Code: `/mcp`; Claude Desktop: restart it). Clients start the bridge when they start, so open ParVu first.
+
+**The approval card says "An AI client".** The client didn't send its name; the change is the same.
 
 **"Failed to connect" / "Connection closed".** Run the same command by hand to see why:
 
@@ -97,5 +135,5 @@ Logs are in `~/.ParVu/logs`; start the server with `PARVU_LOG=debug` in the clie
 
 ## Notes
 
-- Each `parvu mcp` process has its own tables; it does not see the tabs of a running ParVu window. Connecting to the running app is planned (`plans/AI_PLAN.md` §19).
+- A standalone `parvu mcp` process has its own tables. To work with the tabs in your window, use `parvu mcp --attach` (above).
 - On Windows the installed program is a GUI application; MCP over stdio has not been tested there yet.

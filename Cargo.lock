@@ -3247,6 +3247,7 @@ version = "1.0.0-alpha.2"
 dependencies = [
  "chrono",
  "dirs 7.0.0",
+ "getrandom 0.3.4",
  "parvu-config",
  "parvu-core",
  "parvu-dsl",

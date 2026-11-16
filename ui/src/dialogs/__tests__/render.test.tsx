@@ -19,6 +19,9 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
       return { pending_edits: 2 };
     case "find":
       return { row: 4, column_index: 1, column: "b", value: "hello" };
+    case "mcp_status":
+    case "mcp_set_enabled":
+      return { enabled: cmd === "mcp_set_enabled", listening: cmd === "mcp_set_enabled", port: 4000, clients: 0, command: "parvu", args: ["mcp", "--attach"], error: null };
     default:
       return null;
   }
@@ -389,3 +392,52 @@ describe("spreadsheet dialogs", () => {
   });
 });
 
+
+describe("AI clients (MCP)", () => {
+  it("connect dialog shows setup commands and switches the listener", async () => {
+    const ui = makeUi();
+    const p = D.openConnectAi(ui);
+    await flush();
+    expect(screen.getByText("claude mcp add -s user parvu-app -- parvu mcp --attach")).toBeTruthy();
+    expect(screen.getByText("dialog.connect_ai.off")).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox"));
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("mcp_set_enabled", { enabled: true });
+    expect(screen.getByText('dialog.connect_ai.listening{"count":0}')).toBeTruthy();
+    fireEvent.click(screen.getByText("btn.close"));
+    await expect(p).resolves.toBeUndefined();
+  });
+
+  it("proposal card shows the change and resolves with the answer", async () => {
+    const proposal = {
+      id: 7,
+      window: "main",
+      client: "Claude Code",
+      tab_id: 1,
+      table: "sales",
+      kind: "operation" as const,
+      label: { key: "step.remove", args: { column: "qty" } },
+      rationale: "qty is unused",
+      sql: "SELECT * EXCLUDE (qty) FROM sales",
+      rows_before: 3,
+      rows_after: 3,
+      columns: [{ name: "id", dtype: "BIGINT" }],
+      rows: [["1"], [null]],
+    };
+    const ui = makeUi();
+    let p = D.openMcpProposal(ui, proposal);
+    await flush();
+    expect(screen.getByText('mcp.proposal.title{"client":"Claude Code","table":"sales"}')).toBeTruthy();
+    expect(screen.getByText('mcp.proposal.why{"rationale":"qty is unused"}')).toBeTruthy();
+    expect(screen.getByText("NULL")).toBeTruthy();
+    fireEvent.click(screen.getByText("mcp.proposal.apply"));
+    await expect(p).resolves.toBe(true);
+    cleanup();
+
+    p = D.openMcpProposal(ui, { ...proposal, kind: "undo", sql: null, rows_after: null, columns: [], rows: [] });
+    await flush();
+    expect(screen.getByText("mcp.proposal.undo")).toBeTruthy();
+    escape();
+    await expect(p).resolves.toBe(false);
+  });
+});

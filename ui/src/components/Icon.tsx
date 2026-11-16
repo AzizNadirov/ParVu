@@ -7,6 +7,7 @@ import {
   mdiCalculatorVariantOutline,
   mdiChartBar,
   mdiCheck,
+  mdiContentCopy,
   mdiChevronDown,
   mdiChevronLeft,
   mdiChevronRight,
@@ -18,6 +19,7 @@ import {
   mdiPageLast,
   mdiPlay,
   mdiPlus,
+  mdiRobotOutline,
   mdiRestore,
   mdiSigma,
   mdiTableMergeCells,
@@ -25,6 +27,7 @@ import {
 } from "@mdi/js";
 
 export const icons = {
+  ai: mdiRobotOutline,
   append: mdiArrowCollapseDown,
   arrowDown: mdiArrowDown,
   arrowUp: mdiArrowUp,
@@ -34,6 +37,7 @@ export const icons = {
   chevronLeft: mdiChevronLeft,
   chevronRight: mdiChevronRight,
   close: mdiClose,
+  copy: mdiContentCopy,
   filter: mdiFilterVariant,
   first: mdiPageFirst,
   groupBy: mdiSigma,

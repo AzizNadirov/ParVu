@@ -177,6 +177,10 @@ pub struct Settings {
     pub bug_report_email: String,
     pub enable_crash_reporting: bool,
 
+    // AI clients
+    /// Let AI clients (MCP, `parvu mcp --attach`) connect to the running app.
+    pub mcp_allow_clients: bool,
+
     // Legacy colours, kept for backward compatibility
     #[serde(rename = "colour_browseButton")]
     pub colour_browse_button: String,
@@ -222,6 +226,7 @@ impl Default for Settings {
             warning_threshold_filesize_mb: 100,
             bug_report_email: "eziznadirov@gmail.com".into(),
             enable_crash_reporting: true,
+            mcp_allow_clients: false,
             colour_browse_button: "#E8F5E9".into(),
             colour_sql_edit: "#FFF9C4".into(),
             colour_execute_button: "#E1F5FE".into(),
@@ -542,6 +547,7 @@ fn known_keys() -> Vec<&'static str> {
         "warning_threshold_filesize_mb",
         "bug_report_email",
         "enable_crash_reporting",
+        "mcp_allow_clients",
         "colour_browseButton",
         "colour_sqlEdit",
         "colour_executeButton",

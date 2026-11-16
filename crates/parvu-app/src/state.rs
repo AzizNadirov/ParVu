@@ -36,6 +36,8 @@ pub struct AppState {
     pub initial_files: Mutex<Vec<PathBuf>>,
     /// Text of a crash report left by the previous run, shown once.
     pub pending_crash: Mutex<Option<String>>,
+    /// AI clients connected through `parvu mcp --attach`.
+    pub attach: crate::mcp_attach::Attach,
 }
 
 /// Lock a mutex, recovering the data if a panicking thread poisoned it.
@@ -53,6 +55,7 @@ impl AppState {
             next_window: AtomicU64::new(2),
             initial_files: Mutex::new(initial_files),
             pending_crash: Mutex::new(pending_crash),
+            attach: Default::default(),
         }
     }
 

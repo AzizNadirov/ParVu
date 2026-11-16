@@ -735,3 +735,20 @@ export function defaultChartY(columns: ColumnMeta[], x: string): string {
   const nums = columns.filter((c) => isNumericType(c.dtype) && c.name !== x).map((c) => c.name);
   return nums.find((n) => !looksLikeId(n)) ?? nums[0] ?? "";
 }
+
+// ---------- AI clients (MCP attach) ----------
+
+/** Shell-quote one word for a POSIX shell when it needs it. */
+function shellWord(w: string): string {
+  return /^[\w@%+=:,./-]+$/.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Setup snippets for connecting AI clients to this ParVu (see McpStatus). */
+export function mcpClientSetup(command: string, args: string[], name = "parvu-app") {
+  const line = [command, ...args].map(shellWord).join(" ");
+  return {
+    claudeCode: `claude mcp add -s user ${name} -- ${line}`,
+    claudeDesktop: JSON.stringify({ mcpServers: { [name]: { command, args } } }, null, 2),
+    plain: line,
+  };
+}

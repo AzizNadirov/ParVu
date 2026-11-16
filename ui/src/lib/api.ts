@@ -301,6 +301,7 @@ export interface Settings {
   warning_threshold_filesize_mb: number;
   bug_report_email: string;
   enable_crash_reporting: boolean;
+  mcp_allow_clients: boolean;
   [key: string]: unknown;
 }
 
@@ -379,6 +380,35 @@ export function errorMessage(e: unknown): string {
   return String(e);
 }
 
+/** AI clients connected through `parvu mcp --attach` (AI → Connect an AI client). */
+export interface McpStatus {
+  enabled: boolean;
+  listening: boolean;
+  port: number | null;
+  clients: number;
+  /** Program and arguments clients run to connect. */
+  command: string;
+  args: string[];
+  error: string | null;
+}
+
+/** A change an AI client asks for; the user approves or rejects it. */
+export interface McpProposal {
+  id: number;
+  window: string;
+  client: string;
+  tab_id: number;
+  table: string;
+  kind: "operation" | "undo";
+  label: StepLabel;
+  rationale: string | null;
+  sql: string | null;
+  rows_before: number;
+  rows_after: number | null;
+  columns: ColumnMeta[];
+  rows: Cell[][];
+}
+
 const call = <T>(cmd: string, args?: Record<string, unknown>) => invoke<T>(cmd, args);
 
 export const api = {
@@ -430,4 +460,8 @@ export const api = {
 
   startExport: (id: number, options: ExportOptions) => call<number>("start_export", { id, options }),
   cancelExport: (job: number) => call<void>("cancel_export", { job }),
+  mcpStatus: () => call<McpStatus>("mcp_status"),
+  mcpSetEnabled: (enabled: boolean) => call<McpStatus>("mcp_set_enabled", { enabled }),
+  /** Answer an approval card; false when the request is gone. */
+  mcpDecide: (id: number, approve: boolean) => call<boolean>("mcp_decide", { id, approve }),
 };

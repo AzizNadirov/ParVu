@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ColumnStats, FunctionDef, SearchHit } from "../../lib/api";
 import {
+  mcpClientSetup,
   SearchNavigator,
   buildAppendOp,
   buildDropDuplicatesOp,
@@ -336,5 +337,14 @@ describe("SearchNavigator", () => {
     expect(await nav.next(params, { row: null, col: null })).toEqual({ kind: "none" });
     await nav.next({ ...params, query: "y" }, { row: null, col: null });
     expect(find).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AI client setup", () => {
+  it("builds Claude Code, Claude Desktop and plain commands", () => {
+    const s = mcpClientSetup("parvu", ["mcp", "--attach"]);
+    expect(s.claudeCode).toBe("claude mcp add -s user parvu-app -- parvu mcp --attach");
+    expect(JSON.parse(s.claudeDesktop)).toEqual({ mcpServers: { "parvu-app": { command: "parvu", args: ["mcp", "--attach"] } } });
+    expect(mcpClientSetup("/opt/Par Vu/parvu", ["mcp", "--attach"]).plain).toBe("'/opt/Par Vu/parvu' mcp --attach");
   });
 });

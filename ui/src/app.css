@@ -237,3 +237,6 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
 
 /* Glide's overlay editor */
 #portal .gdg-style { font-family: var(--pv-layout-table-font-family), sans-serif; border-radius: var(--md-shape-xs); }
+
+/* AI clients connected (status bar) */
+.status-bar .pv-ai-chip { min-height: 20px; padding: 0 8px; color: inherit; font-weight: 500; }
