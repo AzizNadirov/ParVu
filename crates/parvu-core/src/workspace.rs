@@ -519,6 +519,67 @@ impl Workspace {
         })
     }
 
+    /// The context operations are built in, for the tab's current result.
+    fn with_ctx<T>(&self, id: TabId, f: impl FnOnce(&OpContext) -> Result<T>) -> Result<T> {
+        let t = self.tab(id)?;
+        let columns = t.engine.columns(&self.conn)?;
+        let other = |name: &str| self.current_query_of(name);
+        let conn = &self.conn;
+        let query = |sql: &str| crate::page::format_batches(&crate::engine::query_batches(conn, sql)?);
+        f(&OpContext { table: &t.name, current_query: t.engine.current_query(), columns: &columns, other_query: &other, query: &query })
+    }
+
+    /// The first `n` values of `column` before and after reading them as
+    /// `to`, and whether each failed (a non-empty value that doesn't convert).
+    pub fn preview_conversion(&self, id: TabId, column: &str, to: &Reading, n: u64) -> Result<Vec<(Cell, Cell, bool)>> {
+        let sql = self.with_ctx(id, |ctx| {
+            let (conv, failed) = crate::ops::conversion(ctx, column, to)?;
+            Ok(format!(
+                "SELECT CAST({c} AS VARCHAR), CAST({conv} AS VARCHAR), {failed} FROM ({}) LIMIT {n}",
+                ctx.current_query,
+                c = quote_ident(column)
+            ))
+        })?;
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, bool>(2)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// SQL counting the values of `column` that don't convert as `to`:
+    /// one row `(errors, checked)`, over the first `limit` rows or all.
+    /// Run it with [`conversion_errors`] (here, or on a cloned connection
+    /// for a full count that shouldn't hold the workspace).
+    pub fn conversion_error_query(&self, id: TabId, column: &str, to: &Reading, limit: Option<u64>) -> Result<String> {
+        self.with_ctx(id, |ctx| {
+            let (_, failed) = crate::ops::conversion(ctx, column, to)?;
+            let source = match limit {
+                Some(n) => format!("SELECT * FROM ({}) LIMIT {n}", ctx.current_query),
+                None => ctx.current_query.to_string(),
+            };
+            Ok(format!("SELECT count(*) FILTER (WHERE {failed}), count(*) FROM ({source})"))
+        })
+    }
+
+    /// How ParVu would read `column` of the current result, from its first
+    /// rows as text (the conversion dialog's suggestion).
+    pub fn suggest_reading(&self, id: TabId, column: &str) -> Result<Reading> {
+        let query = self.with_ctx(id, |ctx| {
+            ctx.require(column)?;
+            Ok(format!("SELECT {} FROM ({})", quote_ident(column), ctx.current_query))
+        })?;
+        let found = crate::types::detect_query(&self.conn, &query, self.detect)?;
+        let strict = found.into_iter().next().map(|c| c.reading).unwrap_or(Reading::Text);
+        if strict != Reading::Text {
+            return Ok(strict);
+        }
+        // No reading fits every value (a stray "n/a"): take the one that
+        // converts the most of the first rows, if that's nearly all of them.
+        let sample = format!("SELECT * FROM ({query}) LIMIT {}", crate::types::SAMPLE_ROWS);
+        Ok(crate::types::best_reading(&self.conn, &sample, column, 0.9)?.unwrap_or(Reading::Text))
+    }
+
     /// Apply a table operation as a new step.
     pub fn apply(&mut self, id: TabId, op: &Operation) -> Result<StepLabel> {
         let built = self.build_op(id, op)?;
@@ -826,4 +887,9 @@ fn rebuild_overlay(conn: &Connection, tab: &mut Tab) -> Result<()> {
     let sql = overlay_sql(&src, &columns, tab.edits.all())?;
     conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {sql}", quote_ident(&tab.name)))?;
     tab.engine.refresh(conn)
+}
+
+/// Run a [`Workspace::conversion_error_query`]: `(errors, checked)`.
+pub fn conversion_errors(conn: &Connection, sql: &str) -> Result<(u64, u64)> {
+    Ok(conn.query_row(sql, [], |r| Ok((r.get::<_, i64>(0)?.max(0) as u64, r.get::<_, i64>(1)?.max(0) as u64)))?)
 }

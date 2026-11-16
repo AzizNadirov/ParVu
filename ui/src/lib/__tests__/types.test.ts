@@ -30,5 +30,6 @@ describe("column types", () => {
     expect(seen.size).toBe(choices.length);
     for (const c of choices) expect((en as Record<string, string>)[c.key], c.key).toBeTruthy();
     expect(sameReading({ kind: "date_format", format: "%d/%m/%Y" }, choices[9].reading)).toBe(true);
+    expect(sameReading({ decimal: ",", kind: "locale_number", thousands: "." } as never, choices[4].reading)).toBe(true);
   });
 });

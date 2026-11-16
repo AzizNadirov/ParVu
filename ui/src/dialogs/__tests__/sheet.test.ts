@@ -165,3 +165,24 @@ describe("chart defaults", () => {
     expect(defaultChartY([{ name: "id", dtype: "BIGINT" }], "x")).toBe("id");
   });
 });
+
+describe("convert", () => {
+  it("builds the operation and describes the error count", async () => {
+    const { buildConvertOp, conversionSummary } = await import("../logic");
+    expect(buildConvertOp("a", { kind: "integer" }, null, false)).toEqual({
+      op: "convert",
+      column: "a",
+      to: { kind: "integer" },
+      on_error: null,
+      keep_original: false,
+    });
+    expect(buildConvertOp("a", { kind: "integer" }, "  ", false)).toBeNull();
+    expect(buildConvertOp("a", { kind: "integer" }, " 0 ", true)?.op === "convert" && buildConvertOp("a", { kind: "integer" }, " 0 ", true)).toMatchObject({ on_error: "0" });
+    expect(conversionSummary(null)).toBeNull();
+    expect(conversionSummary({ errors: 0, checked: 100000, complete: false })).toEqual({
+      key: "dialog.convert.no_errors_sample",
+      args: { errors: "0", checked: "100,000" },
+    });
+    expect(conversionSummary({ errors: 12, checked: 2500000, complete: true })?.key).toBe("dialog.convert.errors_all");
+  });
+});

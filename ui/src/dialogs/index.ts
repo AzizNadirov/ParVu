@@ -31,6 +31,7 @@ export { openSort } from "./SortDialog";
 export { openColumns } from "./ColumnsDialog";
 export { openSlice } from "./SliceDialog";
 export { openSplitColumn } from "./SplitColumnDialog";
+export { openConvert } from "./ConvertDialog";
 export { openBin } from "./BinDialog";
 export { openWindow } from "./WindowDialog";
 export { openConditionalFormat } from "./ConditionalFormatDialog";

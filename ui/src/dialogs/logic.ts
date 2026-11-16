@@ -22,6 +22,7 @@ import type {
   JoinType,
   Keep,
   Operation,
+  Reading,
   Quoting,
   ReplaceRequest,
   SearchHit,
@@ -751,4 +752,23 @@ export function mcpClientSetup(command: string, args: string[], name = "parvu-ap
     claudeDesktop: JSON.stringify({ mcpServers: { [name]: { command, args } } }, null, 2),
     plain: line,
   };
+}
+
+// ---------- Convert ----------
+
+/** The Convert operation, or null while a replacement value is chosen but empty. */
+export function buildConvertOp(column: string, to: Reading, onError: string | null, keepOriginal: boolean): Operation | null {
+  if (onError !== null && !onError.trim()) return null;
+  return { op: "convert", column, to, on_error: onError === null ? null : onError.trim(), keep_original: keepOriginal };
+}
+
+/** Text key (and args) describing an error count, or null while counting. */
+export function conversionSummary(
+  count: { errors: number; checked: number; complete: boolean } | null,
+): { key: string; args: Record<string, string> } | null {
+  if (!count) return null;
+  const n = (v: number) => v.toLocaleString("en-US");
+  const args = { errors: n(count.errors), checked: n(count.checked) };
+  if (count.errors === 0) return { key: count.complete ? "dialog.convert.no_errors_all" : "dialog.convert.no_errors_sample", args };
+  return { key: count.complete ? "dialog.convert.errors_all" : "dialog.convert.errors_sample", args };
 }

@@ -36,7 +36,8 @@ export type Reading =
   | { kind: "timestamp_format"; format: string }
   | { kind: "time" }
   | { kind: "json" }
-  | { kind: "cast"; dtype: string };
+  | { kind: "cast"; dtype: string }
+  | { kind: "epoch"; unit: "seconds" | "milliseconds" | "microseconds" };
 
 /** A column of a CSV file and how it is read. */
 export interface SourceColumn {
@@ -99,6 +100,8 @@ export type Operation =
   | { op: "rename"; column: string; new_name: string }
   | { op: "remove"; column: string }
   | { op: "change_type"; column: string; new_type: string }
+  | { op: "convert"; column: string; to: Reading; on_error: string | null; keep_original: boolean }
+  | { op: "conversion_errors"; column: string; to: Reading; keep: boolean }
   | { op: "duplicate"; column: string }
   | { op: "drop_duplicates"; columns: string[]; keep: Keep }
   | { op: "drop_null"; column: string; null_value: string | null }
@@ -567,6 +570,12 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 export const api = {
   sourceColumns: (id: number) => call<SourceColumn[]>("source_columns", { id }),
+  previewConversion: (id: number, column: string, to: Reading, n?: number) =>
+    call<{ before: Cell; after: Cell; failed: boolean }[]>("preview_conversion", { id, column, to, n }),
+  suggestReading: (id: number, column: string) => call<Reading>("suggest_reading", { id, column }),
+  conversionErrorCount: (id: number, column: string, to: Reading, full: boolean) =>
+    call<{ errors: number; checked: number; complete: boolean }>("conversion_error_count", { id, column, to, full }),
+  cancelConversionCount: () => call<void>("cancel_conversion_count"),
   setSourceReading: (id: number, column: string, reading: Reading) =>
     call<TabSummary>("set_source_reading", { id, column, reading }),
   bootstrap: () => call<Bootstrap>("bootstrap"),

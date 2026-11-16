@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- **Convert a column** (column menu → Change Type → Convert…): read a column as a number written `1,234.5`, `1.234,5` or `1 234,5`, yes/no, a date in one of several formats, date and time, time, JSON, or Unix time in seconds, milliseconds or microseconds.
+  - ParVu suggests the reading that fits the column.
+  - A live preview shows the values before and after, and marks the ones that don't convert.
+  - The dialog counts the values that don't convert in the first 100,000 rows, and can count all rows (the count can be stopped).
+  - Values that don't convert become empty, or a value you choose. The original column can be kept next to the new one.
+  - **Show rows that don't convert** keeps just those rows, so you can fix them (Power Query's Keep Errors).
+
 ## [1.0.0-alpha.3]
 
 AI comes to ParVu: use your Claude subscription through Claude Desktop or Claude Code, or chat in the new assistant panel with an API key or a local model. Every change the AI wants to make needs your approval. Also: smarter charts, and CSV columns that get the right types (with a fix for files that broke on a bad value far down).

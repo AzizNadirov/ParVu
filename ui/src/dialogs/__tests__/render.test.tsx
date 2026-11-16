@@ -29,6 +29,15 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
         x_kind: "category", time_unit: null, labels: ["north", "south", "Other"], other_label: 2, bin_edges: [], truncated: false,
         series: [{ name: "", other: false, values: [15, 2, 4], xs: [] }],
       };
+    case "suggest_reading":
+      return { kind: "locale_number", thousands: ".", decimal: "," };
+    case "preview_conversion":
+      return [
+        { before: "1.234,5", after: "1234.5", failed: false },
+        { before: "n/a", after: null, failed: true },
+      ];
+    case "conversion_error_count":
+      return { errors: 1, checked: 2, complete: true };
     case "mcp_status":
     case "mcp_set_enabled":
       return { enabled: cmd === "mcp_set_enabled", listening: cmd === "mcp_set_enabled", port: 4000, clients: 0, command: "parvu", args: ["mcp", "--attach"], error: null };
@@ -421,6 +430,34 @@ describe("spreadsheet dialogs", () => {
   });
 });
 
+
+describe("Convert", () => {
+  const eu = { kind: "locale_number", thousands: ".", decimal: "," };
+
+  it("starts from the suggested reading, previews, counts and converts", async () => {
+    const ui = makeUi();
+    const p = D.openConvert(ui, { tabId: 2, table: "t", column: "amount" });
+    await flush(); // the suggestion arrives and is selected
+    await act(async () => new Promise((r) => setTimeout(r, 300))); // then the debounced preview
+    expect(invoke).toHaveBeenCalledWith("suggest_reading", { id: 2, column: "amount" });
+    expect(invoke).toHaveBeenCalledWith("preview_conversion", { id: 2, column: "amount", to: eu, n: 50 });
+    expect(invoke).toHaveBeenCalledWith("conversion_error_count", { id: 2, column: "amount", to: eu, full: false });
+    expect(document.querySelector(".pv-convert-failed")?.textContent).toContain("n/a");
+    expect(screen.getByText(/dialog\.convert\.errors_all/)).toBeTruthy();
+    fireEvent.click(screen.getByText("dialog.convert.keep_original", { exact: false }));
+    fireEvent.click(screen.getByText("dialog.convert.apply"));
+    await expect(p).resolves.toEqual({ op: "convert", column: "amount", to: eu, on_error: null, keep_original: true });
+  });
+
+  it("shows the rows that don't convert", async () => {
+    const ui = makeUi();
+    const p = D.openConvert(ui, { tabId: 2, table: "t", column: "amount" });
+    await flush();
+    await act(async () => new Promise((r) => setTimeout(r, 300)));
+    fireEvent.click(screen.getByText("dialog.convert.show_errors"));
+    await expect(p).resolves.toEqual({ op: "conversion_errors", column: "amount", to: eu, keep: true });
+  });
+});
 
 describe("AI clients (MCP)", () => {
   it("connect dialog shows setup commands and switches the listener", async () => {

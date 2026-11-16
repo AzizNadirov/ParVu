@@ -483,6 +483,97 @@ pub async fn set_source_reading(
     .await
 }
 
+#[derive(Serialize)]
+pub struct ConversionPreviewRow {
+    before: Cell,
+    after: Cell,
+    failed: bool,
+}
+
+/// The Convert dialog's live preview: the first `n` values before and after.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn preview_conversion(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+    to: Reading,
+    n: Option<u64>,
+) -> ApiResult<Vec<ConversionPreviewRow>> {
+    with_ws(state, window, move |ws| {
+        let rows = ws.preview_conversion(id, &column, &to, n.unwrap_or(50).clamp(1, 500))?;
+        Ok(rows.into_iter().map(|(before, after, failed)| ConversionPreviewRow { before, after, failed }).collect())
+    })
+    .await
+}
+
+/// How ParVu would read a column, for the Convert dialog's first choice.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn suggest_reading(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+) -> ApiResult<Reading> {
+    with_ws(state, window, move |ws| Ok(ws.suggest_reading(id, &column)?)).await
+}
+
+/// Rows checked when counting errors without `full`.
+const ERROR_SAMPLE_ROWS: u64 = 100_000;
+
+#[derive(Serialize)]
+pub struct ConversionCount {
+    errors: u64,
+    checked: u64,
+    /// Every row was checked (not just the first ones).
+    complete: bool,
+}
+
+/// Values of `column` that don't convert as `to`: on the first 100,000 rows,
+/// or, with `full`, on every row. A full count runs on its own connection
+/// (the window stays usable) and can be cancelled.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn conversion_error_count(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+    to: Reading,
+    full: bool,
+) -> ApiResult<ConversionCount> {
+    let ws_arc = ws_of(&state, &window)?;
+    let limit = (!full).then_some(ERROR_SAMPLE_ROWS);
+    let (conn, sql) = {
+        let ws = lock(&ws_arc);
+        (ws.clone_connection()?, ws.conversion_error_query(id, &column, &to, limit)?)
+    };
+    let label = window.label().to_string();
+    lock(&state.counts).insert(label.clone(), conn.interrupt_handle());
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut tries = 0;
+        loop {
+            match parvu_core::workspace::conversion_errors(&conn, &sql) {
+                // A CSV value that didn't parse: read that column as text and count again.
+                Err(e) if tries < 8 && lock(&ws_arc).heal(&e.to_string()) => tries += 1,
+                other => return other,
+            }
+        }
+    })
+    .await
+    .map_err(|e| ApiError::new("app", e.to_string()))?;
+    lock(&state.counts).remove(&label);
+    let (errors, checked) = result?;
+    Ok(ConversionCount { errors, checked, complete: limit.is_none_or(|n| checked < n) })
+}
+
+/// Stop the window's running full error count.
+#[tauri::command(rename_all = "snake_case")]
+pub fn cancel_conversion_count(state: State<'_, AppState>, window: WebviewWindow) {
+    if let Some(h) = lock(&state.counts).get(window.label()) {
+        h.interrupt();
+    }
+}
+
 /// Math operation dialog: add column `name` computed by expression `text`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn add_computed_column(

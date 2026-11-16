@@ -102,8 +102,19 @@ impl Default for DetectOptions {
     }
 }
 
+/// Unit of a number of time since 1970-01-01 (Unix time).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum EpochUnit {
+    Seconds,
+    Milliseconds,
+    Microseconds,
+}
+
 /// How a column of text is turned into its type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Reading {
     /// Kept as text.
@@ -129,6 +140,8 @@ pub enum Reading {
     /// Any other DuckDB type, with `TRY_CAST` (used when a natively typed
     /// column has to fall back to text).
     Cast { dtype: String },
+    /// A number of seconds, milliseconds or microseconds since 1970.
+    Epoch { unit: EpochUnit },
 }
 
 /// Words read as true / false (lower case). English, Russian, Azerbaijani.
@@ -148,18 +161,44 @@ impl Reading {
             Reading::Timestamp | Reading::TimestampFormat { .. } => "TIMESTAMP",
             Reading::Time => "TIME",
             Reading::Json => "JSON",
+            Reading::Epoch { .. } => "TIMESTAMP",
         }
+    }
+
+    /// Whether the expression parses text (so other types are first cast
+    /// to text).
+    fn reads_text(&self) -> bool {
+        matches!(
+            self,
+            Reading::LocaleNumber { .. } | Reading::Boolean | Reading::DateFormat { .. } | Reading::TimestampFormat { .. }
+        )
     }
 
     /// Expression turning the text column `column` into this type. Never
     /// fails: a value that doesn't fit gives NULL.
     pub fn expr(&self, column: &str) -> String {
-        let c = quote_ident(column);
+        self.expr_of(&quote_ident(column), true)
+    }
+
+    /// Expression turning the SQL expression `x` into this type; `text`
+    /// says whether `x` is already text. Never fails: a value that doesn't
+    /// fit gives NULL.
+    pub fn expr_of(&self, x: &str, text: bool) -> String {
         // No trim(): it costs as much as the conversion itself, and
         // TRY_CAST already ignores spaces around numbers.
-        let x = c.clone();
+        let c = x.to_string();
+        let x = if !text && (self.reads_text() || *self == Reading::Text) { format!("CAST({c} AS VARCHAR)") } else { c.clone() };
         match self {
-            Reading::Text => c,
+            Reading::Text => x,
+            Reading::Epoch { unit } => {
+                let n = format!("TRY_CAST({x} AS BIGINT)");
+                // try(): values out of the timestamp range give NULL, not an error.
+                match unit {
+                    EpochUnit::Seconds => format!("try(make_timestamp({n} * 1000000))"),
+                    EpochUnit::Milliseconds => format!("try(epoch_ms({n}))"),
+                    EpochUnit::Microseconds => format!("try(make_timestamp({n}))"),
+                }
+            }
             Reading::Integer => format!("TRY_CAST({x} AS BIGINT)"),
             Reading::Number => format!("TRY_CAST({x} AS DOUBLE)"),
             Reading::LocaleNumber { thousands, decimal } => {
@@ -195,6 +234,7 @@ fn word_list(words: &[&str]) -> String {
 
 /// A column of a file and how it is read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SourceColumn {
     pub name: String,
     pub reading: Reading,
@@ -312,6 +352,84 @@ pub fn detect(conn: &Connection, path: &str, options: DetectOptions) -> Result<V
     })();
     let _ = conn.execute_batch(&format!("DROP TABLE IF EXISTS {SAMPLE_TABLE}"));
     result
+}
+
+/// How ParVu would read each column of `query` (its first [`SAMPLE_ROWS`]
+/// rows, as text), e.g. to suggest a conversion.
+pub fn detect_query(conn: &Connection, query: &str, options: DetectOptions) -> Result<Vec<SourceColumn>> {
+    let names: Vec<String> = describe(conn, query)?.into_iter().map(|(n, _)| n).collect();
+    let text: Vec<String> =
+        names.iter().map(|n| format!("CAST({} AS VARCHAR) AS {}", quote_ident(n), quote_ident(n))).collect();
+    conn.execute_batch(&format!(
+        "CREATE OR REPLACE TEMP TABLE {SAMPLE_TABLE} AS SELECT {} FROM ({query}) LIMIT {SAMPLE_ROWS}",
+        text.join(", ")
+    ))?;
+    let result = detect_sample(conn, &names, options);
+    let _ = conn.execute_batch(&format!("DROP TABLE IF EXISTS {SAMPLE_TABLE}"));
+    result
+}
+
+/// Readings worth trying on a column of text, best first when they tie.
+fn candidate_readings() -> Vec<Reading> {
+    let n = |t: &str, d: &str| Reading::LocaleNumber { thousands: t.into(), decimal: d.into() };
+    let date = |f: &str| Reading::DateFormat { format: f.into() };
+    vec![
+        Reading::Integer,
+        Reading::Number,
+        n(",", "."),
+        n(".", ","),
+        n(" \u{a0}\u{202f}", ","),
+        Reading::Boolean,
+        Reading::Date,
+        date("%d.%m.%Y"),
+        date("%d/%m/%Y"),
+        date("%m/%d/%Y"),
+        Reading::Timestamp,
+        Reading::Time,
+        Reading::Json,
+    ]
+}
+
+/// A condition true where the text `x` really has the shape of `r`. Number
+/// readings are lenient (`1.000,00` read the US way gives 1.0), so they
+/// are checked against the value's shape, as the detectors do.
+fn fits(r: &Reading, x: &str) -> String {
+    let int = r"[+-]?\d+";
+    let shape = |pattern: &str| format!("regexp_full_match({x}, '{pattern}')");
+    match r {
+        Reading::LocaleNumber { thousands, .. } if thousands == "," => {
+            format!("({} OR {})", shape(r"[+-]?\d{1,3}(,\d{3})+(\.\d+)?"), shape(r"[+-]?(\d+\.\d*|\.\d+|\d+)"))
+        }
+        Reading::LocaleNumber { thousands, .. } if thousands == "." => {
+            format!("({} OR {} OR {})", shape(r"[+-]?\d+,\d+"), shape(r"[+-]?\d{1,3}(\.\d{3})+(,\d+)?"), shape(int))
+        }
+        Reading::LocaleNumber { .. } => {
+            format!("({} OR {} OR {})", shape("[+-]?\\d{1,3}([ \u{a0}\u{202f}]\\d{3})+(,\\d+)?"), shape(r"[+-]?\d+,\d+"), shape(int))
+        }
+        _ => format!("{} IS NOT NULL", r.expr_of(x, true)),
+    }
+}
+
+/// The reading of `column` in `query` that converts the most non-empty
+/// values, if it converts at least `share` of them; ties go to the earlier
+/// candidate (an integer before a number).
+pub fn best_reading(conn: &Connection, query: &str, column: &str, share: f64) -> Result<Option<Reading>> {
+    let x = format!("NULLIF(CAST({} AS VARCHAR), '')", quote_ident(column));
+    let candidates = candidate_readings();
+    let mut items = vec![format!("count({x})")];
+    items.extend(candidates.iter().map(|r| format!("count(*) FILTER (WHERE {})", fits(r, &x))));
+    let got = counts(conn, &format!("SELECT {} FROM ({query})", items.join(", ")), items.len())?;
+    let total = got[0];
+    if total == 0 {
+        return Ok(None);
+    }
+    let mut best: Option<(i64, &Reading)> = None;
+    for (r, &n) in candidates.iter().zip(&got[1..]) {
+        if best.is_none_or(|(b, _)| n > b) {
+            best = Some((n, r));
+        }
+    }
+    Ok(best.filter(|(n, _)| *n as f64 >= share * total as f64).map(|(_, r)| r.clone()))
 }
 
 /// Combine ParVu's reading of a column with DuckDB's type for it.
