@@ -20,6 +20,7 @@ The app was rewritten from Python/PyQt6; the plan and its status are in `plans/R
 crates/parvu-core     DuckDB engine: tabs, paging, edits, operations, export, stats, search
 crates/parvu-dsl      expression language: parser → resolver → compiler (no DuckDB)
 crates/parvu-config   settings, recents, themes, translations (no DuckDB)
+crates/parvu-ai       AI assistant: providers, agent loop, pricing (no DuckDB, no Tauri)
 crates/parvu-app      Tauri app: commands.rs, state.rs, main.rs, mcp.rs, packaging
 ui/src                React UI: App.tsx, components/, dialogs/, lib/
 docs/                 user and developer guides
@@ -31,7 +32,7 @@ Dependencies only point down: `ui → parvu-app → (parvu-core, parvu-dsl, parv
 
 ```bash
 cargo test -p parvu-core -p parvu-dsl -p parvu-config --features parvu-core/schema   # Rust tests (prebuilt DuckDB, seconds)
-cargo test -p parvu-app                                    # MCP server tests
+cargo test -p parvu-ai -p parvu-app                        # AI assistant and MCP server tests
 cargo clippy --workspace --all-targets -- -D warnings      # must stay clean
 npm --prefix ui run typecheck && npm --prefix ui test      # UI
 cd crates/parvu-app && npx --prefix ../../ui tauri dev     # run the app
@@ -94,6 +95,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 | Packaging | `crates/parvu-app/tauri*.conf.json`, `crates/parvu-app/packaging/`, `build.sh` |
 | CI | `.github/workflows/ci.yml` (tests), `package.yml` (installers) |
 | MCP server (`parvu mcp`) | `parvu-app/src/mcp.rs` (tools, `--allow-dir` / `--allow-write`, the `--attach` bridge and TCP listener), user guide `docs/MCP.md`; tests with `cargo test -p parvu-app` |
+| Built-in AI assistant | model side: `parvu-ai` (`provider/anthropic.rs`, `provider/openai.rs`, `agent.rs`); app side: `parvu-app/src/ai_assistant.rs` (keys, providers.json, tools, runs); UI: `components/AiPanel.tsx`, `dialogs/AiProvidersDialog.tsx`, `lib/ai.ts`; user guide `docs/AI.md` |
 | AI clients in the window (attached mode) | `parvu-app/src/mcp_attach.rs` (listener, approval cards, `mcp_*` commands), `ui/src/dialogs/ConnectAiDialog.tsx`, `McpProposalDialog.tsx`, the AI menu and listeners in `App.tsx` |
 | Read-only access for AI / MCP (SQL guard, previews) | `parvu-core/src/readonly.rs`, `Workspace::read_session` / `preview_op`, tests in `parvu-core/tests/readonly.rs`; see `plans/AI_PLAN.md` §6 |
 | Releases | `.github/workflows/release.yml`, triggered by a `v*` tag; steps in `RELEASES.md` |

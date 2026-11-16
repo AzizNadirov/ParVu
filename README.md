@@ -70,7 +70,8 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 - CSV delimiter, header and quoting; Parquet compression
 - Progress bar and cancel for large exports
 
-### AI clients (MCP)
+### AI
+- **AI assistant panel** (`Ctrl+Shift+A`): ask about your tables in plain language with your own API key (Anthropic, OpenAI, Gemini, OpenRouter, Groq) or a local model (Ollama, LM Studio). It queries the data itself; changes appear as cards you approve. Keys stay in your system keychain. See [docs/AI.md](docs/AI.md).
 - **Use your Claude subscription with ParVu.** AI → Connect an AI client lets Claude Desktop, Claude Code or VS Code work with the tables open in your window:
   ```bash
   claude mcp add -s user parvu-app -- parvu mcp --attach
@@ -136,7 +137,7 @@ Run the tests:
 
 ```bash
 cargo test -p parvu-core -p parvu-dsl -p parvu-config --features parvu-core/schema
-cargo test -p parvu-app          # MCP server
+cargo test -p parvu-ai -p parvu-app   # AI assistant and MCP server
 npm --prefix ui test
 ```
 
@@ -147,7 +148,8 @@ Tests and development builds use the prebuilt DuckDB library. Installer builds c
 | `crates/parvu-core` | DuckDB engine: tabs, cell edits, operations, charts, export, statistics, search, read-only access for AI tools |
 | `crates/parvu-dsl` | Expression language parser and compiler |
 | `crates/parvu-config` | Settings, recent files, translations, themes |
-| `crates/parvu-app` | Tauri app: windows and commands; the `parvu mcp` server |
+| `crates/parvu-ai` | AI assistant: model providers (Anthropic, OpenAI-compatible), agent loop, pricing |
+| `crates/parvu-app` | Tauri app: windows and commands; the `parvu mcp` server; the assistant's keys and tools |
 | `ui/` | React UI |
 
 See [docs/BUILDING.md](docs/BUILDING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for more.
@@ -256,7 +258,7 @@ A: Parquet, CSV and JSON files are queried in place by DuckDB, and only the visi
 A: The app is about six times smaller (82 MB installed instead of 483 MB), opens files faster, and switches pages in milliseconds. It also opens Excel files, writes Excel on export, and fixes several bugs in the expression language and in join and append.
 
 **Q: Can I use it with AI?**
-A: Yes, through MCP, with your own Claude subscription. Turn on AI → Connect an AI client, add ParVu to Claude Desktop or Claude Code once, and ask about the tables open in your window; you approve every change in ParVu. See [docs/MCP.md](docs/MCP.md). A built-in assistant for API keys and local models is planned ([plans/AI_PLAN.md](plans/AI_PLAN.md)).
+A: Yes, in two ways. The **AI assistant** panel (`Ctrl+Shift+A`) works with your API key or a local model. **AI → Connect an AI client** lets Claude Desktop or Claude Code use your Claude subscription on the tables in your window. Either way you approve every change in ParVu. See [docs/AI.md](docs/AI.md).
 
 **Q: Can I create my own themes?**
 A: Yes. Export a theme as a template, edit the JSON, and import it back. See [docs/THEMES.md](docs/THEMES.md).

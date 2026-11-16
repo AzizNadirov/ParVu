@@ -4,6 +4,7 @@ members = [
     "crates/parvu-core",
     "crates/parvu-dsl",
     "crates/parvu-config",
+    "crates/parvu-ai",
     "crates/parvu-app",
 ]
 
@@ -18,6 +19,7 @@ repository = "https://github.com/AzizNadirov/ParVu"
 parvu-core = { path = "crates/parvu-core", default-features = false }
 parvu-dsl = { path = "crates/parvu-dsl" }
 parvu-config = { path = "crates/parvu-config" }
+parvu-ai = { path = "crates/parvu-ai" }
 duckdb = { version = "1.20000.1", features = ["appender-arrow", "chrono"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

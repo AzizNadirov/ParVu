@@ -95,6 +95,16 @@ Settings, recent files, themes and translations, all stored in `~/.ParVu` in the
 - `commands.rs` holds every command the UI can call. Data commands run on the blocking thread pool so the window stays responsive.
 - Each window has its own `Workspace`, created on first use and dropped when the window closes.
 - Exports run on a second DuckDB connection in a background thread and report progress through `export-progress` and `export-finished` events; `cancel_export` interrupts DuckDB.
+- `ai_assistant.rs` is the built-in assistant:
+  - provider list in `~/.ParVu/ai/providers.json`; keys in the system keychain (`keyring`), or an environment variable;
+  - tools from an attached `ParvuMcp` pinned to the asking window, over an in-memory MCP connection, so its changes use the same approval cards;
+  - one chat per tab; runs stream `ai-event` and end with `ai-finished`.
+
+  The model side is the `parvu-ai` crate, which has no DuckDB or Tauri:
+  - `provider/anthropic.rs`: Messages API, streaming, adaptive thinking, effort, prompt caching, refusal fallback;
+  - `provider/openai.rs`: Chat Completions;
+  - `agent.rs`: the tool loop;
+  - `pricing.rs`, `redact.rs`.
 - `mcp_attach.rs` runs attached mode. While the `mcp_allow_clients` setting is on, a token-protected listener on 127.0.0.1 serves `ParvuMcp::attached`. Its `AttachHost` gives the server the focused window's workspace, shows approval cards (`mcp-proposal` event, answered by `mcp_decide`), and tells the window to refresh (`mcp-changed`).
 - `mcp.rs` is the MCP server. `main.rs` checks for the `mcp` argument before starting Tauri, so no window or webview is created. It uses the `rmcp` SDK on a tokio runtime over stdin/stdout. The server holds one `Workspace`; tools read through `ReadSession` and change tables with `Workspace::apply` / `undo`. stdout carries the protocol, so logs only go to the log file. User guide: [MCP.md](MCP.md).
 

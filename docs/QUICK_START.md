@@ -77,8 +77,13 @@ Press `Ctrl+/` for the full list.
 | `Ctrl+G` | Group by |
 | `Ctrl+Shift+C` | Chart |
 | `Ctrl+D` | Fill down |
+| `Ctrl+Shift+A` | AI assistant panel |
 | `Ctrl+W` | Close tab |
 | `Shift+Wheel` | Scroll sideways |
+
+## Ask the AI assistant
+
+**AI → AI providers…** adds a model: Anthropic, OpenAI, Gemini, OpenRouter or Groq with your API key, or a local Ollama / LM Studio model. Then **AI → AI assistant** (`Ctrl+Shift+A`) opens a panel where you ask about the active table. The assistant runs queries itself; changes it proposes appear as cards you apply or reject. See [AI.md](AI.md).
 
 ## Use it from an AI client
 

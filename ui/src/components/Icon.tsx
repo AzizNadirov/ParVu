@@ -20,6 +20,7 @@ import {
   mdiPlay,
   mdiPlus,
   mdiRobotOutline,
+  mdiCogOutline,
   mdiRestore,
   mdiSigma,
   mdiTableMergeCells,
@@ -49,6 +50,7 @@ export const icons = {
   plus: mdiPlus,
   reset: mdiRestore,
   run: mdiPlay,
+  settings: mdiCogOutline,
   undo: mdiUndo,
 } as const;
 
