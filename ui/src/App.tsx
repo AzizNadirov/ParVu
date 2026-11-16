@@ -203,7 +203,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   const activeTab = tabs.find((x) => x.id === active) ?? null;
   const sourceKey = activeTab ? `${activeTab.id}:${activeTab.path}:${activeTab.steps.length}` : "";
   useEffect(() => {
-    if (!activeTab || activeTab.format !== "csv") {
+    if (!activeTab) {
       setSourceCols([]);
       return;
     }

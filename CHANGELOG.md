@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Dates and other types in Parquet, JSON and Excel files.** Detection on open used to run only for CSV files, so a Parquet column of dates stored as text stayed text. Now the text columns of every format go through the same detection on their first 10,000 rows. The file's own types stay as they are, and a column that reads as dates, numbers, yes/no or JSON gets that type. **Read as** and the day/month flip work for these files too.
+- **A text column mixing dates and timestamps** (`2026-07-01` next to `2026-07-01 12:30:00`) is read as timestamps. Before, it stayed text.
+
 ## [1.0.0-alpha.4]
 
 Columns that know their type, in the spirit of Power Query: convert with options and see what doesn't convert, and use the operations that fit each column (text, yes/no, dates, JSON). Also: open CSV files with a delimiter, header, skipped lines, decimal comma or encoding.

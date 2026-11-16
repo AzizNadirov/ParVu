@@ -118,15 +118,33 @@ pub fn register_source(
             }
         }
     }
-    let select = match format.reader_sql(path) {
-        Some(sql) => sql,
-        None => {
-            load_excel(conn, excel_table, path)?;
-            format!("SELECT * FROM {}", quote_ident(excel_table))
+    if format == FileFormat::Excel {
+        load_excel(conn, excel_table, path)?;
+    }
+    let base = base_select(format, path, excel_table).unwrap_or_default();
+    // Text columns that read as dates, numbers… get that type on top of the
+    // file's own types; the rest stays as stored.
+    let columns = match crate::types::detect_stored(conn, &base, options) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("type detection failed for {}: {e}", path.display());
+            conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {base}", quote_ident(relation)))?;
+            return Ok(Vec::new());
         }
     };
+    let select = crate::types::typed_select(&base, &columns);
     conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(relation)))?;
-    Ok(Vec::new())
+    Ok(columns)
+}
+
+/// The query reading a Parquet, JSON or (loaded) Excel file with its own
+/// types; `None` for CSV, which is read through [`crate::types::csv_select`].
+pub fn base_select(format: FileFormat, path: &Path, excel_table: &str) -> Option<String> {
+    match format {
+        FileFormat::Csv => None,
+        FileFormat::Excel => Some(format!("SELECT * FROM {}", quote_ident(excel_table))),
+        _ => format.reader_sql(path),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

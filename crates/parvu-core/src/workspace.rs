@@ -249,16 +249,13 @@ impl Workspace {
     /// pending cell edits don't work with the new type.
     pub fn set_source_reading(&mut self, id: TabId, column: &str, reading: Reading) -> Result<StepLabel> {
         let tab = self.tab(id)?;
-        if tab.format != FileFormat::Csv {
-            return Err(CoreError::invalid("Only columns of CSV files can be read another way"));
-        }
         let previous = tab
             .source
             .iter()
             .find(|c| c.name == column)
             .cloned()
             .ok_or_else(|| CoreError::invalid(format!("No column \"{column}\" in the file")))?;
-        let next = SourceColumn { name: column.to_string(), reading, native: false, ambiguous: false };
+        let next = SourceColumn { name: column.to_string(), reading, native: false, ambiguous: false, stored: previous.stored.clone() };
         let label = StepLabel::new("step.source_type", &[("column", column), ("type", next.reading.dtype())]);
         self.replace_source_columns(id, std::slice::from_ref(&next))?;
         let tab = self.tab_mut(id)?;
@@ -271,13 +268,12 @@ impl Workspace {
     /// skipped; a set that doesn't work changes nothing.
     pub fn apply_source_readings(&mut self, id: TabId, readings: &[(String, Reading)]) -> Result<()> {
         let tab = self.tab(id)?;
-        if tab.format != FileFormat::Csv {
-            return Ok(());
-        }
         let next: Vec<SourceColumn> = readings
             .iter()
-            .filter(|(name, _)| tab.source.iter().any(|c| &c.name == name))
-            .map(|(name, reading)| SourceColumn { name: name.clone(), reading: reading.clone(), native: false, ambiguous: false })
+            .filter_map(|(name, reading)| {
+                let old = tab.source.iter().find(|c| &c.name == name)?;
+                Some(SourceColumn { name: name.clone(), reading: reading.clone(), native: false, ambiguous: false, stored: old.stored.clone() })
+            })
             .collect();
         if next.is_empty() {
             return Ok(());
@@ -297,7 +293,10 @@ impl Workspace {
             }
         }
         let rebuild = |tab: &mut Tab| -> Result<()> {
-            let select = crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source, &tab.csv)?;
+            let select = match crate::format::base_select(tab.format, &tab.path, &excel_table(&tab.name)) {
+                Some(base) => crate::types::typed_select(&base, &tab.source),
+                None => crate::types::csv_select(&tab.path.to_string_lossy(), &tab.source, &tab.csv)?,
+            };
             conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {select}", quote_ident(&tab.source_view())))?;
             rebuild_overlay(conn, tab)?;
             crate::engine::validate(conn, tab.engine.current_query())

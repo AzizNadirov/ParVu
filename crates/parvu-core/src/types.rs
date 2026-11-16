@@ -297,6 +297,10 @@ pub struct SourceColumn {
     /// The sample allowed more than one reading (e.g. `03/04/2024`), and
     /// the date order setting chose this one.
     pub ambiguous: bool,
+    /// The type stored in the file, for formats with types (Parquet, JSON,
+    /// Excel); `None` for CSV, where every value starts as text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored: Option<String>,
 }
 
 /// `SELECT` reading the CSV file at `path`: native columns as DuckDB types
@@ -319,6 +323,51 @@ pub fn csv_select(path: &str, columns: &[SourceColumn], csv: &CsvOptions) -> Res
         format!("read_csv({p}, types = {{{}}}{extra})", text.join(", "))
     };
     Ok(format!("SELECT {} FROM {reader}", items.join(", ")))
+}
+
+/// How each column of `base` (the reader of a Parquet, JSON or Excel file)
+/// is read: as stored, except text columns whose first [`SAMPLE_ROWS`]
+/// values all read as something else (dates, numbers, yes/no, JSON).
+pub fn detect_stored(conn: &Connection, base: &str, options: DetectOptions) -> Result<Vec<SourceColumn>> {
+    let stored = describe(conn, base)?;
+    let is_text = |t: &str| TypeFamily::of(t) == TypeFamily::Text && !t.eq_ignore_ascii_case("UUID");
+    let text: Vec<&String> = stored.iter().filter(|(_, t)| is_text(t)).map(|(n, _)| n).collect();
+    let mut found: Vec<SourceColumn> = Vec::new();
+    if options.enabled && !text.is_empty() {
+        let list: Vec<String> = text.iter().map(|n| quote_ident(n)).collect();
+        found = detect_query(conn, &format!("SELECT {} FROM ({base})", list.join(", ")), options)?;
+    }
+    Ok(stored
+        .into_iter()
+        .map(|(name, dtype)| {
+            let hit = found.iter().find(|c| c.name == name && c.reading != Reading::Text);
+            match hit {
+                Some(c) => SourceColumn { name, reading: c.reading.clone(), native: false, ambiguous: c.ambiguous, stored: Some(dtype) },
+                None => {
+                    let reading = if is_text(&dtype) { Reading::Text } else { Reading::Cast { dtype: dtype.clone() } };
+                    SourceColumn { name, reading, native: true, ambiguous: false, stored: Some(dtype) }
+                }
+            }
+        })
+        .collect())
+}
+
+/// `SELECT` over `base` (a typed file reader) giving each column its
+/// reading: as stored when native, converted otherwise.
+pub fn typed_select(base: &str, columns: &[SourceColumn]) -> String {
+    let items: Vec<String> = columns
+        .iter()
+        .map(|c| {
+            let q = quote_ident(&c.name);
+            if c.native {
+                q
+            } else {
+                let text = c.stored.as_deref().is_none_or(|t| TypeFamily::of(t) == TypeFamily::Text);
+                format!("{} AS {q}", c.reading.expr_of(&q, text))
+            }
+        })
+        .collect();
+    format!("SELECT {} FROM ({base})", items.join(", "))
 }
 
 /// The column a failed query names when DuckDB couldn't parse one of the
@@ -390,7 +439,7 @@ pub fn detect(conn: &Connection, path: &str, options: DetectOptions, csv: &CsvOp
     if !options.enabled {
         return Ok(duck
             .into_iter()
-            .map(|(name, _)| SourceColumn { name, reading: Reading::Text, native: false, ambiguous: false })
+            .map(|(name, _)| SourceColumn { name, reading: Reading::Text, native: false, ambiguous: false, stored: None })
             .collect());
     }
     conn.execute_batch(&format!(
@@ -581,7 +630,7 @@ fn detect_sample(conn: &Connection, names: &[String], options: DetectOptions) ->
         } else {
             Reading::Text
         };
-        out.push(SourceColumn { name: name.clone(), reading, native: false, ambiguous: false });
+        out.push(SourceColumn { name: name.clone(), reading, native: false, ambiguous: false, stored: None });
     }
     if !date_like.is_empty() {
         detect_dates(conn, names, &date_like, options, &mut out)?;
@@ -602,7 +651,9 @@ fn detect_dates(
     for &(k, _, _) in date_like {
         let x = x_of(&names[k]);
         items.push(format!("count(TRY_CAST({x} AS DATE)) FILTER (WHERE regexp_full_match({x}, '\\d{{4}}-\\d{{2}}-\\d{{2}}'))"));
-        items.push(format!("count(TRY_CAST({x} AS TIMESTAMP)) FILTER (WHERE regexp_matches({x}, '^\\d{{4}}-\\d{{2}}-\\d{{2}}[ T]'))"));
+        // ISO timestamps; plain ISO dates count too (midnight), so a column
+        // mixing "2026-07-01" and "2026-07-01 12:30:00" is a timestamp.
+        items.push(format!("count(TRY_CAST({x} AS TIMESTAMP)) FILTER (WHERE regexp_matches({x}, '^\\d{{4}}-\\d{{2}}-\\d{{2}}'))"));
         items.push(format!("CAST(any_value({x}) AS VARCHAR)"));
     }
     let mut iso = Vec::new();
