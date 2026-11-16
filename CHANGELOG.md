@@ -9,6 +9,12 @@
   - The dialog counts the values that don't convert in the first 100,000 rows, and can count all rows (the count can be stopped).
   - Values that don't convert become empty, or a value you choose. The original column can be kept next to the new one.
   - **Show rows that don't convert** keeps just those rows, so you can fix them (Power Query's Keep Errors).
+- **Text columns** get **Text ▸**, **Extract ▸** and **Merge columns…** in their column menu:
+  - **Text ▸** (one click): trim (both ends, start or end), remove non-printable characters, collapse repeated spaces, lowercase, UPPERCASE, Capitalize Each Word, remove accents. Add prefix…, add suffix… and pad… open a small dialog.
+  - **Extract ▸**: length, first or last characters, a range of characters, text before or after a delimiter (first or last occurrence), text between two delimiters, a regular expression match. The result goes to a new column right after the source, or into the same column.
+  - Each dialog shows a live preview over values from the page.
+  - **Merge columns…** (also in the Data menu) joins several columns with a separator, skipping empty cells.
+- **Yes/no columns** get **Invert**, **Keep yes**, **Keep no** and **Keep empty**.
 
 ## [1.0.0-alpha.3]
 

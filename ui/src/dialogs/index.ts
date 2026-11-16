@@ -32,6 +32,8 @@ export { openColumns } from "./ColumnsDialog";
 export { openSlice } from "./SliceDialog";
 export { openSplitColumn } from "./SplitColumnDialog";
 export { openConvert } from "./ConvertDialog";
+export { openColumnFn } from "./ColumnFnDialog";
+export { openMergeColumns } from "./MergeColumnsDialog";
 export { openBin } from "./BinDialog";
 export { openWindow } from "./WindowDialog";
 export { openConditionalFormat } from "./ConditionalFormatDialog";

@@ -36,6 +36,8 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
         { before: "1.234,5", after: "1234.5", failed: false },
         { before: "n/a", after: null, failed: true },
       ];
+    case "preview_column_fn":
+      return [["ab-1", "AB"]];
     case "conversion_error_count":
       return { errors: 1, checked: 2, complete: true };
     case "mcp_status":
@@ -456,6 +458,42 @@ describe("Convert", () => {
     await act(async () => new Promise((r) => setTimeout(r, 300)));
     fireEvent.click(screen.getByText("dialog.convert.show_errors"));
     await expect(p).resolves.toEqual({ op: "conversion_errors", column: "amount", to: eu, keep: true });
+  });
+});
+
+describe("column functions", () => {
+  it("text before a delimiter goes to a new column, with a preview", async () => {
+    const ui = makeUi();
+    const p = D.openColumnFn(ui, { tabId: 4, table: "t", column: "code", name: "before", values: ["ab-1"] });
+    await flush();
+    await act(async () => new Promise((r) => setTimeout(r, 300)));
+    expect(invoke).toHaveBeenCalledWith("preview_column_fn", {
+      id: 4,
+      column: "code",
+      func: { fn: "before", delimiter: "-", last: false },
+      values: ["ab-1"],
+    });
+    expect(document.querySelector(".pv-table-scroll td:last-child")?.textContent).toBe("AB");
+    fireEvent.click(screen.getByText("fn.field.last"));
+    fireEvent.click(screen.getByText("btn.apply"));
+    await expect(p).resolves.toEqual({
+      op: "column_transform",
+      column: "code",
+      func: { fn: "before", delimiter: "-", last: true },
+      output: { to: "new", name: "" },
+    });
+  });
+
+  it("merging needs two columns", async () => {
+    const ui = makeUi();
+    const p = D.openMergeColumns(ui, { table: "t", columns: [{ name: "a", dtype: "VARCHAR" }, { name: "b", dtype: "VARCHAR" }], selected: "a" });
+    await flush();
+    const apply = screen.getByText("btn.apply") as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+    fireEvent.click(screen.getByText("b"));
+    expect(apply.disabled).toBe(false);
+    fireEvent.click(apply);
+    await expect(p).resolves.toEqual({ op: "merge_columns", columns: ["a", "b"], separator: " ", name: "merged", keep_columns: true });
   });
 });
 

@@ -23,6 +23,33 @@ export type TypeFamily =
   | "binary"
   | "other";
 
+export type Side = "both" | "start" | "end";
+
+/** A function of one column (backend `ColumnFn`). */
+export type ColumnFn =
+  | { fn: "trim"; side: Side }
+  | { fn: "clean" }
+  | { fn: "collapse_spaces" }
+  | { fn: "lower" }
+  | { fn: "upper" }
+  | { fn: "proper" }
+  | { fn: "remove_accents" }
+  | { fn: "add_prefix"; text: string }
+  | { fn: "add_suffix"; text: string }
+  | { fn: "pad"; length: number; fill: string; side: Side }
+  | { fn: "length" }
+  | { fn: "first"; n: number }
+  | { fn: "last"; n: number }
+  | { fn: "range"; start: number; length: number }
+  | { fn: "before"; delimiter: string; last: boolean }
+  | { fn: "after"; delimiter: string; last: boolean }
+  | { fn: "between"; start: string; end: string }
+  | { fn: "regex_extract"; pattern: string; group: number }
+  | { fn: "invert" };
+
+/** Where a column function writes. */
+export type FnOutput = { to: "in_place" } | { to: "new"; name: string };
+
 /** How a column of a CSV file is turned into its type (backend `Reading`). */
 export type Reading =
   | { kind: "text" }
@@ -101,6 +128,8 @@ export type Operation =
   | { op: "remove"; column: string }
   | { op: "change_type"; column: string; new_type: string }
   | { op: "convert"; column: string; to: Reading; on_error: string | null; keep_original: boolean }
+  | { op: "column_transform"; column: string; func: ColumnFn; output: FnOutput }
+  | { op: "merge_columns"; columns: string[]; separator: string; name: string; keep_columns: boolean }
   | { op: "conversion_errors"; column: string; to: Reading; keep: boolean }
   | { op: "duplicate"; column: string }
   | { op: "drop_duplicates"; columns: string[]; keep: Keep }
@@ -572,6 +601,8 @@ export const api = {
   sourceColumns: (id: number) => call<SourceColumn[]>("source_columns", { id }),
   previewConversion: (id: number, column: string, to: Reading, n?: number) =>
     call<{ before: Cell; after: Cell; failed: boolean }[]>("preview_conversion", { id, column, to, n }),
+  previewColumnFn: (id: number, column: string, func: ColumnFn, values: Cell[]) =>
+    call<[Cell, Cell][]>("preview_column_fn", { id, column, func, values }),
   suggestReading: (id: number, column: string) => call<Reading>("suggest_reading", { id, column }),
   conversionErrorCount: (id: number, column: string, to: Reading, full: boolean) =>
     call<{ errors: number; checked: number; complete: boolean }>("conversion_error_count", { id, column, to, full }),

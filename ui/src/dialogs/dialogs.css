@@ -240,3 +240,6 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-convert-preview td { font-variant-numeric: tabular-nums; }
 .pv-convert-failed td:last-child, .pv-convert-warn { color: var(--md-error); }
 .pv-convert-count { justify-content: space-between; min-height: 32px; }
+
+/* Column functions */
+.pv-fn-output label { white-space: nowrap; }

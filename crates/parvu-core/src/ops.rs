@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::clean::{BinMethod, Combine, Condition, FillMethod, SliceMode, SortKey};
+use crate::colfn::{ColumnFn, Output};
 use crate::error::{CoreError, Result};
 use crate::page::{Cell, ColumnMeta};
 use crate::reshape::{AggFunc, Aggregation};
@@ -93,6 +94,25 @@ pub enum Operation {
     /// as `to` (Power Query's Keep Errors / Remove Errors). Empty cells are
     /// not errors.
     ConversionErrors { column: String, to: Reading, keep: bool },
+    /// A function of one column (trim, change case, extract text, invert a
+    /// yes/no…), in place or into a new column right after it.
+    ColumnTransform {
+        column: String,
+        func: ColumnFn,
+        #[serde(default)]
+        output: Output,
+    },
+    /// Join the text of several columns with `separator` into the new
+    /// column `name`, right after the first of them; empty cells are skipped.
+    MergeColumns {
+        columns: Vec<String>,
+        #[serde(default)]
+        separator: String,
+        name: String,
+        /// Keep the merged columns (otherwise they are removed).
+        #[serde(default = "yes")]
+        keep_columns: bool,
+    },
     /// Add a copy of a column.
     Duplicate { column: String },
     /// Remove duplicate rows, comparing the given columns (pandas `drop_duplicates`).
@@ -242,6 +262,10 @@ pub fn with_row_number(query: &str) -> String {
 }
 
 /// `wanted`, or `wanted_2`, `wanted_3`… if it is already taken.
+fn yes() -> bool {
+    true
+}
+
 pub fn unique_name(taken: &[String], wanted: &str) -> String {
     let wanted = if wanted.is_empty() { "column" } else { wanted };
     if !taken.iter().any(|t| t == wanted) {
@@ -410,6 +434,71 @@ impl Operation {
                 let cond = if *keep { failed } else { format!("NOT {failed}") };
                 let key = if *keep { "step.keep_conversion_errors" } else { "step.remove_conversion_errors" };
                 (format!("SELECT * FROM ({cur}) WHERE {cond}"), StepLabel::new(key, &[("column", column), ("type", to.dtype())]))
+            }
+            Operation::ColumnTransform { column, func, output } => {
+                let meta = ctx.column(column)?;
+                let expr = func.expr(column, &meta.dtype)?;
+                // A bad pattern would only fail on the first page that needs
+                // it (neither validation nor the row count evaluates it).
+                if let ColumnFn::RegexExtract { pattern, group } = func {
+                    (ctx.query)(&format!("SELECT regexp_extract('', {}, {group})", quote_literal(pattern)))
+                        .map_err(|e| CoreError::invalid(format!("Invalid pattern: {e}")))?;
+                }
+                let label = StepLabel::new(func.key(), &[("column", column)]);
+                match output {
+                    Output::InPlace => (
+                        ctx.select_each(|c| if c == column { format!("{expr} AS {}", q(c)) } else { q(c) }),
+                        label,
+                    ),
+                    Output::New { name } => {
+                        let taken: Vec<String> = ctx.columns.iter().map(|c| c.name.clone()).collect();
+                        let wanted = if name.trim().is_empty() { format!("{column}_{}", func.suffix()) } else { name.trim().to_string() };
+                        let new = unique_name(&taken, &wanted);
+                        let items: Vec<String> = ctx
+                            .columns
+                            .iter()
+                            .flat_map(|c| {
+                                if c.name == *column { vec![q(&c.name), format!("{expr} AS {}", q(&new))] } else { vec![q(&c.name)] }
+                            })
+                            .collect();
+                        (format!("SELECT {} FROM ({cur})", items.join(", ")), label)
+                    }
+                }
+            }
+            Operation::MergeColumns { columns, separator, name, keep_columns } => {
+                if columns.len() < 2 {
+                    return Err(CoreError::invalid("Choose at least two columns to merge"));
+                }
+                for c in columns {
+                    ctx.require(c)?;
+                }
+                let name = name.trim();
+                if name.is_empty() {
+                    return Err(CoreError::invalid("Enter a name for the merged column"));
+                }
+                let taken: Vec<String> = ctx
+                    .columns
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .filter(|c| *keep_columns || !columns.contains(c))
+                    .collect();
+                let new = unique_name(&taken, name);
+                let parts: Vec<String> = columns.iter().map(|c| format!("CAST({} AS VARCHAR)", q(c))).collect();
+                let expr = format!("concat_ws({}, {}) AS {}", quote_literal(separator), parts.join(", "), q(&new));
+                let mut items = Vec::new();
+                for c in ctx.columns {
+                    let merged = columns.contains(&c.name);
+                    if !merged || *keep_columns {
+                        items.push(q(&c.name));
+                    }
+                    if c.name == columns[0] {
+                        items.push(expr.clone());
+                    }
+                }
+                (
+                    format!("SELECT {} FROM ({cur})", items.join(", ")),
+                    StepLabel::new("step.merge_columns", &[("columns", &columns.join(", ")), ("name", &new)]),
+                )
             }
             Operation::ChangeType { column, new_type } => {
                 ctx.require(column)?;
