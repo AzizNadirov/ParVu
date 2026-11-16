@@ -68,12 +68,13 @@ impl AppState {
         if let Some(ws) = map.get(label) {
             return Ok(ws.clone());
         }
-        let (page_size, memory_mb, temp) = {
+        let (page_size, memory_mb, temp, detect) = {
             let cfg = lock(&self.config);
             let s = cfg.settings.settings();
-            (s.rows_per_page(), s.query_memory_limit_mb, parvu_config::paths::user_cache_dir().join("duckdb"))
+            (s.rows_per_page(), s.query_memory_limit_mb, parvu_config::paths::user_cache_dir().join("duckdb"), detect_options(s))
         };
-        let ws = Workspace::new(page_size, Some(&temp)).map_err(ApiError::from)?;
+        let mut ws = Workspace::new(page_size, Some(&temp)).map_err(ApiError::from)?;
+        ws.set_detect_options(detect);
         // The PARVU_MEMORY_LIMIT_MB environment variable, if set, wins.
         if std::env::var_os("PARVU_MEMORY_LIMIT_MB").is_none() {
             ws.set_memory_limit_mb(memory_mb.max(0) as u64).map_err(ApiError::from)?;
@@ -89,5 +90,14 @@ impl AppState {
 
     pub fn next_job_id(&self) -> u64 {
         self.next_job.fetch_add(1, Ordering::Relaxed)
+    }
+}
+
+/// How files are typed when they open, from the settings.
+pub fn detect_options(s: &parvu_config::Settings) -> parvu_core::types::DetectOptions {
+    use parvu_core::types::{DateOrder, DetectOptions};
+    DetectOptions {
+        enabled: s.detect_column_types,
+        date_order: if s.date_order.day_first(&s.current_language) { DateOrder::DayFirst } else { DateOrder::MonthFirst },
     }
 }

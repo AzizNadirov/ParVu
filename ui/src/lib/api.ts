@@ -23,6 +23,31 @@ export type TypeFamily =
   | "binary"
   | "other";
 
+/** How a column of a CSV file is turned into its type (backend `Reading`). */
+export type Reading =
+  | { kind: "text" }
+  | { kind: "integer" }
+  | { kind: "number" }
+  | { kind: "locale_number"; thousands: string; decimal: string }
+  | { kind: "boolean" }
+  | { kind: "date" }
+  | { kind: "date_format"; format: string }
+  | { kind: "timestamp" }
+  | { kind: "timestamp_format"; format: string }
+  | { kind: "time" }
+  | { kind: "json" }
+  | { kind: "cast"; dtype: string };
+
+/** A column of a CSV file and how it is read. */
+export interface SourceColumn {
+  name: string;
+  reading: Reading;
+  /** Read by DuckDB's own typed reader. */
+  native: boolean;
+  /** Day and month order was a guess (e.g. 03/04/2024). */
+  ambiguous: boolean;
+}
+
 export interface ColumnMeta {
   name: string;
   dtype: string;
@@ -343,6 +368,8 @@ export interface Settings {
   bug_report_email: string;
   enable_crash_reporting: boolean;
   mcp_allow_clients: boolean;
+  detect_column_types: boolean;
+  date_order: "auto" | "day_first" | "month_first";
   [key: string]: unknown;
 }
 
@@ -539,6 +566,9 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 }
 
 export const api = {
+  sourceColumns: (id: number) => call<SourceColumn[]>("source_columns", { id }),
+  setSourceReading: (id: number, column: string, reading: Reading) =>
+    call<TabSummary>("set_source_reading", { id, column, reading }),
   bootstrap: () => call<Bootstrap>("bootstrap"),
   updateSettings: (values: Partial<Settings>) => call<Settings>("update_settings", { values }),
   resetSettings: () => call<Settings>("reset_settings"),

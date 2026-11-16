@@ -27,8 +27,9 @@ fn write_messy(path: &Path) {
             yn = if i % 2 == 0 { "yes" } else { "No" },
             // Always above 12 somewhere in the sample, so day-first is certain.
             d13 = i % 28 + 1,
-            // Never above 12: day and month order are ambiguous.
-            amb_d = i % 12 + 1,
+            // Never above 12, and not equal to the month: both orders read
+            // every value, and give different dates.
+            amb_d = (i + 3) % 12 + 1,
             min = i % 60,
             h = i % 24,
         )
@@ -225,4 +226,39 @@ fn open_speed() {
     let _: i64 = c.query_row("SELECT count(*) FROM (SELECT * FROM v ORDER BY amount DESC)", [], |r| r.get(0)).unwrap();
     c.execute_batch("SELECT * FROM v ORDER BY amount DESC LIMIT 100").unwrap();
     println!("{:10} {n} rows / {size} MB: open {open:?}, sort + first page {:?}", "duckdb", t.elapsed());
+}
+
+#[test]
+fn a_column_can_be_read_another_way_and_undone() {
+    let (_d, mut ws, id) = open(DetectOptions::default());
+    // Row 1 is "04/01/2024": 4 January day first, 1 April month first.
+    assert_eq!(first(&ws, id, "amb").as_deref(), Some("2024-01-04"));
+    ws.set_source_reading(id, "amb", Reading::DateFormat { format: "%m/%d/%Y".into() }).unwrap();
+    assert_eq!(first(&ws, id, "amb").as_deref(), Some("2024-04-01"));
+    let amb = ws.source_columns(id).unwrap().iter().find(|c| c.name == "amb").unwrap().clone();
+    assert!(!amb.ambiguous && !amb.native);
+    assert!(ws.summary(id).unwrap().is_base_query, "no transform: cells stay editable");
+    ws.edit_cell(id, 0, "note", Some("edited".into())).unwrap();
+
+    ws.undo(id).unwrap(); // the cell edit
+    ws.undo(id).unwrap(); // the reading
+    assert_eq!(first(&ws, id, "amb").as_deref(), Some("2024-01-04"));
+    let amb = ws.source_columns(id).unwrap().iter().find(|c| c.name == "amb").unwrap().clone();
+    assert_eq!(amb.reading, Reading::DateFormat { format: "%d/%m/%Y".into() });
+    assert!(amb.ambiguous, "undo restores the detected reading as it was");
+
+    // Text where a later step multiplies the column: refused, nothing changes.
+    ws.apply(id, &Operation::AddColumn { name: "double".into(), expression: "\"messy\".\"qty\" * 2".into() }).unwrap();
+    assert!(ws.set_source_reading(id, "qty", Reading::Text).is_err());
+    assert_eq!(dtypes(&ws, id)[1], ("qty".to_string(), "BIGINT".to_string()));
+    assert!(ws.page(id, 1).is_ok());
+}
+
+#[test]
+fn readings_chosen_before_apply_without_a_step() {
+    let (_d, mut ws, id) = open(DetectOptions::default());
+    ws.apply_source_readings(id, &[("zip".into(), Reading::Integer), ("missing".into(), Reading::Text)]).unwrap();
+    assert_eq!(dtypes(&ws, id)[0], ("zip".to_string(), "BIGINT".to_string()));
+    assert!(ws.summary(id).unwrap().is_base_query);
+    assert!(!ws.has_unsaved_changes(id).unwrap());
 }

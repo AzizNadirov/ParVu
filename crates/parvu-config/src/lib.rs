@@ -22,5 +22,5 @@ pub use error::{ConfigError, Result};
 pub use i18n::{FmtArg, I18n, Language};
 pub use paths::AppPaths;
 pub use recents::{RecentsData, RecentsManager};
-pub use settings::{DefaultsSource, IntOrString, Settings, SettingsManager, WarningCriteria};
+pub use settings::{DateOrderSetting, DefaultsSource, IntOrString, Settings, SettingsManager, WarningCriteria};
 pub use themes::{ColorScheme, LayoutConfig, Theme, ThemeManager, theme_css_variables};

@@ -35,6 +35,10 @@ sales[total] = sales[qty] * sales[price]
 
 Every query and operation is listed under **Applied Steps**. `Ctrl+Z` undoes the last one, and **Reset Query** returns to the original file.
 
+## Column types
+
+Each column header shows an icon for its type: numbers, text, yes/no, dates, times, JSON. For CSV files, right-click a header and choose **Read as** to read the column another way, for example a number written `1.234,56`, or a date written `31.12.2024`. A calendar icon with a question mark means the day and month order was a guess; **Read dates day first / month first** in the same menu flips it. ParVu remembers your choice for that file. **Settings → Column types** sets the default date order.
+
 ## Analyse without SQL
 
 - **Data** menu: filter rows by conditions (`Ctrl+Shift+L`), fill missing values, sort by several columns, choose and reorder columns, keep first/last/random rows, split a column, bin values.

@@ -21,10 +21,13 @@ import {
   type ProvidersInfo,
   type Operation,
   type Page,
+  type Reading,
   type Settings,
+  type SourceColumn,
   type TabSummary,
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
+import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
 import { applyThemeCss } from "./lib/theme";
 import { UiContext, type Closer, type MessageButton, type Ui } from "./lib/ui";
 import { formatRows, pythonTuple } from "./lib/copy";
@@ -164,6 +167,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [editorText, setEditorText] = useState("");
   const [mode, setMode] = useState<EditorMode>("sql");
   const [page, setPage] = useState<Page | null>(null);
+  // How each column of the active tab's CSV file is read ("Read as").
+  const [sourceCols, setSourceCols] = useState<SourceColumn[]>([]);
   const [busy, setBusy] = useState(false);
   const [statusText, setStatusText] = useState(t("status.ready"));
   const statusTimer = useRef<number | undefined>(undefined);
@@ -184,6 +189,23 @@ export function App({ boot }: { boot: Bootstrap }) {
   const pageRequest = useRef(0);
 
   const activeTab = tabs.find((x) => x.id === active) ?? null;
+  const sourceKey = activeTab ? `${activeTab.id}:${activeTab.path}:${activeTab.steps.length}` : "";
+  useEffect(() => {
+    if (!activeTab || activeTab.format !== "csv") {
+      setSourceCols([]);
+      return;
+    }
+    let live = true;
+    api
+      .sourceColumns(activeTab.id)
+      .then((cols) => live && setSourceCols(cols))
+      .catch(() => live && setSourceCols([]));
+    return () => {
+      live = false;
+    };
+    // sourceKey covers the tab, its file and its steps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceKey]);
   const allMethods = useMemo(() => [...new Set(Object.values(boot.methods).flat())].sort(), [boot.methods]);
 
   // ------------------------------------------------------------ ui helpers
@@ -592,9 +614,38 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const columnNames = page?.columns.map((c) => c.name) ?? [];
 
+  const readAsMenu = (column: string): MenuEntry[] => {
+    const src = sourceCols.find((c) => c.name === column);
+    if (!src || !activeTab) return [];
+    const id = activeTab.id;
+    const read = (reading: Reading) => void mutate(id, () => api.setSourceReading(id, column, reading), t("error.operation_failed"));
+    const entries: MenuEntry[] = [];
+    const r = src.reading;
+    if (r.kind === "date_format" || r.kind === "timestamp_format") {
+      // Dates such as 03/04/2024: flip day and month in one click.
+      const other = swapDayMonth(r.format);
+      if (other !== r.format)
+        entries.push({
+          label: t(dayFirst(r.format) ? "types.month_first" : "types.day_first"),
+          onSelect: () => read({ ...r, format: other }),
+        });
+    }
+    entries.push({
+      label: t("types.read_as"),
+      submenu: readAsChoices().map((c) => ({
+        label: t(c.key, c.args),
+        checked: sameReading(c.reading, r),
+        onSelect: () => read(c.reading),
+      })),
+    });
+    entries.push({ type: "separator" });
+    return entries;
+  };
+
   const headerMenu = (column: string): MenuEntry[] => [
     { label: t("context.copy_column"), onSelect: () => void copyText(column, t("status.copied_name")) },
     { type: "separator" },
+    ...readAsMenu(column),
     {
       label: t("context.change_type"),
       submenu: [
@@ -1469,6 +1520,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                 onResize={(c, w) => activeTab && updateView(activeTab.id, { widths: { ...(st?.widths ?? {}), [c]: w } })}
                 formats={st?.formats ?? NO_FORMATS}
                 ranges={st?.ranges ?? NO_RANGES}
+                sourceColumns={sourceCols}
               />
               {busy && <div className="busy-bar" />}
             </section>
