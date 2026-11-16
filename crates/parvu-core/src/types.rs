@@ -232,6 +232,59 @@ fn word_list(words: &[&str]) -> String {
     words.iter().map(|w| quote_literal(w)).collect::<Vec<_>>().join(", ")
 }
 
+/// How to read a CSV file ("Open with options"); `None` lets DuckDB detect it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CsvOptions {
+    /// Field separator, e.g. `;` or `\t`.
+    #[serde(default)]
+    pub delimiter: Option<String>,
+    /// Whether the first (non-skipped) line holds the column names.
+    #[serde(default)]
+    pub header: Option<bool>,
+    /// Lines to skip at the start (titles above the table).
+    #[serde(default)]
+    pub skip: Option<u32>,
+    /// `.` or `,`.
+    #[serde(default)]
+    pub decimal_separator: Option<String>,
+    /// `utf-8`, `utf-16` or `latin-1`.
+    #[serde(default)]
+    pub encoding: Option<String>,
+}
+
+impl CsvOptions {
+    /// Extra `read_csv` parameters (`, delim = ';', …`), checked.
+    pub fn params(&self) -> Result<String> {
+        let mut out = String::new();
+        if let Some(d) = &self.delimiter {
+            let d = if d == "\\t" { "\t" } else { d.as_str() };
+            if d.is_empty() || d.chars().count() > 4 {
+                return Err(crate::error::CoreError::invalid("A delimiter is 1 to 4 characters"));
+            }
+            out.push_str(&format!(", delim = {}", quote_literal(d)));
+        }
+        if let Some(h) = self.header {
+            out.push_str(&format!(", header = {h}"));
+        }
+        if let Some(n) = self.skip {
+            out.push_str(&format!(", skip = {n}"));
+        }
+        if let Some(sep) = &self.decimal_separator {
+            if sep != "." && sep != "," {
+                return Err(crate::error::CoreError::invalid("The decimal separator is . or ,"));
+            }
+            out.push_str(&format!(", decimal_separator = {}", quote_literal(sep)));
+        }
+        if let Some(enc) = &self.encoding {
+            if !["utf-8", "utf-16", "latin-1"].contains(&enc.as_str()) {
+                return Err(crate::error::CoreError::invalid("Encoding: utf-8, utf-16 or latin-1"));
+            }
+            out.push_str(&format!(", encoding = {}", quote_literal(enc)));
+        }
+        Ok(out)
+    }
+}
+
 /// A column of a file and how it is read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -248,7 +301,8 @@ pub struct SourceColumn {
 
 /// `SELECT` reading the CSV file at `path`: native columns as DuckDB types
 /// them, the others as text converted by their reading.
-pub fn csv_select(path: &str, columns: &[SourceColumn]) -> String {
+pub fn csv_select(path: &str, columns: &[SourceColumn], csv: &CsvOptions) -> Result<String> {
+    let extra = csv.params()?;
     let text: Vec<String> =
         columns.iter().filter(|c| !c.native).map(|c| format!("{}: 'VARCHAR'", quote_literal(&c.name))).collect();
     let items: Vec<String> = columns
@@ -260,11 +314,11 @@ pub fn csv_select(path: &str, columns: &[SourceColumn]) -> String {
         .collect();
     let p = quote_literal(path);
     let reader = if text.is_empty() {
-        format!("read_csv({p})")
+        format!("read_csv({p}{extra})")
     } else {
-        format!("read_csv({p}, types = {{{}}})", text.join(", "))
+        format!("read_csv({p}, types = {{{}}}{extra})", text.join(", "))
     };
-    format!("SELECT {} FROM {reader}", items.join(", "))
+    Ok(format!("SELECT {} FROM {reader}", items.join(", ")))
 }
 
 /// The column a failed query names when DuckDB couldn't parse one of the
@@ -329,9 +383,10 @@ const DATE_FORMATS: &[&str] = &[
 const TIME_SUFFIXES: &[&str] = &[" %H:%M:%S", " %H:%M"];
 
 /// Decide how to read each column of the CSV file at `path`.
-pub fn detect(conn: &Connection, path: &str, options: DetectOptions) -> Result<Vec<SourceColumn>> {
+pub fn detect(conn: &Connection, path: &str, options: DetectOptions, csv: &CsvOptions) -> Result<Vec<SourceColumn>> {
     let p = quote_literal(path);
-    let duck = describe(conn, &format!("SELECT * FROM read_csv({p})"))?;
+    let extra = csv.params()?;
+    let duck = describe(conn, &format!("SELECT * FROM read_csv({p}{extra})"))?;
     if !options.enabled {
         return Ok(duck
             .into_iter()
@@ -339,7 +394,7 @@ pub fn detect(conn: &Connection, path: &str, options: DetectOptions) -> Result<V
             .collect());
     }
     conn.execute_batch(&format!(
-        "CREATE OR REPLACE TEMP TABLE {SAMPLE_TABLE} AS SELECT * FROM read_csv({p}, all_varchar = true) LIMIT {SAMPLE_ROWS}"
+        "CREATE OR REPLACE TEMP TABLE {SAMPLE_TABLE} AS SELECT * FROM read_csv({p}, all_varchar = true{extra}) LIMIT {SAMPLE_ROWS}"
     ))?;
     let result = (|| {
         let names: Vec<String> = describe(conn, &format!("SELECT * FROM {SAMPLE_TABLE}"))?.into_iter().map(|(n, _)| n).collect();

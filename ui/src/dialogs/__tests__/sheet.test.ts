@@ -186,3 +186,23 @@ describe("convert", () => {
     expect(conversionSummary({ errors: 12, checked: 2500000, complete: true })?.key).toBe("dialog.convert.errors_all");
   });
 });
+
+describe("open with options", () => {
+  it("turns the form into parsing options", async () => {
+    const { csvOptionsFrom, delimiterLabel } = await import("../logic");
+    const base = { delimiter: "auto", custom: "", header: "auto" as const, skip: "", decimal: "auto", encoding: "auto" };
+    expect(csvOptionsFrom(base)).toEqual({ delimiter: null, header: null, skip: null, decimal_separator: null, encoding: null });
+    expect(csvOptionsFrom({ ...base, delimiter: "custom", custom: "::", header: "no", skip: "3", encoding: "latin-1" })).toEqual({
+      delimiter: "::",
+      header: false,
+      skip: 3,
+      decimal_separator: null,
+      encoding: "latin-1",
+    });
+    expect(csvOptionsFrom({ ...base, delimiter: "custom", custom: "" })).toBeNull();
+    expect(csvOptionsFrom({ ...base, skip: "-1" })).toBeNull();
+    const t = (k: string) => k;
+    expect(delimiterLabel(";", t)).toBe("open_options.delim.semicolon");
+    expect(delimiterLabel("::", t)).toBe("::");
+  });
+});

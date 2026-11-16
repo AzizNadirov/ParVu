@@ -1,6 +1,6 @@
 // Column functions of the type-aware column menu: which take parameters,
 // the fields of their dialog, and building the function from those fields.
-import type { Cell, ColumnFn, FnOutput, RelativeRange, Side, TimeUnitName, TypeFamily } from "./api";
+import type { Cell, ColumnFn, FnOutput, MatchHow, RelativeRange, Side, TimeUnitName, TypeFamily } from "./api";
 
 export type FnName = ColumnFn["fn"];
 
@@ -22,7 +22,7 @@ export function fnLabelKey(f: ColumnFn): string {
   return f.fn === "trim" && f.side !== "both" ? `fn.trim_${f.side}` : `fn.${f.fn}`;
 }
 
-export type FieldKind = "text" | "number" | "bool" | "side" | "unit" | "format";
+export type FieldKind = "text" | "number" | "bool" | "side" | "unit" | "format" | "how";
 
 export interface Field {
   key: string;
@@ -98,7 +98,17 @@ export const FN_DIALOGS: Partial<Record<FnName, { fields: Field[]; output: FnOut
     output: "new",
   },
   join_list: { fields: [{ key: "separator", kind: "text", initial: ", " }], output: "new" },
+  matches: {
+    fields: [
+      { key: "how", kind: "how", initial: "contains" },
+      { key: "find", kind: "text", initial: "" },
+      { key: "ignore_case", kind: "bool", initial: true },
+    ],
+    output: "new",
+  },
 };
+
+export const MATCH_HOWS: MatchHow[] = ["contains", "starts_with", "ends_with", "regex"];
 
 /** Units offered when adding time. */
 export const ADD_UNITS: TimeUnitName[] = ["day", "week", "month", "quarter", "year", "hour", "minute"];
@@ -124,7 +134,7 @@ export const DATE_FILTERS: { key: string; range: RelativeRange }[] = [
 ];
 
 /** Extract ▸ entries, in menu order. */
-export const EXTRACT_FNS: FnName[] = ["length", "first", "last", "range", "before", "after", "between", "regex_extract"];
+export const EXTRACT_FNS: FnName[] = ["length", "first", "last", "range", "before", "after", "between", "regex_extract", "matches"];
 
 export type FieldValues = Record<string, string | number | boolean>;
 
@@ -172,6 +182,8 @@ export function buildFn(name: FnName, v: FieldValues): ColumnFn | null {
       return str("path").startsWith("$") && !str("path").endsWith(".") ? { fn: "json_path", path: str("path"), text: !!v.as_text } : null;
     case "join_list":
       return { fn: "join_list", separator: str("separator") };
+    case "matches":
+      return { fn: "matches", text: str("find"), how: v.how as MatchHow, ignore_case: !!v.ignore_case };
     default:
       return null;
   }

@@ -16,6 +16,7 @@ import {
   type Cell,
   type ColumnFn,
   type ColumnMeta,
+  type CsvOptions,
   type DatePartName,
   type TimeUnitName,
   type AiRunEvent,
@@ -83,6 +84,7 @@ import {
   openDateDiff,
   openLastN,
   openExpandJson,
+  openOpenOptions,
   openTableInfo,
   openThemeSelector,
   openTranspose,
@@ -414,11 +416,11 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
 
   const openPath = useCallback(
-    async (path: string) => {
+    async (path: string, options?: CsvOptions) => {
       setBusy(true);
       status(t("status.loading"));
       try {
-        const s = await api.openFile(path);
+        const s = await api.openFile(path, options);
         tabUi.current.set(s.id, newTabUi(s.name));
         upsertTab(s);
         switchTo(s.id);
@@ -453,6 +455,22 @@ export function App({ boot }: { boot: Bootstrap }) {
     const list = Array.isArray(picked) ? picked : picked ? [picked] : [];
     for (const p of list) await openPath(p);
   }, [boot.extensions, openPath, t]);
+
+  /** File → Open with options: a CSV file with a delimiter, header, rows to skip… */
+  const browseWithOptions = useCallback(async () => {
+    const picked = await openDialog({
+      multiple: false,
+      title: t("open_options.title"),
+      filters: [
+        { name: "CSV", extensions: ["csv", "tsv", "txt"] },
+        { name: "All files", extensions: ["*"] },
+      ],
+    });
+    const path = Array.isArray(picked) ? picked[0] : picked;
+    if (!path) return;
+    const options = await openOpenOptions(ui, path);
+    if (options) await openPath(path, options);
+  }, [openPath, t, ui]);
 
   // ------------------------------------------------------------ actions
   const withTab = <T,>(fn: (tab: TabSummary) => T): T | undefined => (activeTab ? fn(activeTab) : undefined);
@@ -776,6 +794,14 @@ export function App({ boot }: { boot: Bootstrap }) {
               label: `${t(`fn.${n}`)}…`,
               onSelect: () => void runColumnFn(column, n),
             })),
+            { type: "separator" as const },
+            {
+              label: `${t("split_rows.title")}…`,
+              onSelect: async () => {
+                const d = await ui.prompt(t("split_rows.title"), t("split_rows.prompt"), ",");
+                if (d) await applyOp({ op: "split_to_rows", column, delimiter: d, trim: true });
+              },
+            },
           ],
         },
         {
@@ -1285,6 +1311,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.file.new_window"), shortcut: "Ctrl+N", onSelect: () => void api.newWindow() },
         { type: "separator" },
         { label: t("menu.file.open"), shortcut: "Ctrl+O", onSelect: () => void browse() },
+        { label: t("menu.file.open_options"), onSelect: () => void browseWithOptions() },
         {
           label: t("menu.file.recent_files"),
           submenu: recents.length

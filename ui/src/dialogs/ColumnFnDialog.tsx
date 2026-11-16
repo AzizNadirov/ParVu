@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import type { Cell, Operation, Side } from "../lib/api";
 import { Dialog } from "../components/Dialog";
 import { RichText, SubmitOnEnter, useDebounced } from "./common";
-import { ADD_UNITS, buildFn, DATE_FORMATS, FN_DIALOGS, initialValues, type FieldValues, type FnName } from "../lib/colfn";
+import { ADD_UNITS, buildFn, DATE_FORMATS, FN_DIALOGS, initialValues, MATCH_HOWS, type FieldValues, type FnName } from "../lib/colfn";
 import "./dialogs.css";
 
 interface Args {
@@ -96,6 +96,15 @@ function ColumnFnDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nu
                 <input type="checkbox" checked={!!values[f.key]} onChange={(e) => set(f.key, e.target.checked)} />
                 {t(`fn.field.${f.key}`)}
               </>
+            )}
+            {f.kind === "how" && (
+              <select className="grow" value={String(values[f.key])} onChange={(e) => set(f.key, e.target.value)}>
+                {MATCH_HOWS.map((h) => (
+                  <option key={h} value={h}>
+                    {t(`fn.how.${h}`)}
+                  </option>
+                ))}
+              </select>
             )}
             {f.kind === "unit" && (
               <select className="grow" value={String(values[f.key])} onChange={(e) => set(f.key, e.target.value)}>

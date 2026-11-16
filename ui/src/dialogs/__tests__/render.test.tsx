@@ -36,6 +36,12 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
         { before: "1.234,5", after: "1234.5", failed: false },
         { before: "n/a", after: null, failed: true },
       ];
+    case "preview_csv":
+      return {
+        columns: [{ name: "region", dtype: "VARCHAR" }, { name: "amount", dtype: "DOUBLE" }],
+        rows: [["North", "2.5"]],
+        detected: { delimiter: ";", header: true, skip: 2, decimal_separator: null, encoding: null },
+      };
     case "json_keys":
       return (_args as { full: boolean }).full
         ? [{ name: "user", dtype: "VARCHAR" }, { name: "age", dtype: "BIGINT" }, { name: "rare", dtype: "VARCHAR" }]
@@ -522,6 +528,24 @@ describe("column functions", () => {
       ],
       keep_original: false,
     });
+  });
+
+  it("open with options previews and returns the options", async () => {
+    const ui = makeUi();
+    const p = D.openOpenOptions(ui, "/data/report.csv");
+    await act(async () => new Promise((r) => setTimeout(r, 350)));
+    expect(invoke).toHaveBeenCalledWith("preview_csv", {
+      path: "/data/report.csv",
+      options: { delimiter: null, header: null, skip: null, decimal_separator: null, encoding: null },
+    });
+    expect(document.querySelector(".pv-convert-preview td")?.textContent).toBe("North");
+    const selects = screen.getAllByRole("combobox");
+    fireEvent.change(selects[0], { target: { value: ";" } });
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "2" } });
+    fireEvent.change(selects[2], { target: { value: "," } });
+    await act(async () => new Promise((r) => setTimeout(r, 350)));
+    fireEvent.click(screen.getByText("open_options.open"));
+    await expect(p).resolves.toEqual({ delimiter: ";", header: null, skip: 2, decimal_separator: ",", encoding: null });
   });
 
   it("merging needs two columns", async () => {

@@ -117,6 +117,15 @@ pub enum Operation {
     /// One row per item of a list or JSON array column; rows with an empty
     /// or missing list are kept, with an empty cell.
     ToRows { column: String },
+    /// One row per piece of `column` split by `delimiter` ("a, b" → two
+    /// rows); empty cells stay one row.
+    SplitToRows {
+        column: String,
+        delimiter: String,
+        /// Remove spaces around each piece.
+        #[serde(default)]
+        trim: bool,
+    },
     /// Whole `unit`s from `start` to `end` (two date columns), into the new
     /// column `name` right after `end`.
     DateDiff { start: String, end: String, unit: TimeUnit, name: String },
@@ -465,6 +474,10 @@ impl Operation {
                     (ctx.query)(&format!("SELECT regexp_extract('', {}, {group})", quote_literal(pattern)))
                         .map_err(|e| CoreError::invalid(format!("Invalid pattern: {e}")))?;
                 }
+                if let ColumnFn::Matches { text, how: crate::colfn::MatchHow::Regex, .. } = func {
+                    (ctx.query)(&format!("SELECT regexp_matches('', {})", quote_literal(text)))
+                        .map_err(|e| CoreError::invalid(format!("Invalid pattern: {e}")))?;
+                }
                 if let ColumnFn::JsonPath { path, .. } = func {
                     (ctx.query)(&format!("SELECT json_extract('{{}}', {})", quote_literal(path)))
                         .map_err(|e| CoreError::invalid(format!("Invalid JSON path: {e}")))?;
@@ -576,6 +589,24 @@ impl Operation {
                     }
                 });
                 (items, StepLabel::new("step.to_rows", &[("column", column)]))
+            }
+            Operation::SplitToRows { column, delimiter, trim } => {
+                ctx.require(column)?;
+                if delimiter.is_empty() {
+                    return Err(CoreError::invalid("Enter a delimiter"));
+                }
+                let c = q(column);
+                let parts = format!("string_split(CAST({c} AS VARCHAR), {})", quote_literal(delimiter));
+                let piece = if *trim { "trim(p)" } else { "p" };
+                let list = format!("list_transform({parts}, lambda p: {piece})");
+                let items = ctx.select_each(|n| {
+                    if n == column {
+                        format!("unnest(CASE WHEN {c} IS NULL THEN [NULL] ELSE {list} END) AS {c}")
+                    } else {
+                        q(n)
+                    }
+                });
+                (items, StepLabel::new("step.split_to_rows", &[("column", column), ("delimiter", delimiter)]))
             }
             Operation::DateDiff { start, end, unit, name } => {
                 for c in [start, end] {
