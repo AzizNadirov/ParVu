@@ -12,7 +12,7 @@ How to find your way around ParVu and change it safely.
 - **User data:** `~/.ParVu` (settings, recent files, themes, logs), same format as the old Python app
 - **Entry point:** `crates/parvu-app/src/main.rs` (the window), or `parvu mcp` (`src/mcp.rs`, an MCP server without a window)
 
-The app was rewritten from Python/PyQt6; the plan and its status are in `plans/RUST_REWRITE_PLAN.md`. `plans/AI_PLAN.md` is the plan for AI: the MCP server and its read-only data layer are done, the built-in assistant is not started.
+The app was rewritten from Python/PyQt6; the plan and its status are in `plans/RUST_REWRITE_PLAN.md`. `plans/AI_PLAN.md` is the plan for AI. Done: the MCP server (`parvu mcp`, attached mode for the running window), its read-only data layer, and the built-in assistant panel. See `docs/AI.md` and `docs/MCP.md`.
 
 ## Layout
 
