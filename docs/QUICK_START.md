@@ -82,13 +82,13 @@ Press `Ctrl+/` for the full list.
 
 ## Use it from an AI client
 
-`parvu mcp` lets Claude Code, Claude Desktop or VS Code open and query your files with ParVu:
+**AI → Connect an AI client** lets Claude Desktop or Claude Code, with your own subscription, work with the tables in this window. Switch it on, then add ParVu to the client once:
 
 ```bash
-claude mcp add -s user parvu -- parvu mcp --allow-dir ~/Documents
+claude mcp add -s user parvu-app -- parvu mcp --attach
 ```
 
-See [MCP.md](MCP.md).
+The client can query freely. Every change it proposes appears as a card with a preview, and you apply or reject it. See [MCP.md](MCP.md).
 
 ## Problems
 

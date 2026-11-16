@@ -14,20 +14,32 @@
 //!
 //! stdout carries the protocol, so nothing else may print there; logs go to
 //! the usual log file.
+//!
+//! Attached mode (`parvu mcp --attach`): when the user allows AI clients in
+//! the app (AI → Connect an AI client), the app listens on 127.0.0.1 with a
+//! random token written to `~/.ParVu/run/mcp.json`. `parvu mcp --attach` is a
+//! stdio bridge to that listener, so clients see the user's open tabs.
+//! Changes there go through an approval card in the window ([`AttachHost`]).
 
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use parvu_core::Workspace;
 use parvu_core::export::{ExportFormat, ExportOptions};
-use parvu_core::ops::Operation;
+use parvu_core::ops::{Operation, StepLabel};
 use parvu_core::page::{Cell, ColumnMeta};
 use parvu_core::readonly::{QueryRows, ReadSession, SampleRows};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
+use rmcp::model::{CallToolResult, ContentBlock, Implementation, RequestMetaObject, ServerCapabilities, ServerConfig};
+use rmcp::service::{Peer, RoleServer};
 use rmcp::{ErrorData, ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -37,11 +49,17 @@ const MAX_SAMPLE_ROWS: usize = 100;
 
 const USAGE: &str = "\
 Usage: parvu mcp [--allow-dir DIR]... [--allow-write] [FILE]...
+       parvu mcp --attach
 
 Runs ParVu as an MCP server on stdin/stdout for AI clients.
   --allow-dir DIR   folder the client may open files from (repeatable)
   --allow-write     allow the export tool to write files into those folders
-  FILE              files to open at start (always allowed)";
+  FILE              files to open at start (always allowed)
+  --attach          connect to the running ParVu window instead (AI → Connect
+                    an AI client must be switched on there)";
+
+/// How long an approval card waits for the user.
+pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Command-line options of `parvu mcp`.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -49,6 +67,7 @@ pub struct Options {
     pub allow_dirs: Vec<PathBuf>,
     pub allow_write: bool,
     pub files: Vec<PathBuf>,
+    pub attach: bool,
 }
 
 impl Options {
@@ -63,10 +82,14 @@ impl Options {
                     o.allow_dirs.push(expand_home(&dir));
                 }
                 "--allow-write" => o.allow_write = true,
+                "--attach" => o.attach = true,
                 "-h" | "--help" => return Err(USAGE.into()),
                 s if s.starts_with("--") => return Err(format!("Unknown option {s}\n\n{USAGE}")),
                 file => o.files.push(expand_home(file)),
             }
+        }
+        if o.attach && (o.allow_write || !o.allow_dirs.is_empty() || !o.files.is_empty()) {
+            return Err(format!("--attach takes no other options: the window decides what is open\n\n{USAGE}"));
         }
         Ok(o)
     }
@@ -95,6 +118,18 @@ pub fn run(args: Vec<String>) -> i32 {
             return 1;
         }
     };
+    if options.attach {
+        return runtime.block_on(async {
+            match bridge().await {
+                Ok(()) => 0,
+                Err(e) => {
+                    tracing::warn!("parvu mcp --attach: {e}");
+                    eprintln!("parvu mcp --attach: {e}");
+                    1
+                }
+            }
+        });
+    }
     runtime.block_on(async move {
         let server = match ParvuMcp::new(options) {
             Ok(s) => s,
@@ -118,12 +153,58 @@ pub fn run(args: Vec<String>) -> i32 {
     })
 }
 
-/// The server: one workspace for the whole session.
+/// The running app, as seen by an attached server: the focused window's
+/// workspace, approval cards and refreshes. Implemented in `mcp_attach.rs`.
+pub trait AttachHost: Send + Sync + 'static {
+    /// Label and workspace of the window the client works on.
+    fn workspace(&self) -> Result<(String, Arc<Mutex<Workspace>>), String>;
+    /// Show `proposal` in its window and wait for the user's answer.
+    fn propose(&self, proposal: Proposal) -> Pin<Box<dyn Future<Output = Decision> + Send>>;
+    /// A tab of `window` changed; the window reloads it.
+    fn changed(&self, window: &str, tab_id: u64);
+}
+
+/// A change an attached client asks for, shown as an approval card.
+#[derive(Debug, Clone, Serialize)]
+pub struct Proposal {
+    /// Set by the host.
+    pub id: u64,
+    pub window: String,
+    /// The client's name from its handshake ("claude-code", "Claude Desktop"…).
+    pub client: String,
+    pub tab_id: u64,
+    pub table: String,
+    /// "operation" or "undo".
+    pub kind: &'static str,
+    pub label: StepLabel,
+    pub rationale: Option<String>,
+    pub sql: Option<String>,
+    pub rows_before: u64,
+    pub rows_after: Option<u64>,
+    pub columns: Vec<ColumnMeta>,
+    pub rows: Vec<Vec<Cell>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Decision {
+    Approved,
+    Rejected,
+    TimedOut,
+}
+
+#[derive(Clone)]
+enum Source {
+    /// `parvu mcp`: its own workspace and folder rules.
+    Headless { ws: Arc<Mutex<Workspace>>, allow_dirs: Arc<Vec<PathBuf>>, allow_write: bool },
+    /// Inside the app: the user's window.
+    Attached(Arc<dyn AttachHost>),
+}
+
+/// The server. Headless it owns one workspace for the whole session;
+/// attached it works on the focused window of the running app.
 #[derive(Clone)]
 pub struct ParvuMcp {
-    ws: Arc<Mutex<Workspace>>,
-    allow_dirs: Arc<Vec<PathBuf>>,
-    allow_write: bool,
+    source: Source,
     tool_router: ToolRouter<Self>,
 }
 
@@ -187,6 +268,9 @@ pub struct ApplyArgs {
     pub table: String,
     /// The operation, e.g. {"op": "filter", "conditions": [{"column": "price", "op": "gt", "value": "10"}]}.
     pub operation: Operation,
+    /// One short sentence for the user saying why (shown when they are asked to approve).
+    #[serde(default)]
+    pub rationale: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -271,20 +355,51 @@ impl ParvuMcp {
             ws.open(f).map_err(|e| format!("{}: {e}", f.display()))?;
         }
         Ok(Self {
-            ws: Arc::new(Mutex::new(ws)),
-            allow_dirs: Arc::new(allow_dirs),
-            allow_write: options.allow_write,
+            source: Source::Headless {
+                ws: Arc::new(Mutex::new(ws)),
+                allow_dirs: Arc::new(allow_dirs),
+                allow_write: options.allow_write,
+            },
             tool_router: Self::tool_router(),
         })
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Workspace> {
-        self.ws.lock().unwrap_or_else(|p| p.into_inner())
+    /// A server working on the running app's windows. Opening and exporting
+    /// files stay with the user, so those tools are not offered.
+    pub fn attached(host: Arc<dyn AttachHost>) -> Self {
+        let mut tool_router = Self::tool_router();
+        tool_router.remove_route("open_file");
+        tool_router.remove_route("export");
+        Self { source: Source::Attached(host), tool_router }
+    }
+
+    fn is_attached(&self) -> bool {
+        matches!(self.source, Source::Attached(_))
+    }
+
+    fn workspace(&self) -> Result<Arc<Mutex<Workspace>>, String> {
+        match &self.source {
+            Source::Headless { ws, .. } => Ok(ws.clone()),
+            Source::Attached(host) => host.workspace().map(|(_, ws)| ws),
+        }
     }
 
     /// A read-only snapshot, taken under the lock and used without it.
-    fn session(&self) -> parvu_core::Result<ReadSession> {
-        self.lock().read_session()
+    fn session(&self) -> Result<ReadSession, String> {
+        let ws = self.workspace()?;
+        let guard = ws.lock().unwrap_or_else(|p| p.into_inner());
+        guard.read_session().map_err(|e| e.to_string())
+    }
+
+    fn allow_dirs(&self) -> &[PathBuf] {
+        match &self.source {
+            Source::Headless { allow_dirs, .. } => allow_dirs,
+            Source::Attached(_) => &[],
+        }
+    }
+
+    fn allow_write(&self) -> bool {
+        matches!(self.source, Source::Headless { allow_write: true, .. })
     }
 
     /// Run blocking DuckDB work off the async runtime.
@@ -296,11 +411,11 @@ impl ParvuMcp {
 
     /// `path` canonicalised, if it lies inside an allowed folder.
     fn allowed(&self, path: &Path) -> Result<PathBuf, String> {
-        if self.allow_dirs.is_empty() {
+        if self.allow_dirs().is_empty() {
             return Err("No folders are allowed. Start the server with --allow-dir <folder>.".into());
         }
         let canon = path.canonicalize().map_err(|e| format!("{}: {e}", path.display()))?;
-        if self.allow_dirs.iter().any(|d| canon.starts_with(d)) {
+        if self.allow_dirs().iter().any(|d| canon.starts_with(d)) {
             Ok(canon)
         } else {
             Err(format!("{} is outside the allowed folders: {}", path.display(), self.allowed_list()))
@@ -308,7 +423,7 @@ impl ParvuMcp {
     }
 
     fn allowed_list(&self) -> String {
-        self.allow_dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", ")
+        self.allow_dirs().iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", ")
     }
 
     fn tab_id(ws: &Workspace, table: &str) -> Result<u64, String> {
@@ -319,7 +434,18 @@ impl ParvuMcp {
     }
 
     fn instructions(&self) -> String {
-        let dirs = if self.allow_dirs.is_empty() { "none (opening files is disabled)".into() } else { self.allowed_list() };
+        if self.is_attached() {
+            return "You are connected to the user's running ParVu window. The tables are the tabs they have \
+                    open, including the filters and other steps they applied.\n\
+                    Inspect before answering: list_tables, describe_table, sample_rows, value_counts, column_stats.\n\
+                    query runs one DuckDB SELECT over the open tables by name; file functions such as read_csv \
+                    are refused. Quote identifiers with spaces in double quotes.\n\
+                    apply_operation and undo change the user's table only after they approve a card in ParVu, \
+                    so give a short rationale. If they reject it, don't retry the same change; ask them instead.\n\
+                    Files are opened and saved by the user in ParVu."
+                .into();
+        }
+        let dirs = if self.allow_dirs().is_empty() { "none (opening files is disabled)".into() } else { self.allowed_list() };
         format!(
             "ParVu opens Parquet, CSV, JSON and Excel files as tables and queries them with DuckDB.\n\
              Start with list_tables, or open_file for a file in the allowed folders ({dirs}).\n\
@@ -328,9 +454,170 @@ impl ParvuMcp {
              read_csv are refused. Quote identifiers with spaces in double quotes.\n\
              apply_operation changes a table for this session only (filters, group by, pivot, \
              new columns…); undo reverts it. Files on disk are never changed{}.",
-            if self.allow_write { ", except by export" } else { "" }
+            if self.allow_write() { ", except by export" } else { "" }
         )
     }
+}
+
+impl ParvuMcp {
+    fn apply_now(ws: &Mutex<Workspace>, id: u64, op: &Operation) -> Result<serde_json::Value, String> {
+        let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
+        let label = ws.apply(id, op).map_err(|e| e.to_string())?;
+        let s = ws.summary(id).map_err(|e| e.to_string())?;
+        let page = ws.page(id, 1).map_err(|e| e.to_string())?;
+        let first: Vec<_> = page.rows.into_iter().take(10).collect();
+        Ok(json!({
+            "table": s.name,
+            "step": { "step": label.key, "args": label.args },
+            "rows": s.total_rows,
+            "columns": columns_json(&page.columns),
+            "first_rows": first,
+        }))
+    }
+
+    fn undo_now(ws: &Mutex<Workspace>, id: u64) -> Result<serde_json::Value, String> {
+        let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
+        let label = ws.undo(id).map_err(|e| e.to_string())?;
+        let s = ws.summary(id).map_err(|e| e.to_string())?;
+        Ok(json!({ "table": s.name, "undone": { "step": label.key, "args": label.args }, "rows": s.total_rows }))
+    }
+}
+
+impl ParvuMcp {
+    async fn apply_impl(&self, args: ApplyArgs, client: String) -> Result<CallToolResult, ErrorData> {
+        let ro = try_tool!(self.session());
+        let table = args.table.clone();
+        let op = args.operation.clone();
+        try_tool!(Self::blocking(move || ro.check_operation(&table, &op).map_err(|e| e.to_string())).await);
+        if let Source::Attached(host) = &self.source {
+            let (window, ws) = try_tool!(host.workspace());
+            let (table, op, rationale) = (args.table.clone(), args.operation.clone(), args.rationale.clone());
+            let ws2 = ws.clone();
+            let proposal = try_tool!(
+                Self::blocking(move || {
+                    let ws = ws2.lock().unwrap_or_else(|p| p.into_inner());
+                    let id = Self::tab_id(&ws, &table)?;
+                    let p = ws.preview_op(id, &op, 20).map_err(|e| e.to_string())?;
+                    Ok(Proposal {
+                        id: 0,
+                        window,
+                        client,
+                        tab_id: id,
+                        table: ws.tab_name(id).map_err(|e| e.to_string())?.to_string(),
+                        kind: "operation",
+                        label: p.label,
+                        rationale,
+                        sql: Some(p.sql),
+                        rows_before: p.rows_before,
+                        rows_after: Some(p.rows_after),
+                        columns: p.columns,
+                        rows: p.rows,
+                    })
+                })
+                .await
+            );
+            let (window, tab_id) = (proposal.window.clone(), proposal.tab_id);
+            match host.propose(proposal).await {
+                Decision::Approved => {}
+                Decision::Rejected => return tool_error("The user rejected this change in ParVu. Ask them what they want instead of retrying it."),
+                Decision::TimedOut => return tool_error("The user did not answer the approval request in ParVu."),
+            }
+            let out = try_tool!(Self::blocking(move || Self::apply_now(&ws, tab_id, &args.operation)).await);
+            host.changed(&window, tab_id);
+            return ok(out);
+        }
+        let ws = try_tool!(self.workspace());
+        let out = try_tool!(
+            Self::blocking(move || {
+                let id = {
+                    let ws = ws.lock().unwrap_or_else(|p| p.into_inner());
+                    Self::tab_id(&ws, &args.table)?
+                };
+                Self::apply_now(&ws, id, &args.operation)
+            })
+            .await
+        );
+        ok(out)
+    }
+
+    async fn undo_impl(&self, args: TableArgs, client: String) -> Result<CallToolResult, ErrorData> {
+        let ws = try_tool!(self.workspace());
+        if let Source::Attached(host) = &self.source {
+            let (window, _) = try_tool!(host.workspace());
+            let ws2 = ws.clone();
+            let table = args.table.clone();
+            let proposal = try_tool!(
+                Self::blocking(move || {
+                    let ws = ws2.lock().unwrap_or_else(|p| p.into_inner());
+                    let id = Self::tab_id(&ws, &table)?;
+                    let s = ws.summary(id).map_err(|e| e.to_string())?;
+                    let label = s.steps.last().cloned().ok_or("There is nothing to undo on this table.")?;
+                    Ok(Proposal {
+                        id: 0,
+                        window,
+                        client,
+                        tab_id: id,
+                        table: s.name,
+                        kind: "undo",
+                        label,
+                        rationale: None,
+                        sql: None,
+                        rows_before: s.total_rows,
+                        rows_after: None,
+                        columns: Vec::new(),
+                        rows: Vec::new(),
+                    })
+                })
+                .await
+            );
+            let (window, tab_id) = (proposal.window.clone(), proposal.tab_id);
+            match host.propose(proposal).await {
+                Decision::Approved => {}
+                Decision::Rejected => return tool_error("The user declined the undo in ParVu."),
+                Decision::TimedOut => return tool_error("The user did not answer the approval request in ParVu."),
+            }
+            let out = try_tool!(Self::blocking(move || Self::undo_now(&ws, tab_id)).await);
+            host.changed(&window, tab_id);
+            return ok(out);
+        }
+        let out = try_tool!(
+            Self::blocking(move || {
+                let id = {
+                    let ws = ws.lock().unwrap_or_else(|p| p.into_inner());
+                    Self::tab_id(&ws, &args.table)?
+                };
+                Self::undo_now(&ws, id)
+            })
+            .await
+        );
+        ok(out)
+    }
+}
+
+/// The client's display name: from the request's metadata (clients using
+/// the handshake-free protocol, such as current Claude Code), else from its
+/// `initialize` handshake.
+fn client_name(meta: &RequestMetaObject, peer: &Peer<RoleServer>) -> String {
+    let info = meta.client_info().or_else(|| peer.peer_info().map(|i| i.client_info.clone()));
+    info.map(|i| display_name(&i)).filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "An AI client".into())
+}
+
+/// "Claude Code" rather than "claude-code": the title when given, else the
+/// name with dashes turned into words.
+fn display_name(i: &Implementation) -> String {
+    if let Some(t) = i.title.as_deref().filter(|t| !t.trim().is_empty()) {
+        return t.to_string();
+    }
+    let words: Vec<String> = i
+        .name
+        .split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+        })
+        .collect();
+    if words.is_empty() { i.name.clone() } else { words.join(" ") }
 }
 
 #[tool_router]
@@ -357,7 +644,7 @@ impl ParvuMcp {
     #[tool(description = "Open a data file (Parquet, CSV, TSV, JSON, JSON Lines, Excel) from an allowed folder as a table. Returns the table name and columns.")]
     async fn open_file(&self, Parameters(args): Parameters<OpenFileArgs>) -> Result<CallToolResult, ErrorData> {
         let path = try_tool!(self.allowed(&expand_home(&args.path)));
-        let ws = self.ws.clone();
+        let ws = try_tool!(self.workspace());
         let out = try_tool!(
             Self::blocking(move || {
                 let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
@@ -413,52 +700,28 @@ impl ParvuMcp {
         ok(rows_json(&rows))
     }
 
-    #[tool(description = "Apply a table operation (filter, sort, group by, pivot, melt, add column, fill missing values, window functions, …) as a new step on a table. Changes only this session's table, never the file. Returns the new row count and the first rows.")]
-    async fn apply_operation(&self, Parameters(args): Parameters<ApplyArgs>) -> Result<CallToolResult, ErrorData> {
-        let ro = try_tool!(self.session());
-        let ws = self.ws.clone();
-        let out = try_tool!(
-            Self::blocking(move || {
-                ro.check_operation(&args.table, &args.operation).map_err(|e| e.to_string())?;
-                drop(ro);
-                let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
-                let id = Self::tab_id(&ws, &args.table)?;
-                let label = ws.apply(id, &args.operation).map_err(|e| e.to_string())?;
-                let s = ws.summary(id).map_err(|e| e.to_string())?;
-                let page = ws.page(id, 1).map_err(|e| e.to_string())?;
-                let first: Vec<_> = page.rows.into_iter().take(10).collect();
-                Ok(json!({
-                    "table": s.name,
-                    "step": { "step": label.key, "args": label.args },
-                    "rows": s.total_rows,
-                    "columns": columns_json(&page.columns),
-                    "first_rows": first,
-                }))
-            })
-            .await
-        );
-        ok(out)
+    #[tool(description = "Apply a table operation (filter, sort, group by, pivot, melt, add column, fill missing values, window functions, …) as a new step on a table. Returns the new row count and the first rows. When connected to the ParVu window, the user approves the change first.")]
+    async fn apply_operation(
+        &self,
+        Parameters(args): Parameters<ApplyArgs>,
+        meta: RequestMetaObject,
+        client: Peer<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.apply_impl(args, client_name(&meta, &client)).await
     }
 
-    #[tool(description = "Undo the last applied operation on a table.")]
-    async fn undo(&self, Parameters(args): Parameters<TableArgs>) -> Result<CallToolResult, ErrorData> {
-        let ws = self.ws.clone();
-        let out = try_tool!(
-            Self::blocking(move || {
-                let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
-                let id = Self::tab_id(&ws, &args.table)?;
-                let label = ws.undo(id).map_err(|e| e.to_string())?;
-                let s = ws.summary(id).map_err(|e| e.to_string())?;
-                Ok(json!({ "table": s.name, "undone": { "step": label.key, "args": label.args }, "rows": s.total_rows }))
-            })
-            .await
-        );
-        ok(out)
+    #[tool(description = "Undo the last applied operation on a table. When connected to the ParVu window, the user approves it first.")]
+    async fn undo(
+        &self,
+        Parameters(args): Parameters<TableArgs>,
+        meta: RequestMetaObject,
+        client: Peer<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.undo_impl(args, client_name(&meta, &client)).await
     }
-
     #[tool(description = "Write a table (with its applied steps) to a file in an allowed folder. Only available when the server runs with --allow-write.")]
     async fn export(&self, Parameters(args): Parameters<ExportArgs>) -> Result<CallToolResult, ErrorData> {
-        if !self.allow_write {
+        if !self.allow_write() {
             return tool_error("Writing files is disabled. Start the server with --allow-write to allow export.");
         }
         let target = expand_home(&args.path);
@@ -471,7 +734,7 @@ impl ParvuMcp {
         if path.exists() && !args.overwrite {
             return tool_error(format!("{} exists; pass overwrite: true to replace it.", path.display()));
         }
-        let ws = self.ws.clone();
+        let ws = try_tool!(self.workspace());
         let out = try_tool!(
             Self::blocking(move || {
                 let ws = ws.lock().unwrap_or_else(|p| p.into_inner());
@@ -492,6 +755,134 @@ impl ServerHandler for ParvuMcp {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("parvu", env!("CARGO_PKG_VERSION")))
             .with_instructions(self.instructions())
+    }
+}
+
+// ---------- attached mode: run file, listener and bridge ----------
+
+/// Where the app publishes its listener while AI clients are allowed.
+pub fn run_file() -> PathBuf {
+    parvu_config::paths::legacy_app_dir().join("run").join("mcp.json")
+}
+
+/// Contents of [`run_file`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunInfo {
+    pub port: u16,
+    pub token: String,
+    pub pid: u32,
+}
+
+/// Write `info` so only the user can read it.
+pub fn write_run_file(path: &Path, info: &RunInfo) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let text = serde_json::to_string(info).map_err(std::io::Error::other)?;
+    let tmp = path.with_extension("json.tmp");
+    let _ = std::fs::remove_file(&tmp);
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    {
+        use std::io::Write;
+        let mut f = opts.open(&tmp)?;
+        f.write_all(text.as_bytes())?;
+    }
+    std::fs::rename(&tmp, path)
+}
+
+/// A random token for the listener (hex, 256 bits).
+pub fn new_token() -> String {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("the OS random number generator works");
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn same_token(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// Serve MCP sessions on `listener`. Each connection must send `token` and a
+/// newline first; then it speaks MCP (JSON lines) with a fresh server from
+/// `make`. `on_count` hears the number of connected clients.
+pub async fn serve_tcp(
+    listener: TcpListener,
+    token: String,
+    make: impl Fn() -> ParvuMcp + Send + Sync + 'static,
+    on_count: impl Fn(usize) + Send + Sync + 'static,
+) {
+    let make = Arc::new(make);
+    let on_count = Arc::new(on_count);
+    let clients = Arc::new(AtomicUsize::new(0));
+    // Sessions live in this set, so stopping the listener (dropping this
+    // future) disconnects every client too.
+    let mut sessions = tokio::task::JoinSet::new();
+    loop {
+        while sessions.try_join_next().is_some() {}
+        let Ok((stream, peer)) = listener.accept().await else { continue };
+        if !peer.ip().is_loopback() {
+            continue;
+        }
+        let (make, on_count, clients, token) = (make.clone(), on_count.clone(), clients.clone(), token.clone());
+        sessions.spawn(async move {
+            let (read, write) = stream.into_split();
+            let mut read = BufReader::new(read);
+            let mut first = String::new();
+            let got = tokio::time::timeout(Duration::from_secs(5), async {
+                let mut limited = (&mut read).take(256);
+                limited.read_line(&mut first).await
+            })
+            .await;
+            if !matches!(got, Ok(Ok(n)) if n > 0) || !same_token(first.trim_end(), &token) {
+                tracing::warn!("MCP: refused a connection with a wrong token");
+                return;
+            }
+            on_count(clients.fetch_add(1, Ordering::SeqCst) + 1);
+            tracing::info!("MCP: AI client connected");
+            if let Ok(running) = make().serve((read, write)).await {
+                let _ = running.waiting().await;
+            }
+            on_count(clients.fetch_sub(1, Ordering::SeqCst) - 1);
+            tracing::info!("MCP: AI client disconnected");
+        });
+    }
+}
+
+/// `parvu mcp --attach`: copy stdin/stdout to the app's listener.
+async fn bridge() -> Result<(), String> {
+    let not_running = "ParVu is not running with AI clients allowed. Open ParVu, choose AI → Connect an AI client \
+                       and switch it on, then reconnect this server (in Claude Code: /mcp).";
+    let text = std::fs::read_to_string(run_file()).map_err(|_| not_running.to_string())?;
+    let info: RunInfo = serde_json::from_str(&text).map_err(|_| not_running.to_string())?;
+    let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", info.port)).await.map_err(|_| not_running.to_string())?;
+    sock.write_all(format!("{}\n", info.token).as_bytes()).await.map_err(|e| e.to_string())?;
+    let (mut from_app, mut to_app) = sock.into_split();
+    let mut stdin = tokio::io::stdin();
+    let mut stdout = tokio::io::stdout();
+    let up = async {
+        let r = tokio::io::copy(&mut stdin, &mut to_app).await;
+        let _ = to_app.shutdown().await;
+        r
+    };
+    let down = async {
+        let mut buf = vec![0u8; 64 * 1024];
+        loop {
+            let n = from_app.read(&mut buf).await?;
+            if n == 0 {
+                return Ok::<_, std::io::Error>(());
+            }
+            stdout.write_all(&buf[..n]).await?;
+            stdout.flush().await?;
+        }
+    };
+    tokio::select! {
+        r = up => r.map(|_| ()).map_err(|e| e.to_string()),
+        r = down => r.map_err(|e| e.to_string()),
     }
 }
 
@@ -522,7 +913,7 @@ mod tool_tests {
     fn server(write: bool) -> (tempfile::TempDir, ParvuMcp) {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("sales.csv"), "id,region,qty\n1,north,3\n2,south,5\n3,north,7\n").unwrap();
-        let opts = Options { allow_dirs: vec![dir.path().to_path_buf()], allow_write: write, files: vec![] };
+        let opts = Options { allow_dirs: vec![dir.path().to_path_buf()], allow_write: write, ..Default::default() };
         let s = ParvuMcp::new(opts).unwrap();
         (dir, s)
     }
@@ -540,9 +931,9 @@ mod tool_tests {
         assert!(text(&r).contains("[[\"10\"]]"), "{}", text(&r));
 
         let op: Operation = serde_json::from_value(json!({"op": "remove", "column": "qty"})).unwrap();
-        let r = s.apply_operation(Parameters(ApplyArgs { table: "sales".into(), operation: op })).await.unwrap();
+        let r = s.apply_impl(ApplyArgs { table: "sales".into(), operation: op, rationale: None }, "test".into()).await.unwrap();
         assert!(!text(&r).contains("\"name\":\"qty\""), "{}", text(&r));
-        let r = s.undo(Parameters(TableArgs { table: "sales".into() })).await.unwrap();
+        let r = s.undo_impl(TableArgs { table: "sales".into() }, "test".into()).await.unwrap();
         assert!(text(&r).contains("\"step\":\"step.remove\""), "{}", text(&r));
         let r = s.describe_table(Parameters(TableArgs { table: "sales".into() })).await.unwrap();
         assert!(text(&r).contains("\"name\":\"qty\""), "undo restored the column: {}", text(&r));
@@ -591,5 +982,183 @@ mod tool_tests {
         let s = ParvuMcp::new(Options::default()).unwrap();
         assert!(s.allowed(Path::new("/tmp")).unwrap_err().contains("--allow-dir"));
         assert!(s.instructions().contains("disabled"));
+    }
+}
+
+#[cfg(test)]
+mod attach_tests {
+    use super::*;
+    use tokio::io::AsyncBufReadExt;
+
+    /// A host with one workspace that answers every proposal with `answer`.
+    struct FakeHost {
+        ws: Arc<Mutex<Workspace>>,
+        answer: Decision,
+        seen: Mutex<Vec<Proposal>>,
+        changed: Mutex<Vec<u64>>,
+    }
+
+    impl AttachHost for FakeHost {
+        fn workspace(&self) -> Result<(String, Arc<Mutex<Workspace>>), String> {
+            Ok(("main".into(), self.ws.clone()))
+        }
+        fn propose(&self, p: Proposal) -> Pin<Box<dyn Future<Output = Decision> + Send>> {
+            self.seen.lock().unwrap().push(p);
+            let d = self.answer;
+            Box::pin(async move { d })
+        }
+        fn changed(&self, _window: &str, tab_id: u64) {
+            self.changed.lock().unwrap().push(tab_id);
+        }
+    }
+
+    fn host(answer: Decision) -> (tempfile::TempDir, Arc<FakeHost>) {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("sales.csv");
+        std::fs::write(&f, "id,region,qty\n1,north,3\n2,south,5\n3,north,7\n").unwrap();
+        let mut ws = Workspace::new(100, None).unwrap();
+        ws.open(&f).unwrap();
+        let h = FakeHost { ws: Arc::new(Mutex::new(ws)), answer, seen: Mutex::default(), changed: Mutex::default() };
+        (dir, Arc::new(h))
+    }
+
+    /// A line-based MCP client over TCP.
+    struct Client {
+        read: BufReader<tokio::net::tcp::OwnedReadHalf>,
+        write: tokio::net::tcp::OwnedWriteHalf,
+        next: u64,
+    }
+
+    impl Client {
+        async fn connect(port: u16, token: &str) -> Self {
+            let s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            let (r, mut w) = s.into_split();
+            w.write_all(format!("{token}\n").as_bytes()).await.unwrap();
+            let mut c = Client { read: BufReader::new(r), write: w, next: 0 };
+            let init = c
+                .call("initialize", json!({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "Test Client", "version": "1"}}))
+                .await;
+            assert!(init["result"]["instructions"].as_str().unwrap().contains("running ParVu window"));
+            c.send(json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).await;
+            c
+        }
+        async fn send(&mut self, v: serde_json::Value) {
+            self.write.write_all(format!("{v}\n").as_bytes()).await.unwrap();
+        }
+        async fn call(&mut self, method: &str, params: serde_json::Value) -> serde_json::Value {
+            self.next += 1;
+            let id = self.next;
+            self.send(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params})).await;
+            loop {
+                let mut line = String::new();
+                let n = tokio::time::timeout(Duration::from_secs(10), self.read.read_line(&mut line)).await.unwrap().unwrap();
+                assert!(n > 0, "server closed the connection");
+                let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+                if v["id"] == json!(id) {
+                    return v;
+                }
+            }
+        }
+        async fn tool(&mut self, name: &str, args: serde_json::Value) -> (bool, String) {
+            let r = self.call("tools/call", json!({"name": name, "arguments": args})).await;
+            let res = &r["result"];
+            (res["isError"] == json!(true), res["content"][0]["text"].as_str().unwrap_or_default().to_string())
+        }
+    }
+
+    async fn listen(h: Arc<FakeHost>) -> (u16, String) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let token = new_token();
+        let t = token.clone();
+        tokio::spawn(serve_tcp(listener, t, move || ParvuMcp::attached(h.clone()), |_| {}));
+        (port, token)
+    }
+
+    #[tokio::test]
+    async fn approved_changes_apply_and_rejected_ones_dont() {
+        let (_d, h) = host(Decision::Approved);
+        let (port, token) = listen(h.clone()).await;
+        let mut c = Client::connect(port, &token).await;
+
+        let tools = c.call("tools/list", json!({})).await;
+        let names: Vec<_> = tools["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
+        assert!(names.contains(&"query".to_string()) && names.contains(&"apply_operation".to_string()));
+        assert!(!names.contains(&"open_file".to_string()) && !names.contains(&"export".to_string()), "{names:?}");
+
+        let (err, text) = c.tool("query", json!({"sql": "SELECT SUM(qty) AS t FROM sales"})).await;
+        assert!(!err && text.contains("[[\"15\"]]"), "{text}");
+
+        let op = json!({"op": "filter", "conditions": [{"column": "region", "op": "eq", "value": "north"}]});
+        let (err, text) = c.tool("apply_operation", json!({"table": "sales", "operation": op, "rationale": "Only the north region"})).await;
+        assert!(!err && text.contains("\"rows\":2"), "{text}");
+        {
+            let seen = h.seen.lock().unwrap();
+            let p = &seen[0];
+            assert_eq!((p.client.as_str(), p.table.as_str(), p.kind), ("Test Client", "sales", "operation"));
+            assert_eq!((p.rows_before, p.rows_after), (3, Some(2)));
+            assert_eq!(p.rationale.as_deref(), Some("Only the north region"));
+            assert_eq!(p.label.key, "step.filter_rows");
+            assert!(!p.rows.is_empty() && p.sql.is_some());
+        }
+        assert_eq!(h.changed.lock().unwrap().len(), 1, "the window is told to refresh");
+        assert_eq!(h.ws.lock().unwrap().summary(1).unwrap().total_rows, 2);
+
+        let (err, text) = c.tool("undo", json!({"table": "sales"})).await;
+        assert!(!err && text.contains("\"rows\":3"), "{text}");
+        assert_eq!(h.seen.lock().unwrap()[1].kind, "undo");
+
+        // A file read hidden in an expression is refused before any card.
+        let sneaky = json!({"op": "add_column", "name": "x", "expression": "(SELECT 1 FROM read_text('/etc/passwd'))"});
+        let (err, _) = c.tool("apply_operation", json!({"table": "sales", "operation": sneaky})).await;
+        assert!(err);
+        assert_eq!(h.seen.lock().unwrap().len(), 2);
+
+        let (_d2, h2) = host(Decision::Rejected);
+        let (port, token) = listen(h2.clone()).await;
+        let mut c = Client::connect(port, &token).await;
+        let op = json!({"op": "remove", "column": "qty"});
+        let (err, text) = c.tool("apply_operation", json!({"table": "sales", "operation": op})).await;
+        assert!(err && text.contains("rejected"), "{text}");
+        assert!(h2.ws.lock().unwrap().summary(1).unwrap().steps.is_empty(), "nothing applied");
+        assert!(h2.changed.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn wrong_token_is_refused() {
+        let (_d, h) = host(Decision::Approved);
+        let (port, _token) = listen(h).await;
+        let s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let (r, mut w) = s.into_split();
+        w.write_all(b"not-the-token\n").await.unwrap();
+        w.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n").await.unwrap();
+        let mut line = String::new();
+        let n = tokio::time::timeout(Duration::from_secs(5), BufReader::new(r).read_line(&mut line)).await.unwrap().unwrap_or(0);
+        assert_eq!(n, 0, "connection closed without an answer: {line}");
+    }
+
+    #[test]
+    fn run_file_is_private_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("run").join("mcp.json");
+        let info = RunInfo { port: 4242, token: new_token(), pid: 7 };
+        write_run_file(&p, &info).unwrap();
+        write_run_file(&p, &info).unwrap();
+        let back: RunInfo = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        assert_eq!(back, info);
+        assert_eq!(info.token.len(), 64);
+        assert_ne!(new_token(), new_token());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o777, 0o600);
+        }
+        assert!(same_token("abc", "abc") && !same_token("abc", "abd") && !same_token("abc", "ab"));
+        assert_eq!(display_name(&Implementation::new("claude-code", "2")), "Claude Code");
+        let mut titled = Implementation::new("x", "1");
+        titled.title = Some("Claude Desktop".into());
+        assert_eq!(display_name(&titled), "Claude Desktop");
+        assert!(Options::parse(["--attach".to_string()]).unwrap().attach);
+        assert!(Options::parse(["--attach", "--allow-write"].map(String::from)).is_err());
     }
 }

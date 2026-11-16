@@ -211,3 +211,10 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-chart-text { fill: var(--pv-colors-table-foreground); font-size: 11px; font-family: var(--pv-layout-default-font-family, sans-serif), sans-serif; }
 .pv-chart-title { font-weight: 600; }
 .pv-chart-box { min-height: 260px; display: flex; align-items: center; justify-content: center; }
+
+/* AI clients (MCP) */
+.pv-switch-row { padding: 4px 0; }
+.pv-snippet { gap: 2px; }
+.pv-snippet pre { margin: 0; max-height: 200px; }
+.pv-proposal-step { display: flex; flex-direction: column; gap: 4px; }
+.pv-proposal-preview { max-height: 260px; }

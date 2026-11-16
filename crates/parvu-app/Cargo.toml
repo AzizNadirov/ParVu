@@ -32,7 +32,8 @@ dirs.workspace = true
 schemars.workspace = true
 # MCP server (`parvu mcp`, src/mcp.rs).
 rmcp = { version = "3.10", default-features = false, features = ["server", "macros", "transport-io"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "net", "sync", "time"] }
+getrandom = "0.3"
 
 [features]
 default = []

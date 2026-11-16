@@ -71,11 +71,13 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 - Progress bar and cancel for large exports
 
 ### AI clients (MCP)
-- **`parvu mcp`** turns ParVu into an MCP server, so Claude Code, Claude Desktop, VS Code and other AI clients can open your data files and query them with DuckDB:
+- **Use your Claude subscription with ParVu.** AI → Connect an AI client lets Claude Desktop, Claude Code or VS Code work with the tables open in your window:
   ```bash
-  claude mcp add -s user parvu -- parvu mcp --allow-dir ~/Documents
+  claude mcp add -s user parvu-app -- parvu mcp --attach
   ```
-- Only folders you allow are reachable, queries are read-only, operations change only the session's copy, and nothing is written unless you add `--allow-write`. See [docs/MCP.md](docs/MCP.md).
+  The client can query freely, but every change appears as a card in ParVu with a preview, and is applied only when you approve it.
+- **`parvu mcp --allow-dir <folder>`** runs a standalone MCP server without a window. Only allowed folders are reachable, queries are read-only, and nothing is written unless you add `--allow-write`.
+- See [docs/MCP.md](docs/MCP.md).
 
 ### User Interface
 - **Themes** - Material Design 3 interface with 5 built-in themes (Material Light, Material Dark, ParVu Light, Excel, ParVu Black), plus custom themes you can import and export
@@ -254,7 +256,7 @@ A: Parquet, CSV and JSON files are queried in place by DuckDB, and only the visi
 A: The app is about six times smaller (82 MB installed instead of 483 MB), opens files faster, and switches pages in milliseconds. It also opens Excel files, writes Excel on export, and fixes several bugs in the expression language and in join and append.
 
 **Q: Can I use it with AI?**
-A: Yes, through MCP: `parvu mcp` lets Claude Code, Claude Desktop, VS Code and other MCP clients open and query your files with ParVu's tools, using your own AI subscription. See [docs/MCP.md](docs/MCP.md). A built-in assistant is planned ([plans/AI_PLAN.md](plans/AI_PLAN.md)).
+A: Yes, through MCP, with your own Claude subscription. Turn on AI → Connect an AI client, add ParVu to Claude Desktop or Claude Code once, and ask about the tables open in your window; you approve every change in ParVu. See [docs/MCP.md](docs/MCP.md). A built-in assistant for API keys and local models is planned ([plans/AI_PLAN.md](plans/AI_PLAN.md)).
 
 **Q: Can I create my own themes?**
 A: Yes. Export a theme as a template, edit the JSON, and import it back. See [docs/THEMES.md](docs/THEMES.md).

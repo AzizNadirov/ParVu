@@ -4,6 +4,7 @@
 mod commands;
 mod error;
 mod mcp;
+mod mcp_attach;
 mod state;
 
 use std::path::PathBuf;
@@ -92,13 +93,20 @@ fn main() {
         .manage(AppState::new(load_config(), initial_files, crash))
         .setup(|app| {
             build_window(app.handle(), "main")?;
+            let state = app.state::<AppState>();
+            state.attach.set_active_window("main");
+            let allow_clients = state.config.lock().map(|c| c.settings.settings().mcp_allow_clients).unwrap_or(false);
+            if allow_clients && let Err(e) = mcp_attach::start(app.handle()) {
+                tracing::error!("AI clients: {e}");
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event
-                && let Some(state) = window.app_handle().try_state::<AppState>()
-            {
-                state.drop_workspace(window.label());
+            let Some(state) = window.app_handle().try_state::<AppState>() else { return };
+            match event {
+                tauri::WindowEvent::Destroyed => state.drop_workspace(window.label()),
+                tauri::WindowEvent::Focused(true) => state.attach.set_active_window(window.label()),
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -141,7 +149,15 @@ fn main() {
             commands::find,
             commands::start_export,
             commands::cancel_export,
+            mcp_attach::mcp_status,
+            mcp_attach::mcp_set_enabled,
+            mcp_attach::mcp_decide,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running ParVu");
+        .build(tauri::generate_context!())
+        .expect("error while running ParVu")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                mcp_attach::stop(app);
+            }
+        });
 }

@@ -15,6 +15,7 @@ import {
   type Bootstrap,
   type Cell,
   type ColumnMeta,
+  type McpProposal,
   type Operation,
   type Page,
   type Settings,
@@ -38,6 +39,8 @@ import {
   openBin,
   openChart,
   openColumnStats,
+  openConnectAi,
+  openMcpProposal,
   openColumns,
   openConditionalFormat,
   openConfirmClose,
@@ -124,6 +127,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   const t = useMemo(() => makeTranslator(translations, boot.english), [translations, boot.english]);
   const [themeKey, setThemeKey] = useState(boot.theme.name);
   const [recents, setRecents] = useState(boot.recents);
+  /** AI clients connected through `parvu mcp --attach`. */
+  const [aiClients, setAiClients] = useState(0);
 
   const [tabs, setTabs] = useState<TabSummary[]>([]);
   const [active, setActive] = useState<number | null>(null);
@@ -1075,6 +1080,10 @@ export function App({ boot }: { boot: Bootstrap }) {
       ],
     },
     {
+      title: t("menu.ai"),
+      items: (): MenuEntry[] => [{ label: t("menu.ai.connect"), onSelect: () => void openConnectAi(ui) }],
+    },
+    {
       title: t("menu.help"),
       items: (): MenuEntry[] => [
         { label: t("menu.help.expression"), onSelect: () => void openExpressionHelp(ui) },
@@ -1089,8 +1098,21 @@ export function App({ boot }: { boot: Bootstrap }) {
   // Keep refs to the latest handlers for global listeners.
   const filterRows = () => void runOpDialog(openFilter);
   const groupBy = () => void runOpDialog(openGroupBy, undefined, true);
-  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart });
-  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart };
+  /** An AI client changed a tab (after the user approved it): show the result. */
+  const refreshFromAi = async (id: number) => {
+    try {
+      const s = await api.tabSummary(id);
+      upsertTab(s);
+      if (id === active) await loadPage(id, 1);
+      const last = s.steps[s.steps.length - 1];
+      status(last ? t("mcp.tab_updated", { step: stepText(t, last) }) : t("mcp.tab_updated_plain"), 5000);
+      void refreshSchema();
+    } catch {
+      /* the tab may have been closed meanwhile */
+    }
+  };
+  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi });
+  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1126,6 +1148,14 @@ export function App({ boot }: { boot: Bootstrap }) {
   useEffect(() => {
     const unsubs: Promise<() => void>[] = [
       listen<string[]>("recents-changed", (e) => setRecents(e.payload)),
+      // AI clients (parvu mcp --attach): approval cards, refreshes, client count.
+      getCurrentWindow().listen<McpProposal>("mcp-proposal", async (e) => {
+        const approved = await openMcpProposal(ui, e.payload);
+        const live = await api.mcpDecide(e.payload.id, approved).catch(() => false);
+        if (!live) status(t("mcp.proposal.expired"), 5000);
+      }),
+      getCurrentWindow().listen<number>("mcp-changed", (e) => void handlers.current.refreshFromAi(e.payload)),
+      listen<number>("mcp-clients", (e) => setAiClients(e.payload)),
       getCurrentWebview().onDragDropEvent(async (e) => {
         if (e.payload.type !== "drop") return;
         for (const p of e.payload.paths) {
@@ -1135,8 +1165,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         }
       }),
     ];
+    void api.mcpStatus().then((s) => setAiClients(s.clients)).catch(() => undefined);
     return () => unsubs.forEach((u) => void u.then((f) => f()));
-  }, [boot.extensions, status, t]);
+  }, [boot.extensions, status, t, ui]);
 
   // Closing the window: unsaved edits, then (optionally) the transforms warning.
   const closeState = useRef({ tabs, settings, resolveUnsaved, exportTab, ui });
@@ -1394,6 +1425,12 @@ export function App({ boot }: { boot: Bootstrap }) {
           {activeTab && !activeTab.is_base_query && <span className="muted">{t("status.read_only")}</span>}
           {activeTab && activeTab.pending_edits > 0 && (
             <span className="warn-text">{t("status.unsaved_edits", { count: activeTab.pending_edits })}</span>
+          )}
+          {aiClients > 0 && (
+            <button className="text small-btn pv-ai-chip" title={t("menu.ai.connect")} onClick={() => void openConnectAi(ui)}>
+              <Icon name="ai" size={16} />
+              {t("mcp.status.connected", { count: aiClients })}
+            </button>
           )}
           {activeTab && <span className="nowrap">{t("pagination.rows", { total_rows: activeTab.total_rows })}</span>}
         </footer>
