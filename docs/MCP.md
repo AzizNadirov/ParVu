@@ -28,6 +28,8 @@ The client can list, describe, sample and query the open tables freely. When it 
 
 **Apply** adds a normal step to Applied Steps, which `Ctrl+Z` undoes. **Reject** tells the client no. Opening and saving files stays with you: in this mode the client has no `open_file` or `export` tool.
 
+If ParVu isn't running when the client starts, `parvu mcp --attach` opens it and connects once it's ready, so the order you start things in doesn't matter. If ParVu is open with AI clients switched off, the client is told how to switch them on; no second window opens.
+
 While a client is connected, the status bar shows **AI clients: N**. With several ParVu windows open, the client works on the window you used last. Switching the setting off disconnects every client.
 
 How it works: ParVu listens on `127.0.0.1` on a random port and accepts only connections that present a random token. The port and token are in `~/.ParVu/run/mcp.json`, which only your user account can read. `parvu mcp --attach` reads that file and relays the client's messages, so nothing is reachable from the network.
@@ -108,7 +110,9 @@ Logs go to ParVu's usual log folder (`~/.ParVu/logs`), never to the protocol str
 
 ## Troubleshooting
 
-**`parvu mcp --attach`: "ParVu is not running with AI clients allowed".** Open ParVu, switch on AI → Connect an AI client, then reconnect the server in your client (Claude Code: `/mcp`; Claude Desktop: restart it). Clients start the bridge when they start, so open ParVu first.
+**`parvu mcp --attach`: "ParVu is open, but AI clients are not allowed".** In ParVu, switch on AI → Connect an AI client, then reconnect the server in your client (Claude Code: `/mcp`; Claude Desktop: restart it).
+
+**"ParVu did not start in time".** The bridge opens ParVu when it isn't running and waits up to 25 seconds. On a slow first start, open ParVu yourself and reconnect.
 
 **The approval card says "An AI client".** The client didn't send its name; the change is the same.
 

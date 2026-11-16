@@ -853,14 +853,118 @@ pub async fn serve_tcp(
     }
 }
 
-/// `parvu mcp --attach`: copy stdin/stdout to the app's listener.
+/// Marks that a ParVu window is running (`~/.ParVu/run/app.pid`), so the
+/// bridge knows whether to start one.
+pub fn app_pid_file() -> PathBuf {
+    parvu_config::paths::legacy_app_dir().join("run").join("app.pid")
+}
+
+/// Called by the app at start.
+pub fn mark_app_running() {
+    let path = app_pid_file();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&path, std::process::id().to_string());
+}
+
+/// Remove a listener file left by a ParVu that was killed (its process is
+/// gone), so clients don't try a dead port.
+pub fn clear_stale_run_file() {
+    let path = run_file();
+    let stale = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<RunInfo>(&t).ok())
+        .is_some_and(|info| info.pid != std::process::id() && !pid_alive(info.pid));
+    if stale {
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
+/// Called by the app on exit; leaves the file if another ParVu wrote it since.
+pub fn clear_app_running() {
+    let path = app_pid_file();
+    if std::fs::read_to_string(&path).is_ok_and(|t| t.trim() == std::process::id().to_string()) {
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
+/// Whether process `pid` exists. Only checked on Linux; elsewhere a pid file
+/// counts as running (a window that crashed leaves one behind until the
+/// next start).
+fn pid_alive(pid: u32) -> bool {
+    if cfg!(target_os = "linux") { Path::new(&format!("/proc/{pid}")).exists() } else { true }
+}
+
+/// Whether a ParVu window is running, by its pid file.
+fn app_running() -> bool {
+    std::fs::read_to_string(app_pid_file())
+        .ok()
+        .and_then(|t| t.trim().parse::<u32>().ok())
+        .is_some_and(pid_alive)
+}
+
+/// Connect to the app's listener and present the token.
+async fn connect_app() -> Option<tokio::net::TcpStream> {
+    let text = std::fs::read_to_string(run_file()).ok()?;
+    let info: RunInfo = serde_json::from_str(&text).ok()?;
+    let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", info.port)).await.ok()?;
+    sock.write_all(format!("{}\n", info.token).as_bytes()).await.ok()?;
+    Some(sock)
+}
+
+/// Start the ParVu window, detached from this process: its output must not
+/// reach stdout (the MCP channel), and it must outlive the bridge.
+fn launch_app() -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
+    cmd.spawn().map(|_| ()).map_err(|e| format!("could not start ParVu: {e}"))
+}
+
+/// How long the bridge waits for a ParVu it started (MCP clients give up
+/// after about 30 seconds).
+const LAUNCH_WAIT: Duration = Duration::from_secs(25);
+
+/// `parvu mcp --attach`: copy stdin/stdout to the app's listener, starting
+/// the ParVu window first when none is running.
 async fn bridge() -> Result<(), String> {
-    let not_running = "ParVu is not running with AI clients allowed. Open ParVu, choose AI → Connect an AI client \
-                       and switch it on, then reconnect this server (in Claude Code: /mcp).";
-    let text = std::fs::read_to_string(run_file()).map_err(|_| not_running.to_string())?;
-    let info: RunInfo = serde_json::from_str(&text).map_err(|_| not_running.to_string())?;
-    let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", info.port)).await.map_err(|_| not_running.to_string())?;
-    sock.write_all(format!("{}\n", info.token).as_bytes()).await.map_err(|e| e.to_string())?;
+    let switch_on = "ParVu is open, but AI clients are not allowed. In ParVu choose AI → Connect an AI client \
+                     and switch it on, then reconnect this server (in Claude Code: /mcp).";
+    let sock = match connect_app().await {
+        Some(s) => s,
+        None if app_running() => return Err(switch_on.into()),
+        None => {
+            tracing::info!("MCP bridge: starting ParVu");
+            launch_app()?;
+            let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if let Some(s) = connect_app().await {
+                    break s;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(if app_running() {
+                        switch_on.into()
+                    } else {
+                        "ParVu did not start in time. Open it yourself, then reconnect this server (in Claude Code: /mcp).".into()
+                    });
+                }
+            }
+        }
+    };
     let (mut from_app, mut to_app) = sock.into_split();
     let mut stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
@@ -1159,6 +1263,10 @@ mod attach_tests {
         titled.title = Some("Claude Desktop".into());
         assert_eq!(display_name(&titled), "Claude Desktop");
         assert!(Options::parse(["--attach".to_string()]).unwrap().attach);
+        assert!(pid_alive(std::process::id()));
+        if cfg!(target_os = "linux") {
+            assert!(!pid_alive(u32::MAX - 7));
+        }
         assert!(Options::parse(["--attach", "--allow-write"].map(String::from)).is_err());
     }
 }
