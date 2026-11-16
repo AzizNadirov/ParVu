@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.4]
+
+Columns that know their type, in the spirit of Power Query: convert with options and see what doesn't convert, and use the operations that fit each column (text, yes/no, dates, JSON). Also: open CSV files with a delimiter, header, skipped lines, decimal comma or encoding.
+
 ### Added
 - **Convert a column** (column menu → Change Type → Convert…): read a column as a number written `1,234.5`, `1.234,5` or `1 234,5`, yes/no, a date in one of several formats, date and time, time, JSON, or Unix time in seconds, milliseconds or microseconds.
   - ParVu suggests the reading that fits the column.
