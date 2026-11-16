@@ -79,7 +79,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 
 | Task | Where |
 |------|-------|
-| Column types: detection on open, Read as, conversions | `parvu-core/src/types.rs` (`Reading`, detectors, `best_reading`), `ops.rs` (`Convert`, `ConversionErrors`, `ColumnTransform`, `MergeColumns`), `colfn.rs` (text, yes/no and date functions, relative date ranges), `workspace.rs` (`heal`, `set_source_reading`, `preview_conversion`); UI `lib/types.ts`, `lib/colfn.ts`, `dialogs/ConvertDialog.tsx`, `ColumnFnDialog.tsx`, `MergeColumnsDialog.tsx`, `DatesDialog.tsx`; plan `plans/COLUMN_TYPES_PLAN.md` |
+| Column types: detection on open, Read as, conversions | `parvu-core/src/types.rs` (`Reading`, detectors, `best_reading`), `ops.rs` (`Convert`, `ConversionErrors`, `ColumnTransform`, `MergeColumns`, `DateDiff`, `DateRange`, `ExpandJson`, `ExpandStruct`, `ToRows`), `colfn.rs` (text, yes/no, date and JSON/list functions, relative date ranges, `JsonKey`), `workspace.rs` (`heal`, `set_source_reading`, `preview_conversion`); UI `lib/types.ts`, `lib/colfn.ts`, `dialogs/ConvertDialog.tsx`, `ColumnFnDialog.tsx`, `MergeColumnsDialog.tsx`, `DatesDialog.tsx`, `ExpandJsonDialog.tsx`; plan `plans/COLUMN_TYPES_PLAN.md` |
 | A table operation | `parvu-core/src/ops.rs` (or `reshape.rs`, `clean.rs`, `window.rs`), the menu or dialog in `ui/src/App.tsx` / `ui/src/dialogs/` |
 | Charts | `parvu-core/src/chart.rs`, `ui/src/components/Chart.tsx`, `ui/src/dialogs/ChartDialog.tsx` |
 | Conditional formatting | `ui/src/lib/format.ts`, `ui/src/dialogs/ConditionalFormatDialog.tsx`, applied in `DataGrid.tsx` |

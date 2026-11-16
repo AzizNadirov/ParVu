@@ -90,6 +90,14 @@ export const FN_DIALOGS: Partial<Record<FnName, { fields: Field[]; output: FnOut
     output: "in_place",
   },
   format_date: { fields: [{ key: "format", kind: "format", initial: "%d.%m.%Y" }], output: "new" },
+  json_path: {
+    fields: [
+      { key: "path", kind: "text", initial: "$." },
+      { key: "as_text", kind: "bool", initial: true },
+    ],
+    output: "new",
+  },
+  join_list: { fields: [{ key: "separator", kind: "text", initial: ", " }], output: "new" },
 };
 
 /** Units offered when adding time. */
@@ -131,7 +139,7 @@ export function buildFn(name: FnName, v: FieldValues): ColumnFn | null {
   for (const f of FN_DIALOGS[name]?.fields ?? []) {
     const x = v[f.key];
     if (f.kind === "number" && (!Number.isInteger(Number(x)) || Number(x) < (f.min ?? 0))) return null;
-    if (f.kind === "text" && typeof x === "string" && !x && f.key !== "text") return null;
+    if (f.kind === "text" && typeof x === "string" && !x && f.key !== "text" && f.key !== "separator") return null;
   }
   const num = (k: string) => Number(v[k]);
   const str = (k: string) => String(v[k] ?? "");
@@ -159,6 +167,11 @@ export function buildFn(name: FnName, v: FieldValues): ColumnFn | null {
       return num("amount") === 0 ? null : { fn: "add_time", n: num("amount"), unit: v.unit as TimeUnitName };
     case "format_date":
       return { fn: "format_date", format: str("format") };
+    case "json_path":
+      // "$" is the whole value; "$." is a path still being typed.
+      return str("path").startsWith("$") && !str("path").endsWith(".") ? { fn: "json_path", path: str("path"), text: !!v.as_text } : null;
+    case "join_list":
+      return { fn: "join_list", separator: str("separator") };
     default:
       return null;
   }

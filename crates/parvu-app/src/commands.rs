@@ -5,7 +5,7 @@
 //! calling window's label.
 
 use crate::column_types::ColumnTypes;
-use parvu_core::colfn::ColumnFn;
+use parvu_core::colfn::{ColumnFn, JsonKey};
 use parvu_core::types::{Reading, SourceColumn};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -532,6 +532,23 @@ pub async fn preview_column_fn(
 ) -> ApiResult<Vec<(Cell, Cell)>> {
     let values: Vec<Cell> = values.into_iter().take(20).collect();
     with_ws(state, window, move |ws| Ok(ws.preview_column_fn(id, &column, &func, &values)?)).await
+}
+
+/// Rows sampled for the keys of a JSON column, unless `full`.
+const JSON_KEY_SAMPLE_ROWS: u64 = 2_000;
+
+/// The keys of a JSON object column and their types: from the first rows,
+/// or (`full`) from every row, for "Expand into columns".
+#[tauri::command(rename_all = "snake_case")]
+pub async fn json_keys(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+    full: bool,
+) -> ApiResult<Vec<JsonKey>> {
+    let limit = (!full).then_some(JSON_KEY_SAMPLE_ROWS);
+    with_ws(state, window, move |ws| Ok(ws.json_keys(id, &column, limit)?)).await
 }
 
 /// Rows checked when counting errors without `full`.

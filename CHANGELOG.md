@@ -26,6 +26,12 @@
   - **Filter dates ▸**: last 7 or 30 days, this or the previous week, month, quarter or year, year to date, or the last N days, weeks, months, quarters or years.
 
   "Today" is evaluated when the step runs, so "last 7 days" keeps meaning that. The filters are plain date ranges, so Parquet files skip the row groups outside them.
+- **JSON, list and struct columns:**
+  - **Expand into columns…**: choose keys of a JSON object column. They're found in the first 2,000 rows, or in all rows on request, and each becomes a typed column at the JSON column's place.
+  - **Extract a value…**: a JSON path such as `$.address.city`.
+  - **Items to rows**: rows whose list is empty are kept.
+  - **Number of items** and **Join items into text…**.
+  - Struct columns, for example from JSON files: **Expand into columns** in one click.
 
 ## [1.0.0-alpha.3]
 

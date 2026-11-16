@@ -36,6 +36,10 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
         { before: "1.234,5", after: "1234.5", failed: false },
         { before: "n/a", after: null, failed: true },
       ];
+    case "json_keys":
+      return (_args as { full: boolean }).full
+        ? [{ name: "user", dtype: "VARCHAR" }, { name: "age", dtype: "BIGINT" }, { name: "rare", dtype: "VARCHAR" }]
+        : [{ name: "user", dtype: "VARCHAR" }, { name: "age", dtype: "BIGINT" }];
     case "preview_column_fn":
       return [["ab-1", "AB"]];
     case "conversion_error_count":
@@ -497,6 +501,27 @@ describe("column functions", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "month" } });
     fireEvent.click(screen.getByText("btn.apply"));
     await expect(q).resolves.toEqual({ op: "date_range", column: "shipped", range: { kind: "last", n: 3, unit: "month" } });
+  });
+
+  it("expand JSON: sampled keys, scan all rows, untick a key", async () => {
+    const ui = makeUi();
+    const p = D.openExpandJson(ui, { tabId: 5, table: "t", column: "payload" });
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("json_keys", { id: 5, column: "payload", full: false });
+    fireEvent.click(screen.getByText("json.expand.scan_all"));
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("json_keys", { id: 5, column: "payload", full: true });
+    fireEvent.click(screen.getByText("age"));
+    fireEvent.click(screen.getByText("btn.apply"));
+    await expect(p).resolves.toEqual({
+      op: "expand_json",
+      column: "payload",
+      keys: [
+        { name: "user", dtype: "VARCHAR" },
+        { name: "rare", dtype: "VARCHAR" },
+      ],
+      keep_original: false,
+    });
   });
 
   it("merging needs two columns", async () => {
