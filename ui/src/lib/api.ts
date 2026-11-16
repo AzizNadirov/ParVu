@@ -86,19 +86,39 @@ export type Operation =
   // column functions
   | ({ op: "window" } & WindowSpec);
 
-export type ChartKind = "bar" | "line" | "scatter" | "histogram";
+export type ChartKind = "bar" | "line" | "area" | "scatter" | "histogram";
+export type TimeUnit = "auto" | "none" | "day" | "week" | "month" | "quarter" | "year";
+export type ChartSort = "auto" | "value_desc" | "value_asc" | "label";
 export interface ChartSpec {
   kind: ChartKind;
   x: string;
   y: string | null;
   agg: AggFunc;
+  /** Column that splits the values into series. */
+  series: string | null;
+  time_unit: TimeUnit;
+  sort: ChartSort;
+  /** Categories shown (default 20). */
+  limit: number | null;
+  /** Fold the categories past `limit` into "Other". */
+  other: boolean;
   bins: number | null;
-  sort_by_value: boolean;
+}
+export interface ChartSeries {
+  /** Value of the split column; "" when the chart isn't split. */
+  name: string;
+  other: boolean;
+  values: (number | null)[];
+  /** Scatter only. */
+  xs: (number | null)[];
 }
 export interface ChartData {
+  x_kind: "category" | "time" | "number";
+  time_unit: TimeUnit | null;
   labels: string[];
-  values: (number | null)[];
-  xs: (number | null)[];
+  other_label: number | null;
+  series: ChartSeries[];
+  bin_edges: number[];
   truncated: boolean;
 }
 
@@ -524,6 +544,7 @@ export const api = {
 
   columnStats: (id: number, column: string) => call<ColumnStats>("column_stats", { id, column }),
   chartData: (id: number, spec: ChartSpec) => call<ChartData>("chart_data", { id, spec }),
+  saveChartImage: (path: string, bytes: Uint8Array) => call<void>("save_chart_image", { path, bytes: Array.from(bytes) }),
   columnRange: (id: number, column: string) => call<[number, number] | null>("column_range", { id, column }),
   uniqueValues: (id: number, column: string) => call<Cell[]>("unique_values", { id, column }),
   columnTuple: (id: number, column: string, mode: "first" | "random", n: number) =>

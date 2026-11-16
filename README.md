@@ -57,7 +57,7 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 - **Running totals, ranks and rolling values**: cumulative sum/min/max/mean/count, shift, diff, percent change, rank (5 tie methods), rolling mean/sum/min/max/std, per group or overall
 
 ### Spreadsheet Features
-- **Charts** - bar, line, scatter and histogram, calculated by DuckDB so they work on huge files (`Ctrl+Shift+C`)
+- **Charts** - bar, line, area, scatter and histogram, calculated by DuckDB so they work on huge files (`Ctrl+Shift+C`): a suggested chart for the selected column, dates grouped by day to year, top N with the rest as "Other", series split by a category, tooltips, a table view, and PNG/SVG export
 - **Conditional formatting** - colour scales and highlight rules per column
 - **Freeze columns**, remembered column widths, and **fill down** (`Ctrl+D`)
 

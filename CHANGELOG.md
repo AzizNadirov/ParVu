@@ -7,6 +7,9 @@
 - **AI assistant panel** (`Ctrl+Shift+A`): ask about your tables with an Anthropic, OpenAI, Gemini, OpenRouter or Groq API key, or a local Ollama / LM Studio model. It inspects and queries the data with the same read-only tools as the MCP server; changes go through approval cards. Keys are stored in the system keychain. See [docs/AI.md](docs/AI.md).
 - **AI → Connect an AI client:** Claude Desktop, Claude Code and other MCP clients connect to the running window (`parvu mcp --attach`) and work with its open tabs, using your own Claude subscription. Their changes appear as approval cards with a preview and become normal undoable steps. The status bar shows connected clients.
 
+### Changed
+- **Charts:** a suggested chart for the selected column; area charts; dates grouped by day, week, month, quarter or year; top N with the rest as "Other"; series split by a category (stacked or grouped); readable axes (round ticks, compact numbers, round histogram intervals); hover tooltips, a legend, a table view; PNG and SVG export; colours that hold up in dark themes and for colour-blind readers.
+
 ## [1.0.0-alpha.2]
 
 ### Added

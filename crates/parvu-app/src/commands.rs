@@ -526,6 +526,17 @@ pub async fn chart_data(
     with_ws(state, window, move |ws| Ok(ws.chart(id, &spec)?)).await
 }
 
+/// Save a chart image the UI rendered (PNG bytes or SVG text) to the path
+/// the user chose in the save dialog. Only `.png` and `.svg` files.
+#[tauri::command(rename_all = "snake_case")]
+pub fn save_chart_image(path: PathBuf, bytes: Vec<u8>) -> ApiResult<()> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext != "png" && ext != "svg" {
+        return Err(ApiError::new("export", "Charts are saved as .png or .svg files."));
+    }
+    std::fs::write(&path, bytes).map_err(|e| ApiError::new("export", format!("{}: {e}", path.display())))
+}
+
 /// Numeric minimum and maximum of a column, for colour scales.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn column_range(

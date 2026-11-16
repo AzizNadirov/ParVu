@@ -24,6 +24,11 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
       return { providers: cmd === "ai_save_provider" ? [{ config: (_args as { config: unknown }).config, key_source: "keychain", is_default: true }] : [], keychain: true };
     case "ai_test_provider":
       return "claude-opus-5-5";
+    case "chart_data":
+      return {
+        x_kind: "category", time_unit: null, labels: ["north", "south", "Other"], other_label: 2, bin_edges: [], truncated: false,
+        series: [{ name: "", other: false, values: [15, 2, 4], xs: [] }],
+      };
     case "mcp_status":
     case "mcp_set_enabled":
       return { enabled: cmd === "mcp_set_enabled", listening: cmd === "mcp_set_enabled", port: 4000, clients: 0, command: "parvu", args: ["mcp", "--attach"], error: null };
@@ -386,12 +391,31 @@ describe("spreadsheet dialogs", () => {
 
   it("the chart dialog asks DuckDB for chart data and closes", async () => {
     const ui = makeUi();
-    const p = D.openChart(ui, { tabId: 3, table: "t", columns: [{ name: "region", dtype: "VARCHAR" }, { name: "qty", dtype: "INTEGER" }] });
+    const p = D.openChart(ui, {
+      tabId: 3,
+      table: "t",
+      columns: [
+        { name: "region", dtype: "VARCHAR" },
+        { name: "qty", dtype: "INTEGER" },
+        { name: "product", dtype: "VARCHAR" },
+      ],
+    });
     await act(async () => new Promise((r) => setTimeout(r, 400)));
     expect(invoke).toHaveBeenCalledWith("chart_data", {
       id: 3,
-      spec: { kind: "bar", x: "region", y: "qty", agg: "sum", bins: 20, sort_by_value: true },
+      spec: { kind: "bar", x: "region", y: "qty", agg: "sum", series: null, time_unit: "auto", sort: "auto", limit: 20, other: true, bins: 20 },
     });
+    // The chart is drawn: one bar per category, the generated title, no
+    // legend for a single series.
+    const svg = document.querySelector("svg.pv-chart")!;
+    expect(svg.querySelectorAll("path[d]").length).toBeGreaterThanOrEqual(2);
+    expect(svg.textContent).toContain("chart.title.by");
+    expect(svg.textContent).toContain("north");
+    // Split by a column: the request carries it.
+    fireEvent.change(screen.getAllByRole("combobox")[2], { target: { value: "region" } });
+    await act(async () => new Promise((r) => setTimeout(r, 400)));
+    fireEvent.click(screen.getByText("dialog.chart.table_view"));
+    expect(document.querySelector(".pv-chart-table td")?.textContent).toBe("north");
     fireEvent.click(screen.getByText("btn.close"));
     await expect(p).resolves.toBeUndefined();
   });
