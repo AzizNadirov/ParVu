@@ -34,6 +34,21 @@ jobs:
           # restored (fresh) libduckdb-sys build links a missing duckdb.lib.
           prefix-key: v1-duckdb
           cache-directories: target/duckdb-download
+      # rust-cache can restore libduckdb-sys as already built while the
+      # prebuilt DuckDB library its build script downloaded is incomplete
+      # (cache cleanup), which fails linking with "cannot open duckdb.lib".
+      # Drop the download and libduckdb-sys's build state so the build
+      # script runs and downloads the library again (about a minute). The
+      # pattern covers Cargo's old (libduckdb-sys-<hash>) and new
+      # (libduckdb-sys/<hash>) layouts. Only the debug profile: release
+      # builds compile DuckDB from source.
+      - name: Re-download the prebuilt DuckDB library
+        shell: bash
+        run: |
+          rm -rf target/duckdb-download
+          if [ -d target/debug ]; then
+            find target/debug -maxdepth 3 -name 'libduckdb-sys*' -prune -exec rm -rf {} +
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
