@@ -50,6 +50,7 @@ export const openSort = deferred("openSort");
 export const openColumns = deferred("openColumns");
 export const openSlice = deferred("openSlice");
 export const openSplitColumn = deferred("openSplitColumn");
+export const openConvert = deferred("openConvert");
 export const openBin = deferred("openBin");
 export const openWindow = deferred("openWindow");
 export const openConditionalFormat = deferred("openConditionalFormat");

@@ -98,7 +98,18 @@ export function readAsChoices(): ReadAsChoice[] {
   ];
 }
 
+/** Conversion targets: the "Read as" choices plus Unix time. */
+export function convertChoices(): ReadAsChoice[] {
+  const epoch = (unit: "seconds" | "milliseconds" | "microseconds"): ReadAsChoice => ({
+    key: `types.read.epoch_${unit}`,
+    reading: { kind: "epoch", unit },
+  });
+  return [...readAsChoices(), epoch("seconds"), epoch("milliseconds"), epoch("microseconds")];
+}
+
 /** Same reading (for the check mark in the menu). */
 export function sameReading(a: Reading, b: Reading): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  // Field order may differ between the backend and the choices list.
+  const canon = (r: Reading) => JSON.stringify(Object.entries(r).sort(([x], [y]) => x.localeCompare(y)));
+  return canon(a) === canon(b);
 }

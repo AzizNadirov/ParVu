@@ -79,6 +79,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 
 | Task | Where |
 |------|-------|
+| Column types: detection on open, Read as, conversions | `parvu-core/src/types.rs` (`Reading`, detectors, `best_reading`), `ops.rs` (`Convert`, `ConversionErrors`), `workspace.rs` (`heal`, `set_source_reading`, `preview_conversion`); UI `lib/types.ts`, `dialogs/ConvertDialog.tsx`; plan `plans/COLUMN_TYPES_PLAN.md` |
 | A table operation | `parvu-core/src/ops.rs` (or `reshape.rs`, `clean.rs`, `window.rs`), the menu or dialog in `ui/src/App.tsx` / `ui/src/dialogs/` |
 | Charts | `parvu-core/src/chart.rs`, `ui/src/components/Chart.tsx`, `ui/src/dialogs/ChartDialog.tsx` |
 | Conditional formatting | `ui/src/lib/format.ts`, `ui/src/dialogs/ConditionalFormatDialog.tsx`, applied in `DataGrid.tsx` |

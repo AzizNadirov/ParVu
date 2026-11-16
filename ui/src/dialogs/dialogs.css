@@ -233,3 +233,10 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-snippet pre { margin: 0; max-height: 200px; }
 .pv-proposal-step { display: flex; flex-direction: column; gap: 4px; }
 .pv-proposal-preview { max-height: 260px; }
+
+/* Convert */
+.pv-dialog-convert { width: min(92vw, 640px); }
+.pv-convert-preview { max-height: 280px; }
+.pv-convert-preview td { font-variant-numeric: tabular-nums; }
+.pv-convert-failed td:last-child, .pv-convert-warn { color: var(--md-error); }
+.pv-convert-count { justify-content: space-between; min-height: 32px; }

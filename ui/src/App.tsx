@@ -73,6 +73,7 @@ import {
   openSlice,
   openSort,
   openSplitColumn,
+  openConvert,
   openTableInfo,
   openThemeSelector,
   openTranspose,
@@ -614,6 +615,12 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const columnNames = page?.columns.map((c) => c.name) ?? [];
 
+  const runConvert = async (column: string) => {
+    if (!activeTab) return;
+    const op = await openConvert(ui, { tabId: activeTab.id, table: activeTab.name, column });
+    if (op) await applyOp(op);
+  };
+
   const readAsMenu = (column: string): MenuEntry[] => {
     const src = sourceCols.find((c) => c.name === column);
     if (!src || !activeTab) return [];
@@ -649,6 +656,8 @@ export function App({ boot }: { boot: Bootstrap }) {
     {
       label: t("context.change_type"),
       submenu: [
+        { label: t("context.convert"), onSelect: () => void runConvert(column) },
+        { type: "separator" as const },
         ...CHANGE_TYPES.map((ty) => ({ label: ty, onSelect: () => void applyOp({ op: "change_type", column, new_type: ty }) })),
         { type: "separator" as const },
         {

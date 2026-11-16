@@ -14,6 +14,7 @@ use crate::error::{CoreError, Result};
 use crate::page::{Cell, ColumnMeta};
 use crate::reshape::{AggFunc, Aggregation};
 use crate::sql::{is_safe_type_name, quote_ident, quote_literal};
+use crate::types::{Reading, TypeFamily};
 use crate::window::WindowSpec;
 
 /// i18n key plus named arguments, translated by the UI.
@@ -75,6 +76,23 @@ pub enum Operation {
     /// Cast a column to a DuckDB type such as `INTEGER`, `DOUBLE`, `DATE`,
     /// `TIMESTAMP`, `VARCHAR`, `BOOLEAN` or `DECIMAL(18,2)`.
     ChangeType { column: String, new_type: String },
+    /// Convert a column to another type, reading it as `to`: number formats
+    /// (`1.234,5`), date formats (`%d.%m.%Y`), yes/no words, Unix time…
+    /// Never fails: values that don't convert become empty, or `on_error`.
+    Convert {
+        column: String,
+        to: Reading,
+        /// Value for cells that don't convert; must be valid in the new type.
+        #[serde(default)]
+        on_error: Option<String>,
+        /// Keep the original column, as `<column>_raw`, right after it.
+        #[serde(default)]
+        keep_original: bool,
+    },
+    /// Keep (`keep: true`) or remove the rows whose `column` doesn't convert
+    /// as `to` (Power Query's Keep Errors / Remove Errors). Empty cells are
+    /// not errors.
+    ConversionErrors { column: String, to: Reading, keep: bool },
     /// Add a copy of a column.
     Duplicate { column: String },
     /// Remove duplicate rows, comparing the given columns (pandas `drop_duplicates`).
@@ -293,6 +311,21 @@ impl<'a> OpContext<'a> {
     }
 }
 
+/// `(converted, failed)` expressions for reading `column` as `to`: the
+/// converted value, and a condition true where a non-empty value doesn't
+/// convert.
+pub(crate) fn conversion(ctx: &OpContext, column: &str, to: &Reading) -> Result<(String, String)> {
+    let meta = ctx.column(column)?;
+    if !is_safe_type_name(to.dtype()) {
+        return Err(CoreError::invalid(format!("Invalid type: {}", to.dtype())));
+    }
+    let x = quote_ident(column);
+    let text = meta.family == TypeFamily::Text;
+    let conv = to.expr_of(&x, text);
+    let empty = if text { format!(" AND {x} <> ''") } else { String::new() };
+    Ok((conv.clone(), format!("({x} IS NOT NULL{empty} AND {conv} IS NULL)")))
+}
+
 /// SQL literal for a user-typed sentinel: numbers stay bare, anything else is quoted.
 fn sentinel_literal(raw: &str) -> String {
     let t = raw.trim();
@@ -337,6 +370,46 @@ impl Operation {
                     return Err(CoreError::invalid("Cannot remove the only column."));
                 }
                 (format!("SELECT {} FROM ({cur})", remaining.join(", ")), StepLabel::new("step.remove", &[("column", column)]))
+            }
+            Operation::Convert { column, to, on_error, keep_original } => {
+                let (conv, failed) = conversion(ctx, column, to)?;
+                let value = match on_error {
+                    Some(v) => {
+                        // Checked now: inside the CASE it would only fail on
+                        // the first row that needs it, pages later.
+                        let fallback = format!("CAST({} AS {})", quote_literal(v), to.dtype());
+                        (ctx.query)(&format!("SELECT {fallback}")).map_err(|_| {
+                            CoreError::invalid(format!("\"{v}\" is not a valid {} value", to.dtype()))
+                        })?;
+                        format!("CASE WHEN {failed} THEN {fallback} ELSE {conv} END")
+                    }
+                    None => conv,
+                };
+                let taken: Vec<String> = ctx.columns.iter().map(|c| c.name.clone()).collect();
+                let raw = unique_name(&taken, &format!("{column}_raw"));
+                let items: Vec<String> = ctx
+                    .columns
+                    .iter()
+                    .flat_map(|c| {
+                        if c.name != *column {
+                            vec![q(&c.name)]
+                        } else if *keep_original {
+                            vec![format!("{value} AS {}", q(column)), format!("{} AS {}", q(column), q(&raw))]
+                        } else {
+                            vec![format!("{value} AS {}", q(column))]
+                        }
+                    })
+                    .collect();
+                (
+                    format!("SELECT {} FROM ({cur})", items.join(", ")),
+                    StepLabel::new("step.convert", &[("column", column), ("type", to.dtype())]),
+                )
+            }
+            Operation::ConversionErrors { column, to, keep } => {
+                let (_, failed) = conversion(ctx, column, to)?;
+                let cond = if *keep { failed } else { format!("NOT {failed}") };
+                let key = if *keep { "step.keep_conversion_errors" } else { "step.remove_conversion_errors" };
+                (format!("SELECT * FROM ({cur}) WHERE {cond}"), StepLabel::new(key, &[("column", column), ("type", to.dtype())]))
             }
             Operation::ChangeType { column, new_type } => {
                 ctx.require(column)?;
@@ -570,6 +643,20 @@ mod tests {
         let ctx = OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other, query: &no_query };
         assert!(Operation::Remove { column: "only".into() }.build(&ctx).is_err());
         assert_eq!(build(Operation::Remove { column: "id".into() }).unwrap().sql, "SELECT \"name\" FROM (Q)");
+    }
+
+    #[test]
+    fn convert_and_conversion_errors() {
+        let to = Reading::LocaleNumber { thousands: ".".into(), decimal: ",".into() };
+        let conv = "TRY_CAST(replace(replace(\"name\", '.', ''), ',', '.') AS DOUBLE)";
+        let b = build(Operation::Convert { column: "name".into(), to: to.clone(), on_error: None, keep_original: true }).unwrap();
+        assert_eq!(b.sql, format!("SELECT \"id\", {conv} AS \"name\", \"name\" AS \"name_raw\" FROM (Q)"));
+        assert_eq!(b.label.key, "step.convert");
+        // A number column is cast to text before a text parse.
+        let b = build(Operation::Convert { column: "id".into(), to: Reading::Boolean, on_error: None, keep_original: false }).unwrap();
+        assert!(b.sql.contains("lower(CAST(\"id\" AS VARCHAR)) IN ("));
+        let b = build(Operation::ConversionErrors { column: "name".into(), to, keep: false }).unwrap();
+        assert_eq!(b.sql, format!("SELECT * FROM (Q) WHERE NOT (\"name\" IS NOT NULL AND \"name\" <> '' AND {conv} IS NULL)"));
     }
 
     #[test]

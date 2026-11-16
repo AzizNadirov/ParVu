@@ -281,7 +281,7 @@ Each phase is one PR with tests, docs and changelog.
 | **0. Safety** | `ChangeType` and export use `TRY_CAST`; split column without a count reads a 10k-row sample; add `duckdb/icu` to `bundled` (measure the installer size) | S |
 | **1a. Detection (engine)** | `TypeFamily` in `ColumnMeta`; detectors (§3.2); native columns plus text columns where needed; healing; `type_pushdown` off; tests with deep bad values, ambiguous dates, locale numbers, yes/no, leading zeros | M |
 | **1b. Types in the UI** | header icons; **Read as** in the column menu (an undoable step that keeps cell edits allowed); one-click day/month flip; date-order setting; per-file remembered types in `~/.ParVu/column_types.json` (decimal separator: chosen per column with Read as, so no setting) | M |
-| **2. Conversions** | `Convert` and `ConversionErrors`; the Convert dialog with preview; sample error count, background exact count, "Show invalid rows" | M |
+| **2. Conversions** (done) | `Convert` and `ConversionErrors` reuse `Reading` (plus Unix time); the Convert dialog with a suggested reading (strict detectors, else the reading that converts ≥ 90 % of the first 10,000 rows, checked against the value's shape), a 50-row preview, a count on the first 100,000 rows and an exact count on its own connection that can be stopped, and "Show rows that don't convert". The invalid-cell colouring in the grid stays for phase 6 | M |
 | **3. Text and boolean** | `ColumnTransform` + preview command; type-aware menu; text and boolean P0 | M |
 | **4. Dates** | date and time P0; relative date filters; translated month and day names | M |
 | **5. JSON and nested** | struct expand, JSON expand with key sampling, extract path, P1 nested ops | M |
