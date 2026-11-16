@@ -31,7 +31,10 @@ chrono.workspace = true
 dirs.workspace = true
 schemars.workspace = true
 # MCP server (`parvu mcp`, src/mcp.rs).
-rmcp = { version = "3.10", default-features = false, features = ["server", "macros", "transport-io"] }
+rmcp = { version = "3.10", default-features = false, features = ["server", "client", "macros", "transport-io"] }
+# Built-in AI assistant (src/ai_assistant.rs).
+parvu-ai.workspace = true
+keyring = "4.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "net", "sync", "time"] }
 getrandom = "0.3"
 

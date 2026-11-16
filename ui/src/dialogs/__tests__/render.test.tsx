@@ -19,6 +19,11 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
       return { pending_edits: 2 };
     case "find":
       return { row: 4, column_index: 1, column: "b", value: "hello" };
+    case "ai_providers":
+    case "ai_save_provider":
+      return { providers: cmd === "ai_save_provider" ? [{ config: (_args as { config: unknown }).config, key_source: "keychain", is_default: true }] : [], keychain: true };
+    case "ai_test_provider":
+      return "claude-opus-5-5";
     case "mcp_status":
     case "mcp_set_enabled":
       return { enabled: cmd === "mcp_set_enabled", listening: cmd === "mcp_set_enabled", port: 4000, clients: 0, command: "parvu", args: ["mcp", "--attach"], error: null };
@@ -439,5 +444,26 @@ describe("AI clients (MCP)", () => {
     expect(screen.getByText("mcp.proposal.undo")).toBeTruthy();
     escape();
     await expect(p).resolves.toBe(false);
+  });
+});
+
+describe("AI assistant", () => {
+  it("providers dialog adds an Anthropic provider, stores the key and tests it", async () => {
+    const ui = makeUi();
+    const p = D.openAiProviders(ui);
+    await flush();
+    expect(screen.getByText("ai.providers.none")).toBeTruthy();
+    fireEvent.click(screen.getByText("ai.providers.add"));
+    await flush();
+    fireEvent.change(document.querySelector('input[type="password"]')!, { target: { value: "sk-ant-test-123456789" } });
+    fireEvent.click(screen.getByText("ai.providers.save_test"));
+    await flush();
+    await flush();
+    const save = invoke.mock.calls.find(([c]) => c === "ai_save_provider")!;
+    expect(save[1]).toMatchObject({ key: "sk-ant-test-123456789", make_default: false, config: { id: "anthropic", kind: "anthropic", model: "claude-opus-5-5" } });
+    expect(invoke).toHaveBeenCalledWith("ai_test_provider", { id: "anthropic" });
+    expect(screen.getByText('ai.providers.test_ok{"model":"claude-opus-5-5"}')).toBeTruthy();
+    fireEvent.click(screen.getByText("btn.close"));
+    await expect(p).resolves.toBeUndefined();
   });
 });

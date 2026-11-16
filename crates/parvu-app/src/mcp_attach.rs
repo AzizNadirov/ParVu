@@ -115,7 +115,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
             mcp::serve_tcp(
                 listener,
                 token,
-                move || ParvuMcp::attached(Arc::new(TauriHost { app: make_app.clone() })),
+                move || ParvuMcp::attached(Arc::new(TauriHost { app: make_app.clone(), window: None })),
                 move |n| {
                     count_app.state::<AppState>().attach.clients.store(n, Ordering::SeqCst);
                     let _ = count_app.emit("mcp-clients", n);
@@ -165,12 +165,26 @@ pub fn stop(app: &AppHandle) {
 /// The app as seen by an attached MCP server.
 struct TauriHost {
     app: AppHandle,
+    /// Work on this window; `None` follows the window focused last.
+    window: Option<String>,
+}
+
+/// A host pinned to one window (the built-in assistant of that window).
+pub fn host_for_window(app: &AppHandle, label: &str) -> Arc<dyn AttachHost> {
+    Arc::new(TauriHost { app: app.clone(), window: Some(label.to_string()) })
 }
 
 impl AttachHost for TauriHost {
     fn workspace(&self) -> Result<(String, Arc<Mutex<Workspace>>), String> {
         let state = self.app.state::<AppState>();
         let windows = self.app.webview_windows();
+        if let Some(label) = &self.window {
+            if !windows.contains_key(label) {
+                return Err("The ParVu window was closed.".into());
+            }
+            let ws = state.workspace(label).map_err(|e| e.message)?;
+            return Ok((label.clone(), ws));
+        }
         let mut label = lock(&state.attach.active_window).clone();
         if !windows.contains_key(&label) {
             let mut labels: Vec<_> = windows.keys().cloned().collect();

@@ -1,6 +1,7 @@
 // Hide the console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai_assistant;
 mod commands;
 mod error;
 mod mcp;
@@ -85,6 +86,7 @@ fn main() {
     let initial_files: Vec<PathBuf> =
         std::env::args_os().skip(1).map(PathBuf::from).filter(|p| p.is_file()).collect();
     tracing::info!("ParVu {} starting", env!("CARGO_PKG_VERSION"));
+    parvu_ai::init_tls();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -152,6 +154,13 @@ fn main() {
             mcp_attach::mcp_status,
             mcp_attach::mcp_set_enabled,
             mcp_attach::mcp_decide,
+            ai_assistant::ai_providers,
+            ai_assistant::ai_save_provider,
+            ai_assistant::ai_delete_provider,
+            ai_assistant::ai_test_provider,
+            ai_assistant::ai_ask,
+            ai_assistant::ai_cancel,
+            ai_assistant::ai_clear_chat,
         ])
         .build(tauri::generate_context!())
         .expect("error while running ParVu")

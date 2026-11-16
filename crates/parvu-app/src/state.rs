@@ -38,6 +38,8 @@ pub struct AppState {
     pub pending_crash: Mutex<Option<String>>,
     /// AI clients connected through `parvu mcp --attach`.
     pub attach: crate::mcp_attach::Attach,
+    /// The built-in AI assistant's chats and running questions.
+    pub assistant: crate::ai_assistant::Assistant,
 }
 
 /// Lock a mutex, recovering the data if a panicking thread poisoned it.
@@ -56,6 +58,7 @@ impl AppState {
             initial_files: Mutex::new(initial_files),
             pending_crash: Mutex::new(pending_crash),
             attach: Default::default(),
+            assistant: Default::default(),
         }
     }
 

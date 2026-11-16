@@ -55,6 +55,7 @@ export const openWindow = deferred("openWindow");
 export const openConditionalFormat = deferred("openConditionalFormat");
 export const openChart = deferred("openChart");
 export const openConnectAi = deferred("openConnectAi");
+export const openAiProviders = deferred("openAiProviders");
 export const openMcpProposal = deferred("openMcpProposal");
 
 export const SearchPanel = lazy(() => load().then((m) => ({ default: m.SearchPanel })));

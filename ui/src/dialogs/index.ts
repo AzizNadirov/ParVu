@@ -36,6 +36,7 @@ export { openWindow } from "./WindowDialog";
 export { openConditionalFormat } from "./ConditionalFormatDialog";
 export { openChart } from "./ChartDialog";
 export { openConnectAi } from "./ConnectAiDialog";
+export { openAiProviders } from "./AiProvidersDialog";
 export { openMcpProposal } from "./McpProposalDialog";
 export { SearchPanel } from "./SearchPanel";
 export type { SearchPanelProps } from "./SearchPanel";

@@ -409,6 +409,78 @@ export interface McpProposal {
   rows: Cell[][];
 }
 
+// ---------- built-in AI assistant ----------
+
+export type ProviderKind = "anthropic" | "open_ai_compatible";
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** A configured model provider (no key: keys live in the system keychain). */
+export interface ProviderConfig {
+  id: string;
+  kind: ProviderKind;
+  display_name: string;
+  model: string;
+  base_url: string | null;
+  /** Environment variable with the key, used when the keychain has none. */
+  key_env: string | null;
+  max_output_tokens: number;
+  effort: Effort;
+  server_fallback: boolean;
+  request_timeout_s: number;
+}
+
+export interface ProviderView {
+  config: ProviderConfig;
+  key_source: "keychain" | "environment" | "none";
+  is_default: boolean;
+}
+
+export interface ProvidersInfo {
+  providers: ProviderView[];
+  /** Whether a system keychain is available for storing keys. */
+  keychain: boolean;
+}
+
+export interface AiUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
+export type AiStop =
+  | { type: "end_turn" }
+  | { type: "tool_use" }
+  | { type: "max_tokens" }
+  | { type: "refusal"; category: string | null }
+  | { type: "other"; reason: string };
+
+export type AiDelta =
+  | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
+  | { type: "tool_start"; id: string; name: string }
+  | { type: "fallback"; from: string; to: string };
+
+export type AgentEvent =
+  | { type: "delta"; delta: AiDelta }
+  | { type: "tool_call"; id: string; name: string; input: unknown }
+  | { type: "tool_result"; id: string; preview: string; is_error: boolean }
+  | { type: "usage"; usage: AiUsage; model: string; cost_usd: number | null }
+  | { type: "done"; stop: AiStop };
+
+export interface AiRunEvent {
+  run_id: number;
+  tab_id: number | null;
+  event: AgentEvent;
+}
+
+export interface AiRunFinished {
+  run_id: number;
+  tab_id: number | null;
+  error: string | null;
+  cancelled: boolean;
+}
+
 const call = <T>(cmd: string, args?: Record<string, unknown>) => invoke<T>(cmd, args);
 
 export const api = {
@@ -464,4 +536,14 @@ export const api = {
   mcpSetEnabled: (enabled: boolean) => call<McpStatus>("mcp_set_enabled", { enabled }),
   /** Answer an approval card; false when the request is gone. */
   mcpDecide: (id: number, approve: boolean) => call<boolean>("mcp_decide", { id, approve }),
+  aiProviders: () => call<ProvidersInfo>("ai_providers"),
+  /** `key`: undefined keeps the stored key, "" removes it. */
+  aiSaveProvider: (config: ProviderConfig, key: string | undefined, makeDefault: boolean) =>
+    call<ProvidersInfo>("ai_save_provider", { config, key: key ?? null, make_default: makeDefault }),
+  aiDeleteProvider: (id: string) => call<ProvidersInfo>("ai_delete_provider", { id }),
+  aiTestProvider: (id: string) => call<string>("ai_test_provider", { id }),
+  aiAsk: (providerId: string, tabId: number | null, question: string) =>
+    call<number>("ai_ask", { provider_id: providerId, tab_id: tabId, question }),
+  aiCancel: (runId: number, tabId: number | null) => call<boolean>("ai_cancel", { run_id: runId, tab_id: tabId }),
+  aiClearChat: (tabId: number | null) => call<void>("ai_clear_chat", { tab_id: tabId }),
 };

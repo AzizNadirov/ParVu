@@ -15,7 +15,10 @@ import {
   type Bootstrap,
   type Cell,
   type ColumnMeta,
+  type AiRunEvent,
+  type AiRunFinished,
   type McpProposal,
+  type ProvidersInfo,
   type Operation,
   type Page,
   type Settings,
@@ -31,6 +34,8 @@ import { MenuBar, PopupMenu, type MenuEntry } from "./components/PopupMenu";
 import { DataGrid, isNumericType, type GridHandle } from "./components/DataGrid";
 import { QueryEditor, type EditorMode } from "./components/QueryEditor";
 import { Pagination, StepsPanel, TabBar, Welcome, stepText } from "./components/Panels";
+import { AiPanel } from "./components/AiPanel";
+import { applyEvent, emptyChat, finishRun, startRun, type ChatState } from "./lib/ai";
 import type { FormatRule } from "./lib/format";
 import {
   SearchPanel,
@@ -39,6 +44,7 @@ import {
   openBin,
   openChart,
   openColumnStats,
+  openAiProviders,
   openConnectAi,
   openMcpProposal,
   openColumns,
@@ -129,6 +135,20 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [recents, setRecents] = useState(boot.recents);
   /** AI clients connected through `parvu mcp --attach`. */
   const [aiClients, setAiClients] = useState(0);
+  // Built-in AI assistant: panel, providers, one chat per tab (key 0: no tab).
+  const [aiOpen, setAiOpen] = useState(() => {
+    try {
+      return localStorage.getItem("pv.aiPanel") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [aiProviders, setAiProviders] = useState<ProvidersInfo | null>(null);
+  const [aiProvider, setAiProvider] = useState<string | null>(null);
+  const [chats, setChats] = useState<Record<number, ChatState>>({});
+  const updateChat = useCallback((key: number, f: (c: ChatState) => ChatState) => {
+    setChats((all) => ({ ...all, [key]: f(all[key] ?? emptyChat()) }));
+  }, []);
 
   const [tabs, setTabs] = useState<TabSummary[]>([]);
   const [active, setActive] = useState<number | null>(null);
@@ -982,6 +1002,38 @@ export function App({ boot }: { boot: Bootstrap }) {
   const onLanguage = useCallback((_lang: string, tr: Record<string, string>) => setTranslations(tr), []);
 
   // ------------------------------------------------------------ menus
+  // ------------------------------------------------------------ AI assistant
+  const loadAiProviders = useCallback(async () => {
+    try {
+      const info = await api.aiProviders();
+      setAiProviders(info);
+      setAiProvider((cur) =>
+        cur && info.providers.some((p) => p.config.id === cur)
+          ? cur
+          : (info.providers.find((p) => p.is_default) ?? info.providers[0])?.config.id ?? null,
+      );
+    } catch {
+      setAiProviders({ providers: [], keychain: false });
+    }
+  }, []);
+  const toggleAi = useCallback(() => {
+    setAiOpen((open) => {
+      try {
+        localStorage.setItem("pv.aiPanel", open ? "0" : "1");
+      } catch {
+        /* per-viewer convenience only */
+      }
+      return !open;
+    });
+  }, []);
+  const manageProviders = async () => {
+    await openAiProviders(ui);
+    await loadAiProviders();
+  };
+  useEffect(() => {
+    if (aiOpen) void loadAiProviders();
+  }, [aiOpen, loadAiProviders]);
+
   const menus = [
     {
       title: t("menu.file"),
@@ -1081,7 +1133,12 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     {
       title: t("menu.ai"),
-      items: (): MenuEntry[] => [{ label: t("menu.ai.connect"), onSelect: () => void openConnectAi(ui) }],
+      items: (): MenuEntry[] => [
+        { label: t("menu.ai.assistant"), shortcut: "Ctrl+Shift+A", checked: aiOpen, onSelect: () => toggleAi() },
+        { label: t("menu.ai.providers"), onSelect: () => void manageProviders() },
+        { type: "separator" },
+        { label: t("menu.ai.connect"), onSelect: () => void openConnectAi(ui) },
+      ],
     },
     {
       title: t("menu.help"),
@@ -1111,8 +1168,8 @@ export function App({ boot }: { boot: Bootstrap }) {
       /* the tab may have been closed meanwhile */
     }
   };
-  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi });
-  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi };
+  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi, toggleAi });
+  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi, toggleAi };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1135,6 +1192,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       else if (ctrl && e.shiftKey && k === "l") run(() => h.activeTab && h.filterRows());
       else if (ctrl && !e.shiftKey && k === "g") run(() => h.activeTab && h.groupBy());
       else if (ctrl && e.shiftKey && k === "c" && !typing) run(() => h.activeTab && void h.showChart());
+      else if (ctrl && e.shiftKey && k === "a") run(() => h.toggleAi());
       else if (ctrl && !e.shiftKey && k === "d" && !typing) run(() => h.activeTab && void h.fillDown());
       else if (ctrl && k === "f") run(h.openSearch);
       else if (ctrl && (k === "/" || e.code === "Slash")) run(() => void openShortcutsDialog(ui));
@@ -1155,6 +1213,15 @@ export function App({ boot }: { boot: Bootstrap }) {
         if (!live) status(t("mcp.proposal.expired"), 5000);
       }),
       getCurrentWindow().listen<number>("mcp-changed", (e) => void handlers.current.refreshFromAi(e.payload)),
+      // Built-in assistant: streamed events and the end of a run, per tab.
+      getCurrentWindow().listen<AiRunEvent>("ai-event", (e) =>
+        updateChat(e.payload.tab_id ?? 0, (c) => (c.runId === e.payload.run_id ? applyEvent(c, e.payload.event) : c)),
+      ),
+      getCurrentWindow().listen<AiRunFinished>("ai-finished", (e) =>
+        updateChat(e.payload.tab_id ?? 0, (c) =>
+          c.runId === e.payload.run_id ? finishRun(c, e.payload.error, e.payload.cancelled) : c,
+        ),
+      ),
       listen<number>("mcp-clients", (e) => setAiClients(e.payload)),
       getCurrentWebview().onDragDropEvent(async (e) => {
         if (e.payload.type !== "drop") return;
@@ -1167,7 +1234,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     ];
     void api.mcpStatus().then((s) => setAiClients(s.clients)).catch(() => undefined);
     return () => unsubs.forEach((u) => void u.then((f) => f()));
-  }, [boot.extensions, status, t, ui]);
+  }, [boot.extensions, status, t, ui, updateChat]);
 
   // Closing the window: unsaved edits, then (optionally) the transforms warning.
   const closeState = useRef({ tabs, settings, resolveUnsaved, exportTab, ui });
@@ -1285,6 +1352,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     <UiContext.Provider value={ui}>
       <div className="app">
         <MenuBar menus={menus} />
+        <div className="app-body">
         {!activeTab ? (
           <Welcome t={t} recents={recents} extensions={boot.extensions} onOpen={(p) => void openPath(p)} onBrowse={() => void browse()} />
         ) : (
@@ -1417,6 +1485,27 @@ export function App({ boot }: { boot: Bootstrap }) {
             )}
           </main>
         )}
+        {aiOpen && (
+          <AiPanel
+            ui={ui}
+            tabId={activeTab?.id ?? null}
+            tabName={activeTab?.name ?? null}
+            chat={chats[activeTab?.id ?? 0] ?? emptyChat()}
+            onStart={(q, runId) => updateChat(activeTab?.id ?? 0, (c) => startRun(c, q, runId))}
+            onClear={() => {
+              const id = activeTab?.id ?? null;
+              void api.aiClearChat(id);
+              updateChat(id ?? 0, () => emptyChat());
+            }}
+            providers={aiProviders}
+            providerId={aiProvider}
+            onProvider={setAiProvider}
+            onOpenProviders={() => void manageProviders()}
+            onConnectClient={() => void openConnectAi(ui)}
+            onClose={toggleAi}
+          />
+        )}
+        </div>
         {tabs.length > 0 && (
           <TabBar t={t} tabs={tabs} active={active} onSelect={switchTo} onClose={(id) => void closeTab(id)} onAdd={() => void browse()} />
         )}
