@@ -159,6 +159,32 @@ fn filter_drop_null_change_type_duplicate_add() {
 }
 
 #[test]
+fn change_type_never_breaks_later_pages() {
+    // A text column of numbers with one bad value far down: the type change
+    // must not fail on the page, sort or count that reaches it.
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("codes.csv");
+    let mut text = String::from("id,code\n");
+    for i in 0..500 {
+        text.push_str(&format!("{i},{i}\n"));
+    }
+    text.push_str("500,oops\n");
+    std::fs::write(&path, text).unwrap();
+    let mut ws = Workspace::new(100, None).unwrap();
+    let id = ws.open(&path).unwrap();
+    assert_eq!(ws.columns(id).unwrap()[1].dtype, "VARCHAR");
+    ws.apply(id, &Operation::ChangeType { column: "code".into(), new_type: "INTEGER".into() }).unwrap();
+    ws.apply(id, &Operation::Sort { column: "code".into(), ascending: false }).unwrap();
+    assert_eq!(ws.summary(id).unwrap().total_rows, 501);
+    // Every page loads, and the value that doesn't convert is empty.
+    let rows: Vec<Vec<Option<String>>> = (1..=6).flat_map(|p| ws.page(id, p).unwrap().rows).collect();
+    assert_eq!(rows.len(), 501);
+    let bad = rows.iter().find(|r| r[0].as_deref() == Some("500")).unwrap();
+    assert_eq!(bad[1], None);
+    assert!(rows.iter().any(|r| r[1].as_deref() == Some("499")));
+}
+
+#[test]
 fn relative_sql_sees_current_state() {
     let (_d, _p, mut ws, id) = setup(50, "parquet");
     ws.run_sql(id, "SELECT * FROM my_data WHERE id < 10", None).unwrap();
