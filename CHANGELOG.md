@@ -15,6 +15,9 @@ AI comes to ParVu: use your Claude subscription through Claude Desktop or Claude
 - `install.sh` installs a fresh build even when its version matches the installed one (before, apt kept the old program).
 - Windows installer builds in CI: the prebuilt DuckDB library is downloaded again before each build.
 
+### Changed
+- **Charts:** a suggested chart for the selected column; area charts; dates grouped by day, week, month, quarter or year; top N with the rest as "Other"; series split by a category (stacked or grouped); readable axes (round ticks, compact numbers, round histogram intervals); hover tooltips, a legend, a table view; PNG and SVG export; colours that hold up in dark themes and for colour-blind readers.
+
 ## [1.0.0-alpha.2]
 
 ### Added

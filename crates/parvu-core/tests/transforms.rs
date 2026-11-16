@@ -1,7 +1,7 @@
 //! The pandas-style operations (reshape, clean, window) run against DuckDB.
 
 use parvu_core::Workspace;
-use parvu_core::chart::{ChartKind, ChartSpec};
+use parvu_core::chart::{ChartKind, ChartSpec, SortOrder, TimeUnit, XKind};
 use parvu_core::clean::{BinMethod, Combine, CondOp, Condition, FillMethod, SliceMode, SortKey};
 use parvu_core::ops::Operation;
 use parvu_core::reshape::{AggFunc, Aggregation};
@@ -448,28 +448,88 @@ fn numeric_range_for_colour_scales() {
 }
 
 fn chart(kind: ChartKind, x: &str, y: Option<&str>, agg: AggFunc) -> ChartSpec {
-    ChartSpec { kind, x: x.into(), y: y.map(String::from), agg, bins: None, sort_by_value: false }
+    ChartSpec {
+        kind,
+        x: x.into(),
+        y: y.map(String::from),
+        agg,
+        series: None,
+        time_unit: TimeUnit::Auto,
+        sort: SortOrder::Auto,
+        limit: None,
+        other: true,
+        bins: None,
+    }
+}
+
+fn one(d: &parvu_core::chart::ChartData) -> Vec<Option<f64>> {
+    assert_eq!(d.series.len(), 1);
+    d.series[0].values.clone()
 }
 
 #[test]
 fn chart_data_is_aggregated_in_duckdb() {
     let (_d, ws, id) = setup();
+    // Categories: largest first by default.
     let bar = ws.chart(id, &chart(ChartKind::Bar, "region", Some("qty"), AggFunc::Sum)).unwrap();
-    assert_eq!(bar.labels, s(&["east", "north", "south"]));
-    assert_eq!(bar.values, vec![None, Some(15.0), Some(2.0)]);
-    let bar = ws.chart(id, &ChartSpec { sort_by_value: true, ..chart(ChartKind::Bar, "region", None, AggFunc::Sum) }).unwrap();
-    assert_eq!(bar.labels, s(&["north", "south", "east"]), "row counts, largest first");
-    assert_eq!(bar.values, vec![Some(3.0), Some(2.0), Some(1.0)]);
+    assert_eq!(bar.x_kind, XKind::Category);
+    assert_eq!(bar.labels, s(&["north", "south", "east"]));
+    assert_eq!(one(&bar), vec![Some(15.0), Some(2.0), None]);
+    let bar = ws.chart(id, &ChartSpec { sort: SortOrder::Label, ..chart(ChartKind::Bar, "region", None, AggFunc::Sum) }).unwrap();
+    assert_eq!(bar.labels, s(&["east", "north", "south"]), "row counts, by label");
+    assert_eq!(one(&bar), vec![Some(1.0), Some(3.0), Some(2.0)]);
+
+    // Dates: grouped (five days → by day), in date order, empty last.
     let line = ws.chart(id, &chart(ChartKind::Line, "day", Some("price"), AggFunc::Mean)).unwrap();
+    assert_eq!(line.x_kind, XKind::Time);
+    assert_eq!(line.time_unit, Some(TimeUnit::Day));
     assert_eq!(line.labels.first().map(String::as_str), Some("2024-01-01"));
-    assert_eq!(line.labels.last().map(String::as_str), Some("NULL"));
+    assert_eq!(line.labels.last().map(String::as_str), Some("(empty)"));
+    let by_month = ws.chart(id, &ChartSpec { time_unit: TimeUnit::Month, ..chart(ChartKind::Line, "day", Some("qty"), AggFunc::Sum) }).unwrap();
+    assert_eq!(by_month.labels, s(&["2024-01", "(empty)"]));
+    assert_eq!(one(&by_month), vec![Some(17.0), None]);
+
     let sc = ws.chart(id, &chart(ChartKind::Scatter, "qty", Some("price"), AggFunc::Sum)).unwrap();
-    assert_eq!(sc.xs.len(), 6);
+    assert_eq!(sc.series[0].xs.len(), 6);
     assert!(!sc.truncated);
     let h = ws.chart(id, &ChartSpec { bins: Some(5), ..chart(ChartKind::Histogram, "qty", None, AggFunc::Sum) }).unwrap();
-    assert_eq!(h.labels, s(&["2", "3", "4", "5", "6"]));
-    assert_eq!(h.values.iter().flatten().sum::<f64>(), 4.0, "four non-null values");
-    assert_eq!(h.values.last(), Some(&Some(1.0)), "the maximum lands in the last bin");
+    assert_eq!(h.labels.len(), 5);
+    assert_eq!(h.labels[0], "2 – 3");
+    assert_eq!(h.bin_edges.len(), 6);
+    assert_eq!(one(&h).iter().flatten().sum::<f64>(), 4.0, "four non-null values");
+    assert_eq!(one(&h).last(), Some(&Some(1.0)), "the maximum lands in the last bin");
     assert!(ws.chart(id, &chart(ChartKind::Histogram, "region", None, AggFunc::Sum)).is_err());
     assert!(ws.chart(id, &chart(ChartKind::Bar, "region", Some("qty"), AggFunc::List)).is_err());
+}
+
+#[test]
+fn charts_fold_the_rest_into_other_and_split_into_series() {
+    let (_d, ws, id) = setup();
+    // Top 1 region by row count, the rest as "Other" aggregated over its
+    // rows: the mean of south's and east's prices, not a sum of means.
+    let top = ChartSpec { limit: Some(1), ..chart(ChartKind::Bar, "region", Some("price"), AggFunc::Mean) };
+    let bar = ws.chart(id, &top).unwrap();
+    assert_eq!(bar.labels, s(&["south", "Other"]));
+    assert_eq!(bar.other_label, Some(1));
+    assert_eq!(one(&bar)[0], Some(2.5));
+    assert!((one(&bar)[1].unwrap() - 4.0 / 3.0).abs() < 1e-9, "mean of 1.5, 1.0, 1.5");
+    let dropped = ws.chart(id, &ChartSpec { other: false, ..top }).unwrap();
+    assert_eq!(dropped.labels, s(&["south"]));
+
+    // Split by product: one series each, named, largest total first.
+    let split = ChartSpec { series: Some("product".into()), ..chart(ChartKind::Bar, "region", Some("qty"), AggFunc::Sum) };
+    let d = ws.chart(id, &split).unwrap();
+    assert_eq!(d.labels, s(&["north", "south", "east"]));
+    let names: Vec<_> = d.series.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["apple", "pear", "plum"]);
+    assert_eq!(d.series[0].values, vec![Some(10.0), None, None], "apple: north 3+7, south NULL qty");
+    assert_eq!(d.series[1].values, vec![Some(5.0), Some(2.0), None]);
+
+    // Scatter split: named series plus points.
+    let sc = ws
+        .chart(id, &ChartSpec { series: Some("region".into()), ..chart(ChartKind::Scatter, "qty", Some("price"), AggFunc::Sum) })
+        .unwrap();
+    assert_eq!(sc.series.iter().map(|s| s.xs.len()).sum::<usize>(), 6);
+    assert_eq!(sc.series[0].name, "north");
+    assert!(sc.series.iter().all(|s| !s.other), "three regions fit");
 }

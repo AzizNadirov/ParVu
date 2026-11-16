@@ -146,6 +146,7 @@ fn main() {
             commands::edit_cells,
             commands::column_range,
             commands::chart_data,
+            commands::save_chart_image,
             commands::save_tab,
             commands::column_stats,
             commands::unique_values,

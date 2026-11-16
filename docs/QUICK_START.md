@@ -44,6 +44,17 @@ Every query and operation is listed under **Applied Steps**. `Ctrl+Z` undoes the
 
 Each one becomes a step you can undo; formatting, frozen columns and column widths only change the view.
 
+### Charts
+
+Select a column and press `Ctrl+Shift+C`: ParVu suggests a chart (a date → a line over time, a number → its distribution, text → a bar per value). Then:
+
+- **Group by / Value:** what goes along the axis and how it is calculated (sum, mean, count…, or just the number of rows).
+- **Split by:** one series per value of a category, stacked or side by side; past seven values the rest becomes a gray "Other".
+- **Group dates by:** day, week, month, quarter or year (automatic picks one from the date range).
+- **Show:** the top N bars, the rest grouped as "Other", sorted by value or by label.
+
+Hover for exact values, tick **Show the numbers as a table** to read them, and **Save image…** to export PNG or SVG. The chart covers the tab's current result, so filter or group first to chart a subset.
+
 ## Edit and save
 
 While no transform is applied, you can type into any cell. Edited cells are highlighted, and values that don't fit the column type are rejected.
