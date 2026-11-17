@@ -7,6 +7,7 @@
 
 pub mod catalog;
 pub mod compiler;
+pub mod excel;
 pub mod ir;
 pub mod parser;
 pub mod registry;
@@ -170,7 +171,8 @@ pub fn compile_formula(src: &str, catalog: &Catalog, registry: &FunctionRegistry
 }
 
 fn is_aggregate(name: &str) -> bool {
-    AGGREGATES.contains(&name.to_uppercase().as_str())
+    let n = name.to_uppercase();
+    AGGREGATES.contains(&n.as_str()) || excel::AGGREGATES.contains(&n.as_str())
 }
 
 /// Replace each aggregate (a column total) by a marker, collecting its SQL.
@@ -178,7 +180,7 @@ fn extract_totals(e: Expr, registry: &FunctionRegistry, out: &mut Vec<String>) -
     let total = |e: &Expr, out: &mut Vec<String>| -> Result<Expr, DslError> {
         let sql = compile(e, registry)?;
         out.push(sql);
-        Ok(Expr::Template { template: total_marker(out.len() - 1), args: Vec::new(), logical_type: e.logical_type() })
+        Ok(Expr::Template { template: total_marker(out.len() - 1), args: Vec::new(), logical_type: e.logical_type(), aggregate: false })
     };
     let each = |v: Vec<Expr>, out: &mut Vec<String>| -> Result<Vec<Expr>, DslError> {
         v.into_iter().map(|a| extract_totals(a, registry, out)).collect()
@@ -186,6 +188,7 @@ fn extract_totals(e: Expr, registry: &FunctionRegistry, out: &mut Vec<String>) -
     Ok(match e {
         Expr::Call { ref func_name, .. } if is_aggregate(func_name) => total(&e, out)?,
         Expr::MethodCall { ref method_name, .. } if is_aggregate(method_name) => total(&e, out)?,
+        Expr::Template { aggregate: true, .. } => total(&e, out)?,
         Expr::Call { func_name, args, logical_type } => Expr::Call { func_name, args: each(args, out)?, logical_type },
         Expr::MethodCall { receiver, method_name, args, logical_type } => Expr::MethodCall {
             receiver: Box::new(extract_totals(*receiver, registry, out)?),
@@ -210,14 +213,16 @@ fn extract_totals(e: Expr, registry: &FunctionRegistry, out: &mut Vec<String>) -
             regex,
             logical_type,
         },
-        Expr::Template { template, args, logical_type } => Expr::Template { template, args: each(args, out)?, logical_type },
+        Expr::Template { template, args, logical_type, aggregate } => {
+            Expr::Template { template, args: each(args, out)?, logical_type, aggregate }
+        }
         other => other,
     })
 }
 
 fn reads_neighbours(e: &Expr) -> bool {
     match e {
-        Expr::Template { template, args, .. } => template.contains(") OVER ()") || args.iter().any(reads_neighbours),
+        Expr::Template { template, args, .. } => template.contains(" OVER (") || args.iter().any(reads_neighbours),
         Expr::Call { args, .. } => args.iter().any(reads_neighbours),
         Expr::MethodCall { receiver, args, .. } => reads_neighbours(receiver) || args.iter().any(reads_neighbours),
         Expr::BinaryOp { left, right, .. } => reads_neighbours(left) || reads_neighbours(right),

@@ -5,6 +5,8 @@ mod ai_assistant;
 mod column_types;
 mod commands;
 mod error;
+#[cfg(test)]
+mod excel_tests;
 mod jobs;
 mod mcp;
 mod mcp_attach;

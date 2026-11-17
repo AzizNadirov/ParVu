@@ -19,6 +19,7 @@ import type {
   CsvOptions,
   ExportFormat,
   ExportOptions,
+  ExcelEntry,
   FunctionDef,
   JoinType,
   Keep,
@@ -342,8 +343,9 @@ export const FUNCTION_CATEGORIES: [string, string[]][] = [
   ["expr.special", ["DROP_DUPLICATES"]],
 ];
 
-/** Group functions by the help categories; anything not listed goes to "other". */
-export function groupFunctions(functions: FunctionDef[]): [string, FunctionDef[]][] {
+/** Group functions by the help categories; Excel's own functions get a
+ * group of their own, anything else goes to "other". */
+export function groupFunctions(functions: FunctionDef[], excelNames: string[] = []): [string, FunctionDef[]][] {
   const byName = new Map(functions.map((f) => [f.name.toUpperCase(), f]));
   const used = new Set<string>();
   const groups: [string, FunctionDef[]][] = [];
@@ -352,9 +354,41 @@ export function groupFunctions(functions: FunctionDef[]): [string, FunctionDef[]
     fs.forEach((f) => used.add(f.name.toUpperCase()));
     if (fs.length) groups.push([key, fs]);
   }
+  const excel = new Set(excelNames.map((n) => n.toUpperCase()));
+  const fromExcel = functions.filter((f) => !used.has(f.name.toUpperCase()) && excel.has(f.name.toUpperCase()));
+  fromExcel.forEach((f) => used.add(f.name.toUpperCase()));
+  if (fromExcel.length) groups.push(["dialog.expr_help.excel_group", fromExcel]);
   const rest = functions.filter((f) => !used.has(f.name.toUpperCase()));
   if (rest.length) groups.push(["dialog.expr_help.other", rest]);
   return groups;
+}
+
+/** Excel categories, in the order the reference shows them. */
+export const EXCEL_CATEGORIES = ["math", "statistics", "conditional", "logical", "information", "text", "date", "lookup", "tables"];
+
+export interface ExcelRow {
+  entry: ExcelEntry;
+  /** The ParVu function to write, when there is one. */
+  def?: FunctionDef;
+}
+
+/** The Excel reference by category, filtered by `query` (name, function, description, alternative). */
+export function excelGroups(entries: ExcelEntry[], functions: FunctionDef[], query: string): [string, ExcelRow[]][] {
+  const byName = new Map(functions.map((f) => [f.name.toUpperCase(), f]));
+  const q = query.trim().toLowerCase();
+  const rows: ExcelRow[] = entries
+    .map((entry) => ({ entry, def: entry.function ? byName.get(entry.function.toUpperCase()) : undefined }))
+    .filter(
+      ({ entry, def }) =>
+        !q ||
+        entry.name.toLowerCase().includes(q) ||
+        (entry.function ?? "").toLowerCase().includes(q) ||
+        (entry.instead ?? "").toLowerCase().includes(q) ||
+        (def?.description ?? "").toLowerCase().includes(q),
+    );
+  return EXCEL_CATEGORIES.map((c) => [c, rows.filter((r) => r.entry.category === c)] as [string, ExcelRow[]]).filter(
+    ([, rs]) => rs.length > 0,
+  );
 }
 
 export function filterFunctions(functions: FunctionDef[], query: string): FunctionDef[] {
@@ -364,7 +398,7 @@ export function filterFunctions(functions: FunctionDef[], query: string): Functi
     (f) =>
       f.name.toLowerCase().includes(q) ||
       f.description.toLowerCase().includes(q) ||
-      f.sql_name.toLowerCase().includes(q),
+      (f.sql_name ?? "").toLowerCase().includes(q),
   );
 }
 

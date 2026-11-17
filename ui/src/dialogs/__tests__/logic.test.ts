@@ -23,6 +23,7 @@ import {
   fmtPct,
   formatSignature,
   groupFunctions,
+  excelGroups,
   initialExportState,
   initialSampleSize,
   insertAt,
@@ -262,6 +263,35 @@ describe("expressions", () => {
     expect(groups.map(([k]) => k)).toEqual(["expr.aggregates", "expr.text", "dialog.expr_help.other"]);
     expect(filterFunctions(fs, "case").map((f) => f.name)).toEqual(["UPPER"]);
     expect(filterFunctions(fs, "zz").map((f) => f.name)).toEqual(["ZZZ"]);
+  });
+
+  it("puts Excel's own functions in their group, and searches functions without SQL names", () => {
+    const fs = [fn("SUM"), fn("COUNTIF", "rows that meet criteria"), fn("ZZZ"), { ...fn("PREV"), sql_name: null as never }];
+    const groups = groupFunctions(fs, ["COUNTIF", "SUM"]);
+    expect(groups.map(([k, f]) => [k, f.map((x) => x.name)])).toEqual([
+      ["expr.aggregates", ["SUM"]],
+      ["dialog.expr_help.excel_group", ["COUNTIF"]],
+      ["dialog.expr_help.other", ["ZZZ", "PREV"]],
+    ]);
+    expect(filterFunctions(fs, "prev").map((f) => f.name)).toEqual(["PREV"]);
+  });
+
+  it("lists Excel functions by category with what to use", () => {
+    const fs = [fn("COUNTIF", "rows that meet criteria"), fn("FLOOR.MATH")];
+    const entries = [
+      { name: "COUNTIF", category: "conditional", function: "COUNTIF", instead: null },
+      { name: "FLOOR", category: "math", function: "FLOOR.MATH", instead: null },
+      { name: "FILTER", category: "tables", function: null, instead: "Data → Filter Rows" },
+    ];
+    const g = excelGroups(entries, fs, "");
+    expect(g.map(([c, rows]) => [c, rows.map((r) => [r.entry.name, r.def?.name ?? null])])).toEqual([
+      ["math", [["FLOOR", "FLOOR.MATH"]]],
+      ["conditional", [["COUNTIF", "COUNTIF"]]],
+      ["tables", [["FILTER", null]]],
+    ]);
+    // Search finds names, descriptions and the alternative.
+    expect(excelGroups(entries, fs, "criteria").flatMap(([, r]) => r.map((x) => x.entry.name))).toEqual(["COUNTIF"]);
+    expect(excelGroups(entries, fs, "filter rows").flatMap(([, r]) => r.map((x) => x.entry.name))).toEqual(["FILTER"]);
   });
 
   it("inserts text at the caret", () => {

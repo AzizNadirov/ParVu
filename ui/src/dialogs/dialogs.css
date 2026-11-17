@@ -103,7 +103,7 @@ table.simple td select { width: 100%; }
 
 /* expression help / math dialog */
 .pv-help-layout { display: grid; grid-template-columns: 1fr; gap: 8px; min-height: 0; }
-.pv-func-table td:first-child, .pv-func-table td:nth-child(2) { white-space: nowrap; }
+.pv-func-table td:first-child { white-space: nowrap; }
 .pv-func-table code { background: none; }
 .pv-sql-preview {
   font-family: var(--pv-layout-code-font-family, monospace), monospace;
@@ -247,3 +247,8 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 /* Open with options */
 .pv-open-grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
 .pv-open-grid select, .pv-open-grid input[type="number"] { justify-self: start; min-width: 180px; }
+
+/* Function references: names and signatures wrap, descriptions get the room. */
+.pv-func-table td:nth-child(2) code { white-space: normal; overflow-wrap: anywhere; }
+.pv-func-table td:nth-child(2) { min-width: 140px; max-width: 34%; }
+.pv-func-table td:nth-child(3) { width: 50%; }
