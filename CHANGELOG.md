@@ -11,10 +11,15 @@
 - **Custom functions in expressions and formulas.** Call your custom functions like built-in ones: `clean_phone([Phone])` in a formula or the expression editor. A summary function in a formula is a column total, like `SUM`: `= [price] - weighted_average([price], [qty])`. Autocomplete lists them with their signature and description, and an argument of the wrong type is refused with a clear message. Formulas follow the function's current definition; when it's deleted, the formula is kept with a warning icon and an empty column instead of disappearing, and fills again once it's fixed.
 - **Write a custom function in the expression language.** In the custom tool editor, **Language: Expression language** lets you write the body as a formula, with `[x]` for parameter x, e.g. `SUM([x] * [w]) / SUM([w])`. It takes the same checks as SQL.
 - **AI and custom tools.** AI clients and the built-in assistant can list your custom tools and call them. They can also propose a new one: ParVu checks it, and offers to open it in the editor for you to review and save. The AI never saves a tool itself, and the standalone MCP server only checks proposals.
+- **Parameters that take several columns.** A custom tool's parameter can now be a list of columns, with the types it accepts and how many it needs: for example the keys of a "keep the latest row per key" operation. In the body it stands for the columns written one after another, so it goes in a SELECT list, GROUP BY, PARTITION BY, DISTINCT ON or a function's arguments. The apply dialog shows a checklist of the columns that fit. New samples: **dedupe_by** (keep the latest row per key) and **percentile_value**.
+- **Save steps as a custom operation.** The Applied Steps panel (and the Table menu) turns the steps of a tab into a custom operation you can apply to other files. You choose which columns become parameters; the others become columns the table must have. The operation opens in the editor with an example made from the tab's first rows, to review and save. Steps that can't be part of it (cell edits, a step that reads another tab) are listed with the reason.
+- **Custom functions in Group By.** A summary custom function of one column (with optional values, such as the percentile) appears in Group By's list of calculations.
 - **A Jupyter theme**, in the look of JupyterLab: white surfaces, light grey borders, JupyterLab's blue with Jupyter orange, and the notebook's code colours in the SQL editor.
 
 ### Fixed
 - **Autocomplete shows function help again.** The signature and description beside a suggested function were clipped and never appeared.
+- **Double-clicking a formula cell** opened an empty edit box over the formula bar; it now just opens the formula.
+- **Paging stays responsive when a custom function changes.** Formula totals that use it are computed again in the background instead of blocking the window.
 - **Column names with a double quote in expressions.** Assigning a column in the expression editor broke when another column's name contained `"`; the name is now quoted properly.
 
 ## [1.0.0-alpha.7]
