@@ -13,10 +13,13 @@ export interface FormulaRef {
   from: number;
   to: number;
   column: string;
+  /** Last column of a range `[q1:q4]` (then `column` is the first). */
+  toColumn?: string;
 }
 
-// table[column], [column], ["column name"], ['column name']
-const REF = /(?:\b[A-Za-z_][A-Za-z0-9_]*)?\[(?:"([^"]*)"|'([^']*)'|([A-Za-z_][A-Za-z0-9_]*))\]/g;
+const NAME = `(?:"([^"]*)"|'([^']*)'|([A-Za-z_][A-Za-z0-9_]*))`;
+// table[column], [column], ["column name"], ['column name'], [first:last]
+const REF = new RegExp(`(?:\\b[A-Za-z_][A-Za-z0-9_]*)?\\[${NAME}(?::${NAME})?\\]`, "g");
 
 /** The column references in a formula, outside string literals. */
 export function formulaRefs(text: string): FormulaRef[] {
@@ -40,17 +43,70 @@ export function formulaRefs(text: string): FormulaRef[] {
   }
   for (const m of masked.matchAll(REF)) {
     const column = m[1] ?? m[2] ?? m[3] ?? "";
-    out.push({ from: m.index ?? 0, to: (m.index ?? 0) + m[0].length, column });
+    const toColumn = m[4] ?? m[5] ?? m[6];
+    const from = m.index ?? 0;
+    out.push(toColumn !== undefined ? { from, to: from + m[0].length, column, toColumn } : { from, to: from + m[0].length, column });
   }
   return out;
 }
 
-/** A colour per referenced column, in order of first appearance. */
+/** What a reference names: a column, or a range `first:last`. */
+export const refKey = (r: FormulaRef) => (r.toColumn !== undefined ? `${r.column}:${r.toColumn}` : r.column);
+
+/** A colour per reference (column or range), in order of first appearance. */
 export function refColors(refs: FormulaRef[], dark = false): Map<string, string> {
   const palette = dark ? REF_COLORS_DARK : REF_COLORS_LIGHT;
   const colors = new Map<string, string>();
-  for (const r of refs) if (!colors.has(r.column)) colors.set(r.column, palette[colors.size % palette.length]);
+  for (const r of refs) {
+    const k = refKey(r);
+    if (!colors.has(k)) colors.set(k, palette[colors.size % palette.length]);
+  }
   return colors;
+}
+
+/** The grid tint of each referenced column; a range tints every column in it. */
+export function columnHighlights(refs: FormulaRef[], columns: string[], dark = false): Map<string, string> {
+  const colors = refColors(refs, dark);
+  const out = new Map<string, string>();
+  for (const r of refs) {
+    const color = colors.get(refKey(r))!;
+    let names = [r.column];
+    if (r.toColumn !== undefined) {
+      const a = columns.indexOf(r.column);
+      const b = columns.indexOf(r.toColumn);
+      names = a < 0 || b < 0 ? [r.column, r.toColumn] : columns.slice(Math.min(a, b), Math.max(a, b) + 1);
+    }
+    for (const n of names) if (!out.has(n)) out.set(n, color);
+  }
+  return out;
+}
+
+const plainName = (column: string) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(column) ? column : `"${column.replace(/"/g, "")}"`);
+
+/** The range reference `[first:last]`. */
+export const rangeFor = (first: string, last: string) => `[${plainName(first)}:${plainName(last)}]`;
+
+/**
+ * Shift+click on a header while writing: the reference just before the
+ * cursor becomes a range up to `column`. Returns the text change, or null
+ * when there is no single-column reference right before the cursor.
+ */
+export function extendToRange(text: string, cursor: number, column: string): { from: number; to: number; insert: string } | null {
+  const r = formulaRefs(text).find((x) => x.to === cursor && x.toColumn === undefined);
+  return r ? { from: r.from, to: r.to, insert: rangeFor(r.column, column) } : null;
+}
+
+/**
+ * Where a compiler error points, as an offset into the bar's text. The
+ * compiler reports a 1-based line and column of the formula without its
+ * leading "=" and spaces.
+ */
+export function errorOffset(text: string, line: number, column: number): number {
+  const rest = text.trimStart().replace(/^=\s*/, "");
+  let at = text.length - rest.length;
+  const lines = rest.split("\n");
+  for (let i = 0; i < line - 1 && i < lines.length; i++) at += lines[i].length + 1;
+  return Math.min(text.length, at + Math.max(0, column - 1));
 }
 
 /** The reference to insert for a column: `[qty]`, or `["unit price"]`. */

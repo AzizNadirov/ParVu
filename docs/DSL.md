@@ -17,6 +17,7 @@ ParVu includes a small domain-specific language (DSL) for data transformations. 
   - [String](#string)
   - [Aggregation](#aggregation)
   - [Special](#special)
+- [Column Formulas](#column-formulas)
 - [Examples](#examples)
 - [Auto-Completion](#auto-completion)
 - [Error Handling](#error-handling)
@@ -279,6 +280,21 @@ SELECT * FROM data WHERE score IS NULL OR score <> -1
 The first argument must be a column reference. The second (optional) must be a
 literal (string, integer, or float). Available in the UI under
 **Operations → Drop Null Values...** and via the column header context menu.
+
+## Column Formulas
+
+A formula column (type `=` in a cell, or use the *fx* button of the formula bar) computes every row from an expression and updates when cells change. Formulas use bare `[column]` references; three forms exist only in formulas:
+
+| Formula | Meaning |
+|---|---|
+| `= [qty] * [price]` | values of this row |
+| `= [price] / SUM([price])` | **column total**: `SUM`, `AVG`, `COUNT`, `COUNTD`, `MIN` and `MAX` of a single column are totals over the whole table. Each total is computed once (and again after a cell edit), so pages stay fast. |
+| `= SUM([q1:q4])` | **range across the row**: `[first:last]` is every column from `first` to `last`, in table order. `SUM`, `AVG`, `MIN`, `MAX` and `COUNT` of a range work across the columns of each row and skip NULLs (`SUM` of all NULLs is 0). |
+| `= [total] - PREV([total])` | **neighbouring rows**: `PREV([x])` is the value from the row before, `NEXT([x], 2)` from two rows after, in the file's row order (sorting the table later doesn't change them). NULL past the first or last row. Allowed on tables up to 2,000,000 rows, because every page reads the whole table in order. |
+
+In the formula bar, click a column header to insert `[column]`; then Shift+click another header to turn it into the range `[column:other]`. Errors are underlined where the formula goes wrong.
+
+Totals and ranges follow Excel: `SUM(B:B)` is a column total and `SUM(B2:D2)` adds across a row; here they are `SUM([b])` and `SUM([b:d])`.
 
 ## Examples
 

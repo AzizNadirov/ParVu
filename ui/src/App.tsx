@@ -32,7 +32,7 @@ import {
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
-import { formulaBody, formulaRefs, newFormulaName, refColors, refFor } from "./lib/formula";
+import { columnHighlights, errorOffset, formulaBody, formulaRefs, newFormulaName, refFor } from "./lib/formula";
 import { jobResult } from "./lib/jobs";
 import { StatusJobs } from "./components/JobProgress";
 import { fillEdge, fillFromHandle, type FillCell, type FillDirection, type Rect } from "./lib/fill";
@@ -186,7 +186,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [mode, setMode] = useState<EditorMode>("sql");
   const [page, setPage] = useState<Page | null>(null);
   // The column formula being written in the formula bar, if any.
-  const [formulaEdit, setFormulaEdit] = useState<{ name: string; isNew: boolean; after: string | null; source: string; error: string } | null>(null);
+  const [formulaEdit, setFormulaEdit] = useState<{ name: string; isNew: boolean; after: string | null; source: string; error: string; errorAt?: number | null } | null>(null);
   const [currentCell, setCurrentCell] = useState<{ row: number; col: number } | null>(null);
   const formulaBar = useRef<FormulaBarHandle>(null);
   // How each column of the active tab's CSV file is read ("Read as").
@@ -1038,7 +1038,10 @@ export function App({ boot }: { boot: Bootstrap }) {
       const last = s.steps[s.steps.length - 1];
       if (last) status(t("steps.applied", { step: stepText(t, last) }), 4000);
     } catch (e) {
-      setFormulaEdit({ ...fe, error: errorMessage(e) });
+      // Parse errors carry a position: underline it in the bar.
+      const pos = e as { line?: number; column?: number };
+      const errorAt = pos.line ? errorOffset(fe.source, pos.line, pos.column ?? 1) : null;
+      setFormulaEdit({ ...fe, error: errorMessage(e), errorAt });
     }
   };
   const removeFormula = async (name: string) => {
@@ -1048,8 +1051,9 @@ export function App({ boot }: { boot: Bootstrap }) {
   // While writing a formula, its references are coloured in the grid too.
   const darkTheme = useMemo(() => isDark(resolvedColor("var(--md-surface)", "#ffffff")), [themeKey]);
   const formulaHighlights = useMemo(
-    () => (formulaEdit ? refColors(formulaRefs(formulaEdit.source), darkTheme) : undefined),
-    [formulaEdit, darkTheme],
+    () =>
+      formulaEdit ? columnHighlights(formulaRefs(formulaEdit.source), (page?.columns ?? []).map((c) => c.name), darkTheme) : undefined,
+    [formulaEdit, darkTheme, page],
   );
   // What the bar shows while not editing: the formula of a formula column,
   // or the selected cell's value.
@@ -1848,6 +1852,7 @@ export function App({ boot }: { boot: Bootstrap }) {
               onNameChange={(name) => formulaEdit && setFormulaEdit({ ...formulaEdit, name })}
               value={formulaEdit ? formulaEdit.source : barIdle.value}
               error={formulaEdit?.error ?? ""}
+              errorAt={formulaEdit?.errorAt ?? null}
               onStart={() => (barIdle.target ? editFormula(barIdle.target) : startFormula())}
               onNew={() => startFormula()}
               onChange={(source) => formulaEdit && setFormulaEdit({ ...formulaEdit, source, error: "" })}
@@ -1862,7 +1867,14 @@ export function App({ boot }: { boot: Bootstrap }) {
                 themeKey={themeKey}
                 nullText={t("grid.null")}
                 select={gridSelect}
-                onHeaderClick={(c) => (formulaEdit ? formulaBar.current?.insert(refFor(c)) : void sortBy(c))}
+                pickingColumns={!!formulaEdit}
+                onHeaderClick={(c, shift) =>
+                  formulaEdit
+                    ? shift
+                      ? formulaBar.current?.extendRange(c)
+                      : formulaBar.current?.insert(refFor(c))
+                    : void sortBy(c)
+                }
                 onHeaderMenu={(c, x, y) => setMenu({ x, y, items: headerMenu(c) })}
                 onCellMenu={(r, c, x, y) => setMenu({ x, y, items: cellMenu(r, c) })}
                 onFill={fillHandle}

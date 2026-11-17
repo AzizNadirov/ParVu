@@ -18,6 +18,8 @@ export function formatFileSize(bytes: number): string {
 function TableInfoDialog({ ui, close, summary, columns }: { ui: Ui; close: () => void; summary: TabSummary; columns: ColumnMeta[] }) {
   const t = ui.t;
   const n = (x: number) => x.toLocaleString("en-US");
+  // Formula columns show their formula.
+  const formulas = new Map((summary.formulas ?? []).map((f) => [f.name, f.source]));
   const rows: [string, string][] = [
     [t("dialog.table_info.name"), summary.name],
     [t("dialog.table_info.file"), summary.path || "N/A"],
@@ -54,6 +56,7 @@ function TableInfoDialog({ ui, close, summary, columns }: { ui: Ui; close: () =>
               <th className="num">#</th>
               <th>{t("dialog.table_info.col_name")}</th>
               <th>{t("dialog.table_info.col_type")}</th>
+              {formulas.size > 0 && <th>{t("dialog.table_info.col_formula")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -62,6 +65,7 @@ function TableInfoDialog({ ui, close, summary, columns }: { ui: Ui; close: () =>
                 <td className="num">{i + 1}</td>
                 <td>{c.name}</td>
                 <td className="pv-mono">{c.dtype}</td>
+                {formulas.size > 0 && <td className="pv-mono">{formulas.has(c.name) ? `= ${formulas.get(c.name)}` : ""}</td>}
               </tr>
             ))}
           </tbody>

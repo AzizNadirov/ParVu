@@ -104,6 +104,7 @@ impl Resolver<'_> {
                 })
             }
             Ast::ColumnRef { table, column } => self.column_ref(table, column),
+            Ast::RangeRef { .. } => err("A range [a:c] works inside SUM, AVG, MIN, MAX or COUNT, e.g. SUM([q1:q4])"),
             Ast::FuncCall { name, args } => self.func_call(name, args),
             Ast::MethodCall {
                 receiver,
@@ -156,15 +157,24 @@ impl Resolver<'_> {
         }
     }
 
+    /// The table a bare `[column]` means: the current one, or the only one open.
+    fn bare_table(&self, column: &str) -> Result<String, DslError> {
+        let only = self.catalog.tables();
+        match self.current {
+            Some(t) => Ok(t.to_string()),
+            None if only.len() == 1 => Ok(only[0].clone()),
+            None => err(format!("Write the table name: table[{column}]")),
+        }
+    }
+
     fn column_ref(&self, table: &str, raw_column: &str) -> Result<Expr, DslError> {
         let column = column_name(raw_column);
-        // A bare `[column]`: the current table, or the only one open.
-        let only = self.catalog.tables();
-        let table = match (table.is_empty(), self.current) {
-            (false, _) => table,
-            (true, Some(t)) => t,
-            (true, None) if only.len() == 1 => only[0].as_str(),
-            (true, None) => return err(format!("Write the table name: table[{column}]")),
+        let bare;
+        let table = if table.is_empty() {
+            bare = self.bare_table(&column)?;
+            bare.as_str()
+        } else {
+            table
         };
         if !self.catalog.has_table(table) {
             return err(format!("Unknown table: '{table}'"));
@@ -184,6 +194,15 @@ impl Resolver<'_> {
     }
 
     fn func_call(&self, name: &str, args: &[Ast]) -> Result<Expr, DslError> {
+        let upper = name.to_uppercase();
+        if let [Ast::RangeRef { from, to }] = args
+            && ROW_FUNCS.contains(&upper.as_str())
+        {
+            return self.row_range(&upper, from, to);
+        }
+        if upper == "PREV" || upper == "NEXT" {
+            return self.neighbour(&upper, args);
+        }
         let args = self.args(args)?;
         match name.to_uppercase().as_str() {
             "DROP_DUPLICATES" => return self.drop_duplicates(args),
@@ -200,6 +219,66 @@ impl Resolver<'_> {
             func_name: name.to_string(),
             args,
             logical_type: func_def.return_type,
+        })
+    }
+
+    /// `SUM([q1:q4])` and friends: across the columns of one row, NULLs
+    /// skipped (a single column inside SUM stays the column's total).
+    fn row_range(&self, func: &str, from: &str, to: &str) -> Result<Expr, DslError> {
+        let (from, to) = (column_name(from), column_name(to));
+        let table = self.bare_table(&from)?;
+        let columns = self.catalog.columns(&table);
+        let position = |c: &str| {
+            columns.iter().position(|x| x == c).ok_or_else(|| DslError::Resolve {
+                message: format!("Unknown column '{c}' in table '{table}'"),
+            })
+        };
+        let (a, b) = (position(&from)?, position(&to)?);
+        let picked = &columns[a.min(b)..=a.max(b)];
+        let args: Vec<Expr> = picked
+            .iter()
+            .map(|c| Expr::ColumnRef {
+                logical_type: self.catalog.resolve_column(&table, c),
+                table: table.clone(),
+                column: c.clone(),
+            })
+            .collect();
+        let each = |f: &dyn Fn(usize) -> String, sep: &str| (0..args.len()).map(f).collect::<Vec<_>>().join(sep);
+        let sum = || each(&|i| format!("COALESCE({{{i}}}, 0)"), " + ");
+        let count = || each(&|i| format!("CAST({{{i}}} IS NOT NULL AS INTEGER)"), " + ");
+        let (template, ty) = match func {
+            "SUM" => (sum(), LogicalType::Numeric),
+            "COUNT" => (count(), LogicalType::Numeric),
+            "AVG" => (format!("({}) / NULLIF({}, 0)", sum(), count()), LogicalType::Numeric),
+            "MIN" => (format!("LEAST({})", each(&|i| format!("{{{i}}}"), ", ")), args[0].logical_type()),
+            _ => (format!("GREATEST({})", each(&|i| format!("{{{i}}}"), ", ")), args[0].logical_type()),
+        };
+        Ok(Expr::Template { template, args, logical_type: ty })
+    }
+
+    /// `PREV([x])`, `NEXT([x], 2)`: the value `n` rows before or after, in
+    /// the table's row order (NULL past the ends).
+    fn neighbour(&self, func: &str, args: &[Ast]) -> Result<Expr, DslError> {
+        let usage = || err(format!("{func} takes a column and an optional number of rows, e.g. {func}([total]) or {func}([total], 2)"));
+        let mut args = self.args(args)?;
+        if args.is_empty() || args.len() > 2 {
+            return usage();
+        }
+        args.iter().try_for_each(ensure_scalar)?;
+        let n = match args.get(1) {
+            None => 1,
+            Some(Expr::Literal { value: LiteralValue::Int(v), .. }) => match v.parse::<u32>() {
+                Ok(n) if n >= 1 => n,
+                _ => return usage(),
+            },
+            Some(_) => return usage(),
+        };
+        args.truncate(1);
+        let window = if func == "PREV" { "LAG" } else { "LEAD" };
+        Ok(Expr::Template {
+            template: format!("{window}({{0}}, {n}) OVER ()"),
+            logical_type: args[0].logical_type(),
+            args,
         })
     }
 
@@ -345,6 +424,9 @@ impl Resolver<'_> {
         ))
     }
 }
+
+/// Functions that take a range of columns, `SUM([q1:q4])`.
+const ROW_FUNCS: &[&str] = &["SUM", "AVG", "MIN", "MAX", "COUNT"];
 
 fn check_args(func_def: &FunctionDef, n_args: usize) -> Result<(), DslError> {
     let required = func_def.params.iter().filter(|p| p.required).count();

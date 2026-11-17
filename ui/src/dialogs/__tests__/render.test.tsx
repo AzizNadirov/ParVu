@@ -169,6 +169,22 @@ describe("dialogs render and resolve", () => {
     }
   });
 
+  it("table info shows each formula column's formula", async () => {
+    const ui = makeUi();
+    const p = D.openTableInfo(ui, {
+      summary: {
+        id: 1, name: "t", path: "/x.csv", format: "csv", file_size: 10, total_rows: 2, total_pages: 1, page_size: 500,
+        formulas: [{ name: "share", source: "[qty] / SUM([qty])", sql: "", after: null }],
+      } as never,
+      columns: [{ name: "qty", dtype: "BIGINT" }, { name: "share", dtype: "DOUBLE" }],
+    });
+    await flush();
+    expect(screen.getByText("dialog.table_info.col_formula")).toBeTruthy();
+    expect(screen.getByText("= [qty] / SUM([qty])")).toBeTruthy();
+    escape();
+    await p;
+  });
+
   it("drop null submits with Enter", async () => {
     const ui = makeUi();
     const p = D.openDropNull(ui, { table: "t", columns: ["a", "b"], selected: "b" });

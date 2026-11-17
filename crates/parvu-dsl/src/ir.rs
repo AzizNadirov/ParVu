@@ -107,6 +107,14 @@ pub enum Expr {
         regex: bool,
         logical_type: LogicalType,
     },
+    /// SQL written around compiled arguments: `{0}`, `{1}`… in `template`
+    /// are replaced by the arguments' SQL. Used for formula forms that have
+    /// no function of their own (row-wise ranges, PREV / NEXT, totals).
+    Template {
+        template: String,
+        args: Vec<Expr>,
+        logical_type: LogicalType,
+    },
     /// Drop rows where `column` is NULL (`null_value` = `Null`) or equals the
     /// sentinel `null_value` (real NULLs are then kept).
     DropNull {
@@ -129,7 +137,8 @@ impl Expr {
             | Expr::Assignment { logical_type, .. }
             | Expr::DropDuplicates { logical_type, .. }
             | Expr::Replace { logical_type, .. }
-            | Expr::DropNull { logical_type, .. } => *logical_type,
+            | Expr::DropNull { logical_type, .. }
+            | Expr::Template { logical_type, .. } => *logical_type,
         }
     }
 

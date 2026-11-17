@@ -122,28 +122,35 @@ pub fn translate(
 /// totals) are not allowed in formulas yet.
 const AGGREGATES: &[&str] = &["SUM", "AVG", "COUNT", "COUNTD", "MIN", "MAX"];
 
-fn has_aggregate(e: &Expr) -> bool {
-    match e {
-        Expr::Call { func_name, args, .. } => {
-            AGGREGATES.contains(&func_name.to_uppercase().as_str()) || args.iter().any(has_aggregate)
-        }
-        Expr::BinaryOp { left, right, .. } => has_aggregate(left) || has_aggregate(right),
-        Expr::UnaryOp { operand, .. } => has_aggregate(operand),
-        Expr::MethodCall { receiver, method_name, args, .. } => {
-            AGGREGATES.contains(&method_name.to_uppercase().as_str()) || has_aggregate(receiver) || args.iter().any(has_aggregate)
-        }
-        Expr::Replace { text, pattern, with_value, .. } => {
-            has_aggregate(text) || has_aggregate(pattern) || has_aggregate(with_value)
-        }
-        _ => false,
-    }
+/// A compiled column formula.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FormulaSql {
+    /// The SQL expression. Column references are qualified with the table;
+    /// total `i` appears as [`total_marker`]`(i)`.
+    pub sql: String,
+    /// The column totals it uses (`SUM([price])`), as aggregate SQL over the
+    /// table. ParVu computes them once and writes them in as constants.
+    pub totals: Vec<String>,
+    /// It reads other rows (`PREV` / `NEXT`): every page then reads the
+    /// whole table in order.
+    pub reads_neighbours: bool,
+}
+
+/// Where total `i` goes in [`FormulaSql::sql`]; `parvu_core::formula`
+/// fills it in.
+pub fn total_marker(i: usize) -> String {
+    format!("\u{1}pv_total_{i}\u{1}")
 }
 
 /// Compile a column formula: an expression of one row of `table`, such as
 /// `[qty] * [price]` (a leading `=` is allowed, and `[column]` means a
-/// column of `table`). Returns the SQL expression; its column references
-/// are qualified with `table`.
-pub fn compile_formula(src: &str, catalog: &Catalog, registry: &FunctionRegistry, table: &str) -> Result<String, DslError> {
+/// column of `table`).
+///
+/// - `SUM([price])` and the other aggregates are column totals, computed
+///   once (see [`FormulaSql::totals`]): `= [price] / SUM([price])`.
+/// - `SUM([q1:q4])` adds across the columns q1 to q4 of the row.
+/// - `PREV([x])`, `NEXT([x], n)` read neighbouring rows.
+pub fn compile_formula(src: &str, catalog: &Catalog, registry: &FunctionRegistry, table: &str) -> Result<FormulaSql, DslError> {
     let text = src.trim();
     let text = text.strip_prefix('=').unwrap_or(text).trim();
     if text.is_empty() {
@@ -156,12 +163,70 @@ pub fn compile_formula(src: &str, catalog: &Catalog, registry: &FunctionRegistry
             message: "A formula is an expression of one row, e.g. = [qty] * [price]".into(),
         });
     }
-    if has_aggregate(&expr) {
-        return Err(DslError::Resolve {
-            message: "Totals such as SUM([x]) are not available in formulas yet; use Group by for totals".into(),
-        });
+    let mut totals = Vec::new();
+    let expr = extract_totals(expr, registry, &mut totals)?;
+    let reads_neighbours = reads_neighbours(&expr);
+    Ok(FormulaSql { sql: compile(&expr, registry)?, totals, reads_neighbours })
+}
+
+fn is_aggregate(name: &str) -> bool {
+    AGGREGATES.contains(&name.to_uppercase().as_str())
+}
+
+/// Replace each aggregate (a column total) by a marker, collecting its SQL.
+fn extract_totals(e: Expr, registry: &FunctionRegistry, out: &mut Vec<String>) -> Result<Expr, DslError> {
+    let total = |e: &Expr, out: &mut Vec<String>| -> Result<Expr, DslError> {
+        let sql = compile(e, registry)?;
+        out.push(sql);
+        Ok(Expr::Template { template: total_marker(out.len() - 1), args: Vec::new(), logical_type: e.logical_type() })
+    };
+    let each = |v: Vec<Expr>, out: &mut Vec<String>| -> Result<Vec<Expr>, DslError> {
+        v.into_iter().map(|a| extract_totals(a, registry, out)).collect()
+    };
+    Ok(match e {
+        Expr::Call { ref func_name, .. } if is_aggregate(func_name) => total(&e, out)?,
+        Expr::MethodCall { ref method_name, .. } if is_aggregate(method_name) => total(&e, out)?,
+        Expr::Call { func_name, args, logical_type } => Expr::Call { func_name, args: each(args, out)?, logical_type },
+        Expr::MethodCall { receiver, method_name, args, logical_type } => Expr::MethodCall {
+            receiver: Box::new(extract_totals(*receiver, registry, out)?),
+            method_name,
+            args: each(args, out)?,
+            logical_type,
+        },
+        Expr::BinaryOp { op, left, right, logical_type } => Expr::BinaryOp {
+            op,
+            left: Box::new(extract_totals(*left, registry, out)?),
+            right: Box::new(extract_totals(*right, registry, out)?),
+            logical_type,
+        },
+        Expr::UnaryOp { op, operand, logical_type } => {
+            Expr::UnaryOp { op, operand: Box::new(extract_totals(*operand, registry, out)?), logical_type }
+        }
+        Expr::Replace { text, pattern, with_value, case_sensitive, regex, logical_type } => Expr::Replace {
+            text: Box::new(extract_totals(*text, registry, out)?),
+            pattern: Box::new(extract_totals(*pattern, registry, out)?),
+            with_value: Box::new(extract_totals(*with_value, registry, out)?),
+            case_sensitive,
+            regex,
+            logical_type,
+        },
+        Expr::Template { template, args, logical_type } => Expr::Template { template, args: each(args, out)?, logical_type },
+        other => other,
+    })
+}
+
+fn reads_neighbours(e: &Expr) -> bool {
+    match e {
+        Expr::Template { template, args, .. } => template.contains(") OVER ()") || args.iter().any(reads_neighbours),
+        Expr::Call { args, .. } => args.iter().any(reads_neighbours),
+        Expr::MethodCall { receiver, args, .. } => reads_neighbours(receiver) || args.iter().any(reads_neighbours),
+        Expr::BinaryOp { left, right, .. } => reads_neighbours(left) || reads_neighbours(right),
+        Expr::UnaryOp { operand, .. } => reads_neighbours(operand),
+        Expr::Replace { text, pattern, with_value, .. } => {
+            reads_neighbours(text) || reads_neighbours(pattern) || reads_neighbours(with_value)
+        }
+        _ => false,
     }
-    compile(&expr, registry)
 }
 
 /// `SELECT` that overwrites `column` in place when it exists in `all_cols`,
@@ -338,20 +403,92 @@ mod formula_tests {
         c
     }
 
+    fn quarters() -> Catalog {
+        let mut c = Catalog::new();
+        c.register_table(
+            "t",
+            ["id", "q1", "q2", "q3", "q4"].map(|n| (n.to_string(), if n == "id" { "VARCHAR" } else { "DOUBLE" }.to_string())),
+        );
+        c
+    }
+
     #[test]
     fn formulas() {
         let reg = FunctionRegistry::default();
         let f = |s: &str| compile_formula(s, &catalog(), &reg, "sales");
         assert_eq!(f("= [qty] * [\"unit price\"]").unwrap(), f("sales[qty] * sales[\"unit price\"]").unwrap());
-        assert!(f("= ROUND([qty] / 3, 1)").unwrap().contains("ROUND"));
+        assert!(f("= ROUND([qty] / 3, 1)").unwrap().sql.contains("ROUND"));
         assert!(f("= [nope] + 1").is_err());
         assert!(f("sales[x] = 1").is_err(), "assignment");
-        assert!(f("= SUM([qty])").is_err(), "aggregate");
         assert!(f("= ").is_err());
         // A bare reference outside formulas: the only table, else an error.
         let mut one = Catalog::new();
         one.register_table("t", [("a".to_string(), "BIGINT".to_string())]);
         assert!(resolve(&parse("[a] + 1").unwrap(), &one, &reg).is_ok());
         assert!(resolve(&parse("[qty] + 1").unwrap(), &catalog(), &reg).is_err());
+    }
+
+    #[test]
+    fn totals_become_markers() {
+        let reg = FunctionRegistry::default();
+        let f = compile_formula("= [qty] / SUM([qty]) + MAX([qty])", &catalog(), &reg, "sales").unwrap();
+        assert_eq!(f.totals, ["SUM(sales.qty)", "MAX(sales.qty)"]);
+        assert_eq!(f.sql, format!("sales.qty / ({}) + ({})", total_marker(0), total_marker(1)));
+        assert!(!f.reads_neighbours);
+        // A total inside a function, and a plain formula has none.
+        let g = compile_formula("= ROUND(100 * [qty] / SUM([qty]), 1)", &catalog(), &reg, "sales").unwrap();
+        assert_eq!(g.totals, ["SUM(sales.qty)"]);
+        assert!(compile_formula("= [qty] + 1", &catalog(), &reg, "sales").unwrap().totals.is_empty());
+    }
+
+    #[test]
+    fn ranges_add_across_a_row() {
+        let reg = FunctionRegistry::default();
+        let f = |s: &str| compile_formula(s, &quarters(), &reg, "t").map(|f| f.sql);
+        assert_eq!(f("= SUM([q1:q3])").unwrap(), "(COALESCE(t.q1, 0) + COALESCE(t.q2, 0) + COALESCE(t.q3, 0))");
+        // Either direction, and quoted names.
+        assert_eq!(f("= SUM([q3:q1])").unwrap(), f("= SUM([\"q1\":\"q3\"])").unwrap());
+        assert_eq!(f("= MAX([q1:q2])").unwrap(), "(GREATEST(t.q1, t.q2))");
+        assert_eq!(f("= MIN([q1:q2])").unwrap(), "(LEAST(t.q1, t.q2))");
+        assert_eq!(
+            f("= COUNT([q1:q2])").unwrap(),
+            "(CAST(t.q1 IS NOT NULL AS INTEGER) + CAST(t.q2 IS NOT NULL AS INTEGER))"
+        );
+        assert!(f("= AVG([q1:q4])").unwrap().contains("NULLIF("));
+        // A range is a row-wise total; it is not a column total.
+        let c = compile_formula("= SUM([q1:q4]) / SUM([q1])", &quarters(), &reg, "t").unwrap();
+        assert_eq!(c.totals, ["SUM(t.q1)"]);
+        assert!(f("= [q1:q2] + 1").unwrap_err().to_string().contains("SUM"));
+        assert!(f("= ROUND([q1:q2])").is_err());
+        assert!(f("= SUM([q1:nope])").is_err());
+    }
+
+    #[test]
+    fn parse_errors_in_words() {
+        let reg = FunctionRegistry::default();
+        let e = compile_formula("= [qty] + * 2", &catalog(), &reg, "sales").unwrap_err();
+        match e {
+            DslError::Parse { message, line, column } => {
+                assert_eq!(message, "Expected a value, a column like [qty] or a function here");
+                assert_eq!((line, column), (1, 9));
+            }
+            other => panic!("{other:?}"),
+        }
+        let e = compile_formula("[qty] 2", &catalog(), &reg, "sales").unwrap_err().to_string();
+        assert!(e.contains("an operator such as + or *"), "{e}");
+        assert!(e.contains("the end of the expression"), "{e}");
+    }
+
+    #[test]
+    fn prev_and_next() {
+        let reg = FunctionRegistry::default();
+        let f = |s: &str| compile_formula(s, &quarters(), &reg, "t");
+        let p = f("= [q1] - PREV([q1])").unwrap();
+        assert_eq!(p.sql, "t.q1 - (LAG(t.q1, 1) OVER ())");
+        assert!(p.reads_neighbours);
+        assert_eq!(f("= NEXT([q2], 3)").unwrap().sql, "(LEAD(t.q2, 3) OVER ())");
+        assert!(f("= PREV([q1], 0)").is_err());
+        assert!(f("= PREV([q1], [q2])").is_err());
+        assert!(f("= PREV()").is_err());
     }
 }

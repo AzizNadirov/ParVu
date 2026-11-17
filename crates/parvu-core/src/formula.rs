@@ -6,10 +6,12 @@
 //! qualified with the table's name, so every layer aliases its input with
 //! that name.
 
+use duckdb::Connection;
 use serde::{Deserialize, Serialize};
 
+use crate::error::Result;
 use crate::page::ColumnMeta;
-use crate::sql::quote_ident;
+use crate::sql::{is_safe_type_name, quote_ident, quote_literal};
 
 /// A computed column.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,18 +25,71 @@ pub struct Formula {
     /// Shown right after this column; at the end when `None` or unknown.
     #[serde(default)]
     pub after: Option<String>,
+    /// Column totals the formula uses (`SUM([price])`), as aggregate SQL.
+    /// `sql` holds [`total_marker`]`(i)` where total `i` goes: each total is
+    /// computed once when the views are built (after every cell edit too),
+    /// so pages don't rescan the table.
+    #[serde(default)]
+    pub totals: Vec<String>,
+}
+
+/// Where total `i` goes in a formula's SQL. The expression language's
+/// compiler writes the same text (see `parvu_dsl::compile_formula`).
+pub fn total_marker(i: usize) -> String {
+    format!("\u{1}pv_total_{i}\u{1}")
+}
+
+/// `formulas` with their totals computed over the rows they see (`base`
+/// with the cell edits, plus the formulas before them) and written into
+/// their SQL as constants.
+pub fn with_totals(conn: &Connection, base: &str, table: &str, formulas: &[Formula]) -> Result<Vec<Formula>> {
+    let mut done: Vec<Formula> = Vec::with_capacity(formulas.len());
+    for f in formulas {
+        if f.totals.is_empty() {
+            done.push(f.clone());
+            continue;
+        }
+        let input = layers(base, table, &done);
+        let parts: Vec<String> = f
+            .totals
+            .iter()
+            .enumerate()
+            .map(|(i, t)| format!("CAST(({t}) AS VARCHAR) AS v{i}, typeof(({t})) AS t{i}"))
+            .collect();
+        let sql = format!("SELECT {} FROM ({input}) AS {}", parts.join(", "), quote_ident(table));
+        let values: Vec<(Option<String>, String)> = conn.query_row(&sql, [], |r| {
+            (0..f.totals.len()).map(|i| Ok((r.get(2 * i)?, r.get(2 * i + 1)?))).collect()
+        })?;
+        let mut resolved = f.sql.clone();
+        for (i, (value, ty)) in values.iter().enumerate() {
+            let constant = match value {
+                None => "NULL".to_string(),
+                Some(v) if is_safe_type_name(ty) => format!("CAST({} AS {ty})", quote_literal(v)),
+                Some(v) => quote_literal(v),
+            };
+            resolved = resolved.replace(&total_marker(i), &constant);
+        }
+        done.push(Formula { sql: resolved, totals: Vec::new(), ..f.clone() });
+    }
+    Ok(done)
+}
+
+/// `base` with each formula as one more column, in order.
+fn layers(base: &str, table: &str, formulas: &[Formula]) -> String {
+    let mut query = format!("SELECT * FROM {}", quote_ident(base));
+    for f in formulas {
+        query = format!("SELECT *, ({}) AS {} FROM ({query}) AS {}", f.sql, quote_ident(&f.name), quote_ident(table));
+    }
+    query
 }
 
 /// The table's view: `base` (the file with its cell edits) plus each
 /// formula, in order. A formula sees the columns of `base` and of the
 /// formulas before it, so formulas can't refer to each other in a cycle.
 pub fn formula_sql(base: &str, table: &str, base_columns: &[ColumnMeta], formulas: &[Formula]) -> String {
-    let mut query = format!("SELECT * FROM {}", quote_ident(base));
+    let query = layers(base, table, formulas);
     if formulas.is_empty() {
         return query;
-    }
-    for f in formulas {
-        query = format!("SELECT *, ({}) AS {} FROM ({query}) AS {}", f.sql, quote_ident(&f.name), quote_ident(table));
     }
     let mut order: Vec<&str> = base_columns.iter().map(|c| c.name.as_str()).collect();
     for f in formulas {
@@ -58,6 +113,7 @@ mod tests {
             source: String::new(),
             sql: sql.into(),
             after: after.map(str::to_string),
+            totals: Vec::new(),
         };
         let sql = formula_sql("b", "t", &cols, &[f("total", "t.qty * t.price", None), f("half", "t.total / 2", Some("qty"))]);
         assert_eq!(

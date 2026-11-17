@@ -92,7 +92,9 @@ fn create_views(conn: &Connection, name: &str, edits: &[CellEdit], formulas: &[F
     let overlay = overlay_sql(&src, &src_columns, edits)?;
     let base = edits_view(name);
     conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {overlay}", quote_ident(&base)))?;
-    let table = formula_sql(&base, name, &src_columns, formulas);
+    // Column totals (SUM([x])) are computed here, once per rebuild.
+    let formulas = crate::formula::with_totals(conn, &base, name, formulas)?;
+    let table = formula_sql(&base, name, &src_columns, &formulas);
     conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {table}", quote_ident(name)))?;
     Ok(())
 }
@@ -339,6 +341,16 @@ impl Workspace {
 
     /// The columns formulas can use: the file's (with cell edits) and the
     /// formulas', in table order. Steps don't change them.
+    /// Rows of the table under the steps (the file with its cell edits).
+    pub fn table_rows(&self, id: TabId) -> Result<u64> {
+        let t = self.tab(id)?;
+        if t.engine.is_base_query() {
+            return Ok(t.engine.total_rows());
+        }
+        let n: i64 = self.conn.query_row(&format!("SELECT COUNT(*) FROM {}", quote_ident(&edits_view(&t.name))), [], |r| r.get(0))?;
+        Ok(n as u64)
+    }
+
     pub fn formula_columns(&self, id: TabId) -> Result<Vec<ColumnMeta>> {
         let t = self.tab(id)?;
         describe(&self.conn, &format!("SELECT * FROM {}", quote_ident(&t.name)))

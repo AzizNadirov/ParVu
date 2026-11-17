@@ -44,7 +44,10 @@ export interface DataGridProps {
   nullText: string;
   /** Select and scroll to this cell once the page has rendered. */
   select?: { row: number; col: number; seq: number } | null;
-  onHeaderClick(column: string): void;
+  /** A header was clicked; `shift` when Shift was held. */
+  onHeaderClick(column: string, shift?: boolean): void;
+  /** Header clicks insert references (a formula is being written): columns aren't selected. */
+  pickingColumns?: boolean;
   onHeaderMenu(column: string, x: number, y: number): void;
   onCellMenu(row: number, col: number, x: number, y: number): void;
   onEdit(row: number, column: string, value: string): void;
@@ -282,9 +285,9 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
   );
 
   const onHeaderClicked = useCallback(
-    (col: number) => {
+    (col: number, e: { shiftKey: boolean }) => {
       const name = page?.columns[col]?.name;
-      if (name) handlers.current.onHeaderClick(name);
+      if (name) handlers.current.onHeaderClick(name, e.shiftKey);
     },
     [page],
   );
@@ -313,6 +316,9 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         getCellsForSelection={true}
         gridSelection={selection}
         onGridSelectionChange={(s) => {
+          // Header clicks insert references while a formula is written:
+          // they must not select the column.
+          if (handlers.current.pickingColumns && s.columns.length > 0) return;
           setSelection(s);
           const c = s.current?.cell;
           if (c) handlers.current.onCurrentCell?.(c[1], c[0]);
@@ -383,6 +389,7 @@ export const DataGrid = memo(
     a.formats === b.formats &&
     a.ranges === b.ranges &&
     a.sourceColumns === b.sourceColumns &&
+    !!a.pickingColumns === !!b.pickingColumns &&
     (a.formulaColumns ?? []).join("\u0001") === (b.formulaColumns ?? []).join("\u0001") &&
     // By content: starting or ending a formula, or a change of its
     // references, re-renders (and refreshes the callbacks the grid holds).

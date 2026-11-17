@@ -176,6 +176,8 @@ export interface Formula {
   source: string;
   sql: string;
   after: string | null;
+  /** Column totals it uses (aggregate SQL), computed once per rebuild. */
+  totals?: string[];
 }
 
 export type Keep = "first" | "last";
