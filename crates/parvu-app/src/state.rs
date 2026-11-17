@@ -30,8 +30,8 @@ pub struct AppState {
     /// One workspace (set of tabs) per window label.
     pub workspaces: Mutex<HashMap<String, Arc<Mutex<Workspace>>>>,
     pub exports: Mutex<HashMap<u64, ExportJob>>,
-    /// Running full error counts of the Convert dialog, by window label.
-    pub counts: Mutex<HashMap<String, Arc<InterruptHandle>>>,
+    /// Long work running outside the workspace lock (unique values, stats…).
+    pub jobs: crate::jobs::Jobs,
     pub next_job: AtomicU64,
     pub next_window: AtomicU64,
     /// Files passed on the command line, opened by the first window.
@@ -55,7 +55,7 @@ impl AppState {
             config: Mutex::new(config),
             workspaces: Mutex::new(HashMap::new()),
             exports: Mutex::new(HashMap::new()),
-            counts: Default::default(),
+            jobs: Default::default(),
             next_job: AtomicU64::new(1),
             next_window: AtomicU64::new(2),
             initial_files: Mutex::new(initial_files),

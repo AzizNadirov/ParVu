@@ -313,3 +313,14 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
 .formula-bar .formula-editor .cm-scroller { overflow: auto; }
 .formula-bar .formula-hint { grid-column: 1 / -1; font-size: 12px; color: var(--md-on-surface-variant); padding: 0 4px 2px; }
 .formula-bar .formula-hint.error-text { color: var(--md-error); }
+
+/* ---------- running jobs (unique values, stats, charts…) ---------- */
+.pv-job { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pv-job-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pv-job-pct { font-variant-numeric: tabular-nums; color: var(--md-on-surface-variant); }
+.pv-job .pv-progress { height: 4px; }
+.pv-job.compact { gap: 1px; }
+.pv-job.compact .pv-job-head { font-size: 0.95em; }
+.pv-job.compact .small-btn { min-height: 18px; padding: 0 6px; }
+.pv-job.compact .pv-progress { height: 3px; }
+.status-bar .pv-status-job { flex: 0 1 320px; min-width: 160px; }

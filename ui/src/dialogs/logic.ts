@@ -89,15 +89,36 @@ export function buildReplaceRequest(r: {
 // ---------------------------------------------------------------- unique values
 
 /** Values sorted case-insensitively, NULL first (Python sorted by str(x).lower()). */
+const asNumber = (v: string): number | null => {
+  const t = v.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** Order of unique values: NULL first, numbers by value, then text (case-insensitive). */
+export function compareUniqueValues(a: Cell, b: Cell): number {
+  if (a === null || b === null) return a === b ? 0 : a === null ? -1 : 1;
+  const na = asNumber(a);
+  const nb = asNumber(b);
+  if (na !== null && nb !== null) return na - nb || (a < b ? -1 : a > b ? 1 : 0);
+  if (na !== null) return -1;
+  if (nb !== null) return 1;
+  const la = a.toLowerCase();
+  const lb = b.toLowerCase();
+  return la < lb ? -1 : la > lb ? 1 : a < b ? -1 : a > b ? 1 : 0;
+}
+
 export function sortUniqueValues(values: Cell[]): Cell[] {
-  const nulls = values.filter((v) => v === null);
-  const rest = values.filter((v): v is string => v !== null);
-  rest.sort((a, b) => {
-    const la = a.toLowerCase();
-    const lb = b.toLowerCase();
-    return la < lb ? -1 : la > lb ? 1 : a < b ? -1 : a > b ? 1 : 0;
-  });
-  return [...nulls, ...rest];
+  return [...values].sort(compareUniqueValues);
+}
+
+/** Add newly found values to a sorted list, keeping it sorted and without repeats. */
+export function mergeUniqueValues(sorted: Cell[], fresh: Cell[]): Cell[] {
+  const have = new Set(sorted);
+  const add = fresh.filter((v) => !have.has(v) && (have.add(v), true));
+  if (!add.length) return sorted;
+  return [...sorted, ...add].sort(compareUniqueValues);
 }
 
 /** Case-insensitive substring filter. NULL matches the text "null". */
@@ -136,7 +157,7 @@ export function statsRows(s: ColumnStats): [string, string][] {
     ["column_stats.rows", fmtNum(s.row_count)],
     ["column_stats.non_null", fmtNum(s.non_null)],
     ["column_stats.null", `${fmtNum(s.null)} (${fmtPct(s.null, s.row_count)})`],
-    ["column_stats.distinct", fmtNum(s.distinct)],
+    ["column_stats.distinct", (s.distinct_approx ? "≈ " : "") + fmtNum(s.distinct)],
     ["column_stats.min", s.min ?? "—"],
     ["column_stats.max", s.max ?? "—"],
   ];

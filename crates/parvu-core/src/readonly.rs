@@ -303,7 +303,7 @@ impl ReadSession {
             .iter()
             .find(|c| c.name == column)
             .ok_or_else(|| CoreError::UnknownColumn(column.to_string()))?;
-        column_stats(&self.conn, &format!("SELECT * FROM {}", quote_ident(self.view(table)?)), column, &col.dtype)
+        column_stats(&self.conn, &format!("SELECT * FROM {}", quote_ident(self.view(table)?)), column, &col.dtype, false)
     }
 
     /// The `k` most frequent values of a column, with counts.

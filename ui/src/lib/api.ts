@@ -1,6 +1,7 @@
 // Typed wrappers around the Tauri commands in crates/parvu-app/src/commands.rs.
 // Every call rejects with an ApiError.
 import { invoke } from "@tauri-apps/api/core";
+import { startJob, type JobOptions } from "./jobs";
 
 export type Cell = string | null;
 
@@ -369,6 +370,14 @@ export interface ReplaceRequest {
   regex: boolean;
 }
 
+/** Unique values of a column; `complete` when every row was read. */
+export interface UniqueValues {
+  values: Cell[];
+  complete: boolean;
+  stopped: "too_many" | "too_large" | null;
+  rows_scanned: number;
+}
+
 export interface ColumnStats {
   column: string;
   dtype: string;
@@ -376,6 +385,8 @@ export interface ColumnStats {
   non_null: number;
   null: number;
   distinct: number;
+  /** `distinct` is an estimate (a big table). */
+  distinct_approx?: boolean;
   min: string | null;
   max: string | null;
   mean: number | null;
@@ -670,11 +681,14 @@ export const api = {
     call<{ before: Cell; after: Cell; failed: boolean }[]>("preview_conversion", { id, column, to, n }),
   previewColumnFn: (id: number, column: string, func: ColumnFn, values: Cell[]) =>
     call<[Cell, Cell][]>("preview_column_fn", { id, column, func, values }),
-  jsonKeys: (id: number, column: string, full: boolean) => call<JsonKey[]>("json_keys", { id, column, full }),
+  jsonKeys: (id: number, column: string, full: boolean, options?: JobOptions) =>
+    startJob((job) => call<JsonKey[]>("json_keys", { id, column, full, job }), options),
   suggestReading: (id: number, column: string) => call<Reading>("suggest_reading", { id, column }),
-  conversionErrorCount: (id: number, column: string, to: Reading, full: boolean) =>
-    call<{ errors: number; checked: number; complete: boolean }>("conversion_error_count", { id, column, to, full }),
-  cancelConversionCount: () => call<void>("cancel_conversion_count"),
+  conversionErrorCount: (id: number, column: string, to: Reading, full: boolean, options?: JobOptions) =>
+    startJob(
+      (job) => call<{ errors: number; checked: number; complete: boolean }>("conversion_error_count", { id, column, to, full, job }),
+      options,
+    ),
   setSourceReading: (id: number, column: string, reading: Reading) =>
     call<TabSummary>("set_source_reading", { id, column, reading }),
   bootstrap: () => call<Bootstrap>("bootstrap"),
@@ -716,14 +730,21 @@ export const api = {
     call<TabSummary>("edit_cells", { id, cells }),
   saveTab: (id: number, path: string | null) => call<TabSummary>("save_tab", { id, path }),
 
-  columnStats: (id: number, column: string) => call<ColumnStats>("column_stats", { id, column }),
-  chartData: (id: number, spec: ChartSpec) => call<ChartData>("chart_data", { id, spec }),
+  columnStats: (id: number, column: string, options?: JobOptions) =>
+    startJob((job) => call<ColumnStats>("column_stats", { id, column, job }), options),
+  chartData: (id: number, spec: ChartSpec, options?: JobOptions) =>
+    startJob((job) => call<ChartData>("chart_data", { id, spec, job }), options),
   saveChartImage: (path: string, bytes: Uint8Array) => call<void>("save_chart_image", { path, bytes: Array.from(bytes) }),
-  columnRange: (id: number, column: string) => call<[number, number] | null>("column_range", { id, column }),
-  uniqueValues: (id: number, column: string) => call<Cell[]>("unique_values", { id, column }),
-  columnTuple: (id: number, column: string, mode: "first" | "random", n: number) =>
-    call<string>("column_tuple", { id, column, mode, n }),
-  find: (id: number, options: SearchOptions) => call<SearchHit | null>("find", { id, options }),
+  /** Numeric min and max of each column, in one scan (colour scales). */
+  columnRanges: (id: number, columns: string[], options?: JobOptions) =>
+    startJob((job) => call<([number, number] | null)[]>("column_ranges", { id, columns, job }), options),
+  /** Unique values, read piece by piece; new values arrive as progress `data`. */
+  uniqueValues: (id: number, column: string, options?: JobOptions) =>
+    startJob((job) => call<UniqueValues>("unique_values", { id, column, job }), options),
+  columnTuple: (id: number, column: string, mode: "first" | "random", n: number, options?: JobOptions) =>
+    startJob((job) => call<string>("column_tuple", { id, column, mode, n, job }), options),
+  find: (id: number, search: SearchOptions, options?: JobOptions) =>
+    startJob((job) => call<SearchHit | null>("find", { id, options: search, job }), options),
 
   startExport: (id: number, options: ExportOptions) => call<number>("start_export", { id, options }),
   cancelExport: (job: number) => call<void>("cancel_export", { job }),

@@ -33,6 +33,7 @@ import {
   parseCssVariables,
   previewValue,
   sortUniqueValues,
+  mergeUniqueValues,
   statsRows,
   themeFileName,
   validTableVar,
@@ -93,6 +94,15 @@ describe("operations", () => {
 describe("unique values", () => {
   it("sorts case-insensitively with NULL first", () => {
     expect(sortUniqueValues(["b", null, "A", "a", "C"])).toEqual([null, "A", "a", "b", "C"]);
+    // Numbers by value, before text.
+    expect(sortUniqueValues(["10", "x", "9", "-1.5", null])).toEqual([null, "-1.5", "9", "10", "x"]);
+  });
+
+  it("merges newly found unique values in order, without repeats", () => {
+    const merged = mergeUniqueValues(["1", "3", "b"], ["2", "3", null, "a"]);
+    expect(merged).toEqual([null, "1", "2", "3", "a", "b"]);
+    const same = ["1"];
+    expect(mergeUniqueValues(same, ["1"])).toBe(same);
   });
 
   it("filters by substring, NULL matching 'null'", () => {

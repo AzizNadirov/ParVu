@@ -84,6 +84,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 | Charts | `parvu-core/src/chart.rs`, `ui/src/components/Chart.tsx`, `ui/src/dialogs/ChartDialog.tsx` |
 | Conditional formatting | `ui/src/lib/format.ts`, `ui/src/dialogs/ConditionalFormatDialog.tsx`, applied in `DataGrid.tsx` |
 | A new backend command | `parvu-app/src/commands.rs`, register in `main.rs`, wrapper in `ui/src/lib/api.ts` |
+| Work that can scan a whole table (stats, unique values, charts, search, counts) | run it as a job: `parvu-app/src/jobs.rs` (`run_job`: cloned connection, no workspace lock, progress, cancel), `parvu-core/src/job.rs` (`Cancel`); UI `lib/jobs.ts` (`startJob`), `components/JobProgress.tsx`. Never hold `with_ws` for a full scan, and stream results without a LIMIT (`stream_arrow`) |
 | Query, paging or undo behaviour | `parvu-core/src/engine.rs`, `workspace.rs` |
 | Cell edits or saving | `parvu-core/src/edits.rs`, `workspace.rs` |
 | File format support | `parvu-core/src/format.rs` (and `export.rs` for writing) |
@@ -107,4 +108,5 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 2. **Grid coordinates:** Glide Data Grid rows are page-relative; add `page.offset` for absolute rows (edits, search).
 3. **React StrictMode** runs effects twice in development; one-time startup work is guarded (`bootstrapOnce` in `main.tsx`, `started` ref in `App.tsx`).
 4. **Tauri build hooks** (`beforeDevCommand` / `beforeBuildCommand`) run from the `crates/` folder, not from `crates/parvu-app`.
-5. **Debian versions:** dpkg would rank `1.0.0-alpha.1` above `1.0.0`, so `build.sh` repacks pre-release debs as `1.0.0~alpha.1` (`crates/parvu-app/packaging/fix-deb-version.sh`). Keep that step if you change how the deb is built.
+5. **Long queries and the workspace lock:** `with_ws` holds the window's workspace for the whole call, so a full-table scan there freezes paging and menus. Use `run_job` for such work; sync (non-async) commands must never lock a workspace, because they run on the main thread.
+6. **Debian versions:** dpkg would rank `1.0.0-alpha.1` above `1.0.0`, so `build.sh` repacks pre-release debs as `1.0.0~alpha.1` (`crates/parvu-app/packaging/fix-deb-version.sh`). Keep that step if you change how the deb is built.

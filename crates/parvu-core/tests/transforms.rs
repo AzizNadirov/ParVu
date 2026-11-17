@@ -442,9 +442,10 @@ fn batch_edits_are_one_step_and_undo_restores_earlier_edits() {
 #[test]
 fn numeric_range_for_colour_scales() {
     let (_d, ws, id) = setup();
-    assert_eq!(ws.numeric_range(id, "qty").unwrap(), Some((2.0, 7.0)));
-    assert_eq!(ws.numeric_range(id, "region").unwrap(), None);
-    assert!(ws.numeric_range(id, "nope").is_err());
+    let cols = |c: &[&str]| c.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert_eq!(ws.numeric_ranges(id, &cols(&["qty", "region"])).unwrap(), vec![Some((2.0, 7.0)), None]);
+    assert!(ws.numeric_ranges(id, &cols(&["nope"])).is_err());
+    assert_eq!(ws.numeric_ranges(id, &[]).unwrap(), vec![]);
 }
 
 fn chart(kind: ChartKind, x: &str, y: Option<&str>, agg: AggFunc) -> ChartSpec {

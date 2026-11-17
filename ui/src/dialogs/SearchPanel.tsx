@@ -1,5 +1,6 @@
 // Port of search_dialog.py: non-modal full-table search with Next/Previous
 // across all pages. Floats near the top-right without blocking the window.
+import { isCancelled } from "../lib/jobs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { api, errorMessage } from "../lib/api";
@@ -40,7 +41,20 @@ export function SearchPanel(props: SearchPanelProps): JSX.Element {
 
   const tabRef = useRef(props.tabId);
   tabRef.current = props.tabId;
-  const nav = useMemo(() => new SearchNavigator((o) => api.find(tabRef.current, o)), []);
+  // Each search runs as a job (a newer one replaces it); closing the panel stops it.
+  const searchJob = useRef<(() => void) | null>(null);
+  const nav = useMemo(
+    () =>
+      new SearchNavigator((o) => {
+        const job = api.find(tabRef.current, o, { label: t("job.find") });
+        searchJob.current = job.cancel;
+        return job.result;
+      }),
+    // t is stable for the panel's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  useEffect(() => () => searchJob.current?.(), []);
 
   // Everything next/prev read, kept in a ref so the registered key API stays valid.
   const live = useRef({ props, query, column, caseSensitive, wholeCell, regex, busy });
@@ -127,8 +141,12 @@ export function SearchPanel(props: SearchPanelProps): JSX.Element {
       show(step);
     } catch (e) {
       // A failed query leaves the cache as it was; the next attempt retries.
-      setStatus(t("search.status.failed", { error: errorMessage(e) }));
-      setStatusIsError(true);
+      if (isCancelled(e)) {
+        setStatus(t("job.cancelled"));
+      } else {
+        setStatus(t("search.status.failed", { error: errorMessage(e) }));
+        setStatusIsError(true);
+      }
     } finally {
       setBusy(false);
       live.current.busy = false;

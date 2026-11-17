@@ -33,6 +33,8 @@ import {
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
 import { formulaBody, formulaRefs, newFormulaName, refColors, refFor } from "./lib/formula";
+import { jobResult } from "./lib/jobs";
+import { StatusJobs } from "./components/JobProgress";
 import { fillEdge, fillFromHandle, type FillCell, type FillDirection, type Rect } from "./lib/fill";
 import { FormulaBar, type FormulaBarHandle } from "./components/FormulaBar";
 import { isDark } from "./lib/chart";
@@ -577,35 +579,23 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const showUniqueValues = useCallback(
     async (column: string) => {
-      if (!activeTab || !(await confirmLargeDataset())) return;
-      status(t("status.calculating"));
-      try {
-        const values = await api.uniqueValues(activeTab.id, column);
-        status("");
-        if (!values.length) {
-          await ui.alert(t("error.no_values"), t("error.no_values_msg", { column }));
-          return;
-        }
-        const chosen = await openUniqueValues(ui, { column, values });
-        if (chosen && chosen.length) await applyOp({ op: "filter_values", column, values: chosen });
-      } catch (e) {
-        status("");
-        await showError(t("error.unique_values_error"), e);
-      }
+      if (!activeTab) return;
+      // The dialog opens at once and fills while the column is read piece
+      // by piece; the grid stays usable meanwhile.
+      const chosen = await openUniqueValues(ui, { tabId: activeTab.id, column, total: activeTab.total_rows });
+      if (chosen && chosen.length) await applyOp({ op: "filter_values", column, values: chosen });
     },
-    [activeTab, confirmLargeDataset, status, t, ui, applyOp, showError],
+    [activeTab, ui, applyOp],
   );
 
   const showStats = useCallback(
     async (column: string) => {
       if (!activeTab) return;
-      status(t("column_stats.computing"));
       try {
-        const stats = await api.columnStats(activeTab.id, column);
-        status("");
-        await openColumnStats(ui, { stats });
+        const job = api.columnStats(activeTab.id, column, { label: t("job.column_stats", { column }), total: activeTab.total_rows });
+        const stats = await jobResult(job);
+        if (stats) await openColumnStats(ui, { stats });
       } catch (e) {
-        status("");
         await ui.alert(t("column_stats.error_title"), t("column_stats.error_msg", { column, error: errorMessage(e) }), "error");
       }
     },
@@ -638,7 +628,11 @@ export function App({ boot }: { boot: Bootstrap }) {
       });
       if (!r) return;
       try {
-        let text = r.mode === "page" ? pythonTuple(pageValues, numeric) : await api.columnTuple(activeTab.id, column, r.mode, r.n);
+        let text =
+          r.mode === "page"
+            ? pythonTuple(pageValues, numeric)
+            : await jobResult(api.columnTuple(activeTab.id, column, r.mode, r.n, { label: t("job.tuple", { column }) }));
+        if (text === null) return;
         if (r.label) text = `${r.label} = ${text}`;
         await copyText(text, t("status.copied", { count: r.mode === "page" ? pageValues.length : r.n }));
       } catch (e) {
@@ -1697,16 +1691,24 @@ export function App({ boot }: { boot: Bootstrap }) {
     if (!activeTab || !scaleColumns.length) return;
     const id = activeTab.id;
     let cancelled = false;
-    void Promise.all(scaleColumns.map((c) => api.columnRange(id, c).then((r) => [c, r] as const).catch(() => [c, null] as const))).then(
-      (pairs) => {
+    // One scan for every scaled column, stopped when the data changes again.
+    const columns = scaleColumns;
+    const job = api.columnRanges(id, columns, { label: t("job.ranges"), total: activeTab.total_rows });
+    job.result.then(
+      (found) => {
         if (cancelled) return;
         const ranges: Record<string, { min: number; max: number }> = {};
-        for (const [c, r] of pairs) if (r) ranges[c] = { min: r[0], max: r[1] };
+        columns.forEach((c, i) => {
+          const r = found[i];
+          if (r) ranges[c] = { min: r[0], max: r[1] };
+        });
         updateView(id, { ranges });
       },
+      () => undefined,
     );
     return () => {
       cancelled = true;
+      job.cancel();
     };
     // rangeKey covers the tab, its data and the scaled columns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1927,6 +1929,7 @@ export function App({ boot }: { boot: Bootstrap }) {
               {t("mcp.status.connected", { count: aiClients })}
             </button>
           )}
+          <StatusJobs t={t} />
           {activeTab && <span className="nowrap">{t("pagination.rows", { total_rows: activeTab.total_rows })}</span>}
         </footer>
       </div>
