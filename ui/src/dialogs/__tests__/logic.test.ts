@@ -282,7 +282,7 @@ describe("expressions", () => {
     const entries = [
       { name: "COUNTIF", category: "conditional", function: "COUNTIF", instead: null },
       { name: "FLOOR", category: "math", function: "FLOOR.MATH", instead: null },
-      { name: "FILTER", category: "tables", function: null, instead: "Data → Filter Rows" },
+      { name: "FILTER", category: "tables", function: null, instead: "Rows → Filter Rows" },
     ];
     const g = excelGroups(entries, fs, "");
     expect(g.map(([c, rows]) => [c, rows.map((r) => [r.entry.name, r.def?.name ?? null])])).toEqual([
