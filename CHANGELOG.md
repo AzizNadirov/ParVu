@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Whole numbers stayed whole only until saved to Parquet.** A sum of integers (Group By, Pivot, SQL `SUM`) is a 128-bit integer in DuckDB, which Parquet can't store, so it was written as a decimal number: 6 came back as 6.0. These columns are now saved as 64-bit integers, or as 38-digit decimals with no fraction when a value is bigger, so nothing is lost.
 - The Filter dialog's hint still said dates are written as `2024-12-31`; it now explains the value boxes that follow the column's type. **Drop Duplicates…** has the ellipsis of a menu item that opens a dialog.
 
 ## [1.0.0-alpha.6]

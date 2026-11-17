@@ -236,16 +236,27 @@ pub fn export(conn: &Connection, source: &str, o: &ExportOptions) -> Result<u64>
     }
     let query = build_export_query(source, o)?;
     let tmp = temp_path_for(&o.path);
+    let copy = |query: &str| -> Result<u64> {
+        let sql = format!("COPY ({query}) TO {} ({})", quote_literal(&tmp.to_string_lossy()), copy_options(o)?);
+        conn.execute(&sql, []).map(|n| n as u64).map_err(CoreError::from)
+    };
     let result = match o.format {
         ExportFormat::Excel => write_excel(conn, &query, &tmp),
-        _ => {
-            let sql = format!(
-                "COPY ({query}) TO {} ({})",
-                quote_literal(&tmp.to_string_lossy()),
-                copy_options(o)?
-            );
-            conn.execute(&sql, []).map(|n| n as u64).map_err(CoreError::from)
-        }
+        ExportFormat::Parquet => match hugeint_columns(conn, &query)? {
+            huge if huge.is_empty() => copy(&query),
+            // Parquet has no 128-bit integers: DuckDB would write them as
+            // doubles (a SUM of integers, 6, would read back as 6.0). Whole
+            // numbers stay whole: BIGINT when every value fits, otherwise
+            // DECIMAL(38,0).
+            huge => match copy(&cast_columns(&query, &huge, "BIGINT")) {
+                Err(e) if e.to_string().contains("out of range") || e.to_string().contains("Conversion Error") => {
+                    let _ = std::fs::remove_file(&tmp);
+                    copy(&cast_columns(&query, &huge, "DECIMAL(38,0)"))
+                }
+                other => other,
+            },
+        },
+        _ => copy(&query),
     };
     match result {
         Ok(rows) => {
@@ -258,6 +269,21 @@ pub fn export(conn: &Connection, source: &str, o: &ExportOptions) -> Result<u64>
             Err(e)
         }
     }
+}
+
+/// Columns of `query` typed HUGEINT or UHUGEINT (128-bit integers).
+fn hugeint_columns(conn: &Connection, query: &str) -> Result<Vec<String>> {
+    Ok(crate::engine::describe(conn, query)?
+        .into_iter()
+        .filter(|c| matches!(c.dtype.to_uppercase().as_str(), "HUGEINT" | "UHUGEINT"))
+        .map(|c| c.name)
+        .collect())
+}
+
+/// `query` with `columns` cast to `ty`, in place.
+fn cast_columns(query: &str, columns: &[String], ty: &str) -> String {
+    let items: Vec<String> = columns.iter().map(|c| format!("CAST({0} AS {ty}) AS {0}", quote_ident(c))).collect();
+    format!("SELECT * REPLACE ({}) FROM ({query})", items.join(", "))
 }
 
 fn is_number(dt: &DataType) -> bool {

@@ -483,3 +483,29 @@ fn resource_limits_are_applied() {
     let amount: f64 = limit.split_whitespace().next().unwrap_or("0").parse().unwrap_or(0.0);
     assert!((250.0..=320.0).contains(&amount), "memory_limit = {limit}");
 }
+
+/// Parquet has no 128-bit integers. A SUM of integers (HUGEINT) is saved as
+/// BIGINT, or as DECIMAL(38,0) when a value is too big for BIGINT: whole
+/// numbers never come back as 6.0.
+#[test]
+fn hugeint_columns_are_saved_as_whole_numbers() {
+    let (dir, _p, mut ws, id) = setup(10, "parquet");
+    let types = |ws: &Workspace, path: &Path| -> Vec<String> {
+        let sql = format!("SELECT column_type FROM (DESCRIBE SELECT * FROM read_parquet('{}'))", path.display());
+        let mut st = ws.connection().prepare(&sql).unwrap();
+        st.query_map([], |r| r.get::<_, String>(0)).unwrap().map(Result::unwrap).collect()
+    };
+    // Small sums fit BIGINT.
+    ws.run_sql(id, "SELECT name, SUM(id) AS total FROM \"my_data\" GROUP BY name ORDER BY name", None).unwrap();
+    assert_eq!(ws.column_type(id, "total").unwrap(), "HUGEINT");
+    let small = dir.path().join("small.parquet");
+    ws.save(id, Some(&small)).unwrap();
+    assert_eq!(types(&ws, &small), ["VARCHAR", "BIGINT"]);
+    assert_eq!(cell(&ws, id, 1, 0, 1).as_deref(), Some("7"), "name_0: ids 0 and 7");
+    // A value past BIGINT keeps every digit.
+    ws.run_sql(id, "SELECT CAST(170141183460469231731687303715884105727 AS HUGEINT) // 2 AS big", None).unwrap();
+    let big = dir.path().join("big.parquet");
+    ws.save(id, Some(&big)).unwrap();
+    assert_eq!(types(&ws, &big), ["DECIMAL(38,0)"]);
+    assert_eq!(cell(&ws, id, 1, 0, 0).as_deref(), Some("85070591730234615865843651857942052863"));
+}

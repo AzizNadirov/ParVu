@@ -71,8 +71,8 @@ fn group_by_opens_a_new_tab_and_leaves_the_source_alone() {
     assert!(s.origin.is_none());
     assert_eq!(s.path, out);
     assert!(!ws.has_unsaved_changes(res).unwrap());
-    // SUM of integers is a HUGEINT, which Parquet stores as a double.
-    assert_eq!(rows(&ws, res)[1][1].as_deref(), Some("6.0"));
+    // SUM of integers is a 128-bit HUGEINT; it is saved as a whole number.
+    assert_eq!(rows(&ws, res)[1][1].as_deref(), Some("6"));
     assert_eq!(result_tables(&ws), 0, "the in-memory copy is dropped once saved");
 }
 
