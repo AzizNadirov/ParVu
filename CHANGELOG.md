@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **ParVu no longer opens whenever Claude Code (or VS Code with Claude) starts.** MCP clients start their servers when a session opens, and `parvu mcp --attach` used to open ParVu right then. Now it answers the client's startup itself and opens ParVu only when the AI first uses a tool.
+
 ## [1.0.0-alpha.5]
 
 Column types are now detected in Parquet, JSON and Excel files too, not just CSV: text columns that hold dates, numbers or yes/no values get those types when the file opens.
