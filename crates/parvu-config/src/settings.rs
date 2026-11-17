@@ -218,7 +218,7 @@ pub struct Settings {
     pub query_panel_collapsed: bool,
     /// Height of the SQL Query panel, in pixels.
     pub query_panel_height: i64,
-    /// The Applied Steps panel is shown.
+    /// The Applied Steps panel is expanded (otherwise only its title shows).
     pub show_steps_panel: bool,
     /// The AI assistant panel is shown.
     pub show_ai_panel: bool,
@@ -272,9 +272,9 @@ impl Default for Settings {
             detect_column_types: true,
             date_order: DateOrderSetting::Auto,
             show_query_panel: true,
-            query_panel_collapsed: false,
+            query_panel_collapsed: true,
             query_panel_height: 220,
-            show_steps_panel: true,
+            show_steps_panel: false,
             show_ai_panel: false,
             colour_browse_button: "#E8F5E9".into(),
             colour_sql_edit: "#FFF9C4".into(),

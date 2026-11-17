@@ -172,8 +172,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   }, []);
   const aiOpen = settings.show_ai_panel ?? false;
   const editorOpen = settings.show_query_panel ?? true;
-  const editorCollapsed = settings.query_panel_collapsed ?? false;
-  const stepsOpen = settings.show_steps_panel ?? true;
+  const editorCollapsed = settings.query_panel_collapsed ?? true;
+  const stepsOpen = settings.show_steps_panel ?? false;
   const [aiProviders, setAiProviders] = useState<ProvidersInfo | null>(null);
   const [aiProvider, setAiProvider] = useState<string | null>(null);
   const [chats, setChats] = useState<Record<number, ChatState>>({});
@@ -2163,14 +2163,12 @@ export function App({ boot }: { boot: Bootstrap }) {
                       {t("btn.execute")}
                     </button>
                   )}
-                  <button className="outlined" disabled={busy} onClick={() => void resetTab()}>
-                    <Icon name="reset" />
-                    {t("btn.reset")}
-                  </button>
-                  <button className="outlined" onClick={() => void showTableInfo()}>
-                    <Icon name="info" />
-                    {t("btn.table_info")}
-                  </button>
+                  {!editorCollapsed && (
+                    <button className="outlined" disabled={busy} onClick={() => void resetTab()}>
+                      <Icon name="reset" />
+                      {t("btn.reset")}
+                    </button>
+                  )}
                   {mode === "sql" && !editorCollapsed && (
                     <label className="check small">
                       <input type="checkbox" checked={sqlToNewTab} onChange={(e) => setSqlToNewTab(e.target.checked)} />
@@ -2203,6 +2201,11 @@ export function App({ boot }: { boot: Bootstrap }) {
                   <button className="text" onClick={() => void runAppend()}>
                     <Icon name="append" />
                     {t("menu.operations.append")}
+                  </button>
+                  <span className="divider" />
+                  <button className="text" onClick={() => void showTableInfo()}>
+                    <Icon name="info" />
+                    {t("btn.table_info")}
                   </button>
                 </div>
                 {!editorCollapsed && <div className="resize-handle" onMouseDown={startResize} />}

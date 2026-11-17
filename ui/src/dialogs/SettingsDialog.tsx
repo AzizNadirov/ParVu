@@ -89,8 +89,8 @@ export function settingsToForm(s: Settings, language: string, theme: string): Se
     cellsThreshold: String(toInt(s.warning_threshold_cells, 10_000_000)),
     sizeThreshold: String(toInt(s.warning_threshold_filesize_mb, 100)),
     showQueryPanel: s.show_query_panel ?? true,
-    queryCollapsed: s.query_panel_collapsed ?? false,
-    showSteps: s.show_steps_panel ?? true,
+    queryCollapsed: s.query_panel_collapsed ?? true,
+    showSteps: s.show_steps_panel ?? false,
     showAi: s.show_ai_panel ?? false,
   };
 }

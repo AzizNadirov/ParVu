@@ -1453,7 +1453,7 @@
   "settings.group.view": "View",
   "settings.label.show_query_panel": "Show the SQL Query panel",
   "settings.label.query_collapsed": "Start with the SQL Query panel collapsed",
-  "settings.label.show_steps": "Show Applied Steps",
+  "settings.label.show_steps": "Expand Applied Steps",
   "settings.label.show_ai": "Show the AI assistant panel",
   "settings.hint.view": "Changes made in the View menu are remembered here too."
 }
