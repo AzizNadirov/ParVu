@@ -1485,6 +1485,6 @@
   "dialog.close_tab.steps": "Tətbiq olunmuş {count} addım saxlanmayıb. Saxla onları fayla yazacaq.",
   "table.source_closed": "{source} bağlıdır, cədvəli yeniləmək olmur",
   "dialog.reset.title": "{name} sıfırlansın?",
-  "dialog.reset.message": "Tətbiq olunmuş {count} addım (süzgəclər, əməliyyatlar, sorğular) silinəcək və bunu geri qaytarmaq olmaz. Xana düzəlişləri qalır.",
-  "success.formulas_as_values": "{count} düstur sütunu dəyər kimi saxlanıldı; ParVu düsturları yalnız fayl dəyişməyənə qədər xatırlayır."
+  "dialog.reset.message": "Silinəcək addımlar: {count} (süzgəclər, əməliyyatlar, sorğular). Bunu geri qaytarmaq olmaz. Xana düzəlişləri, düstur sütunları və «Kimi oxu» seçimləri qalır.",
+  "success.formulas_as_values": "Düstur sütunları ({count}) dəyər kimi saxlanıldı; ParVu düsturları yalnız fayl dəyişməyənə qədər xatırlayır."
 }

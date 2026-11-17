@@ -1485,6 +1485,6 @@
   "dialog.close_tab.steps": "Its {count} applied steps are not saved. Save writes them to the file.",
   "table.source_closed": "{source} is closed, so this table can't be refreshed",
   "dialog.reset.title": "Reset {name}?",
-  "dialog.reset.message": "This drops its {count} applied steps (filters, operations, queries) and can't be undone. Cell edits stay.",
-  "success.formulas_as_values": "Its {count} formula columns were saved as their values; ParVu remembers the formulas only while the file is unchanged."
+  "dialog.reset.message": "Applied steps to drop: {count} (filters, operations, queries). This can't be undone. Cell edits, formula columns and \"Read as\" choices stay.",
+  "success.formulas_as_values": "Formula columns ({count}) were saved as their values; ParVu remembers the formulas only while the file is unchanged."
 }

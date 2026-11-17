@@ -1671,6 +1671,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   const closeTab = useCallback(
     async (id: number) => {
       const tab = tabs.find((x) => x.id === id);
+      // The tab in front before an unsaved-changes prompt switched to `id`.
+      const before = activeRef.current;
       if (!tab || !(await resolveUnsaved(tab, true))) return;
       try {
         await api.closeTab(id);
@@ -1682,7 +1684,9 @@ export function App({ boot }: { boot: Bootstrap }) {
       setTabs(rest);
       // The prompt about unsaved changes switches to the tab it asks about.
       if (id === active || id === activeRef.current) {
-        if (rest.length) {
+        if (before !== null && before !== id && rest.some((x) => x.id === before)) {
+          switchTo(before);
+        } else if (rest.length) {
           const idx = Math.min(tabs.findIndex((x) => x.id === id), rest.length - 1);
           switchTo(rest[idx].id);
         } else {
@@ -1743,10 +1747,17 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     [active, upsertTab, loadPage],
   );
-  const onLanguage = useCallback((lang: string, tr: Record<string, string>) => {
-    setTranslations(tr);
-    setSettings((s) => ({ ...s, current_language: lang }));
-  }, []);
+  const onLanguage = useCallback(
+    (lang: string, tr: Record<string, string>) => {
+      setTranslations(tr);
+      setSettings((s) => ({ ...s, current_language: lang }));
+      // The status line ("Showing page 1 of 5") is in the old language
+      // until the page is read again.
+      const id = activeRef.current;
+      if (id !== null) void loadPage(id, tabUi.current.get(id)?.page ?? 1);
+    },
+    [loadPage],
+  );
 
   // ------------------------------------------------------------ menus
   // ------------------------------------------------------------ AI assistant
@@ -2358,7 +2369,8 @@ export function App({ boot }: { boot: Bootstrap }) {
                     ? shift
                       ? formulaBar.current?.extendRange(c)
                       : formulaBar.current?.insert(refFor(c))
-                    : void sortBy(c)
+                    : (setCurrentCell((cur) => ({ row: cur?.row ?? 0, col: Math.max(0, page?.columns.findIndex((x) => x.name === c) ?? 0) })),
+                      void sortBy(c))
                 }
                 onHeaderMenu={(c, x, y) => setMenu({ x, y, items: headerMenu(c) })}
                 onCellMenu={(r, c, x, y) => setMenu({ x, y, items: cellMenu(r, c) })}

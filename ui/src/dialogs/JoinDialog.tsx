@@ -25,11 +25,13 @@ export function pickLeftKey(leftColumns: string[], rightColumns: string[]): stri
 
 function JoinDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>; a: Args }) {
   const t = ui.t;
-  const [right, setRight] = useState(a.others[0]?.name ?? "");
+  // Start on a table that shares a column with this one, if any.
+  const firstOther = a.others.find((o) => o.columns.some((c) => a.columns.includes(c))) ?? a.others[0];
+  const [right, setRight] = useState(firstOther?.name ?? "");
   const [joinType, setJoinType] = useState<JoinType>("inner");
-  const [leftKey, setLeftKey] = useState(() => pickLeftKey(a.columns, a.others[0]?.columns ?? []));
+  const [leftKey, setLeftKey] = useState(() => pickLeftKey(a.columns, firstOther?.columns ?? []));
   const rightCols = a.others.find((o) => o.name === right)?.columns ?? [];
-  const [rightKey, setRightKey] = useState(() => pickRightKey(pickLeftKey(a.columns, a.others[0]?.columns ?? []), a.others[0]?.columns ?? []));
+  const [rightKey, setRightKey] = useState(() => pickRightKey(pickLeftKey(a.columns, firstOther?.columns ?? []), firstOther?.columns ?? []));
 
   const op = buildJoinOp(right, joinType, leftKey, rightKey);
   const submit = () => op && close(op);
