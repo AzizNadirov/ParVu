@@ -1616,6 +1616,7 @@
   "custom.editor.add_param": "Add parameter",
   "custom.editor.add_row": "Add row",
   "custom.editor.body_function": "Body: a SQL expression",
+  "custom.editor.body_expression": "Body: an expression",
   "custom.editor.body_function_hint": "Write the parameters by name, e.g. upper(name) || '!'. Ctrl+Enter validates.",
   "custom.editor.body_expression_hint": "One expression of the parameters, [x] for parameter x, e.g. SUM([x] * [w]) / SUM([w]). The built-in functions work; custom ones don't. Ctrl+Enter validates.",
   "custom.editor.language": "Language:",

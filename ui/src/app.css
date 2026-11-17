@@ -98,6 +98,9 @@
   box-shadow: var(--md-elevation-2);
   overflow: hidden;
 }
+/* The doc popup of a completion sits beside the list, outside it: not clipped. */
+.cm-tooltip.cm-tooltip-autocomplete { overflow: visible; }
+.cm-tooltip-autocomplete > ul { border-radius: var(--md-shape-s); }
 .cm-tooltip-autocomplete ul li { padding: 3px 10px !important; }
 .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--md-primary) !important; color: var(--md-on-primary) !important; }
 .cm-completionInfo { max-width: 420px; padding: 8px 10px !important; }

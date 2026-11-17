@@ -664,7 +664,7 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | n
 
         <div className="col">
           <div className="row">
-            <span className="pv-section-title grow">{t(fn ? "custom.editor.body_function" : "custom.editor.body_operation")}</span>
+            <span className="pv-section-title grow">{t(exprBody ? "custom.editor.body_expression" : fn ? "custom.editor.body_function" : "custom.editor.body_operation")}</span>
             {fn && (
               <label className="row" title={t("custom.editor.language_hint")}>
                 <span>{t("custom.editor.language")}</span>

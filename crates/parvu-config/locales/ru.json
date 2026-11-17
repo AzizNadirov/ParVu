@@ -1616,6 +1616,7 @@
   "custom.editor.add_param": "Добавить параметр",
   "custom.editor.add_row": "Добавить строку",
   "custom.editor.body_function": "Тело: выражение SQL",
+  "custom.editor.body_expression": "Тело: выражение",
   "custom.editor.body_function_hint": "Пишите параметры по имени, например upper(name) || '!'. Ctrl+Enter запускает проверку.",
   "custom.editor.body_expression_hint": "Одно выражение от параметров, [x] — параметр x, например SUM([x] * [w]) / SUM([w]). Встроенные функции работают, пользовательские — нет. Ctrl+Enter запускает проверку.",
   "custom.editor.language": "Язык:",

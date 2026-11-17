@@ -1616,6 +1616,7 @@
   "custom.editor.add_param": "Parametr əlavə et",
   "custom.editor.add_row": "Sətir əlavə et",
   "custom.editor.body_function": "Gövdə: SQL ifadəsi",
+  "custom.editor.body_expression": "Gövdə: ifadə",
   "custom.editor.body_function_hint": "Parametrləri adı ilə yazın, məsələn upper(name) || '!'. Ctrl+Enter yoxlayır.",
   "custom.editor.body_expression_hint": "Parametrlərdən bir ifadə, [x] — x parametri, məsələn SUM([x] * [w]) / SUM([w]). Daxili funksiyalar işləyir, xüsusi funksiyalar yox. Ctrl+Enter yoxlayır.",
   "custom.editor.language": "Dil:",
