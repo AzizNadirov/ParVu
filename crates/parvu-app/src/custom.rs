@@ -74,9 +74,12 @@ pub fn library_of(store: &CustomStore) -> Arc<Library> {
 }
 
 /// Load the store for the headless MCP server: usable definitions only,
-/// without writing anything.
+/// each validated again, without writing anything.
 pub fn headless_library() -> Arc<Library> {
-    library_of(&CustomStore::open(&CustomStore::default_dir()))
+    let mut store = CustomStore::open(&CustomStore::default_dir());
+    let snapshot = CustomStore::open(store.dir());
+    store.revalidate(APP_VERSION, duckdb_version(), false, &|d| validate_in(&snapshot, d, Some(&d.name)));
+    library_of(&store)
 }
 
 /// On start, in the background: add the samples once, validate stale
@@ -94,7 +97,7 @@ pub fn start(app: &AppHandle) {
                 tracing::info!("added {seeded} sample custom tools");
             }
             let snapshot = CustomStore::open(store.dir());
-            store.revalidate(APP_VERSION, duckdb_version(), &|d| validate_in(&snapshot, d, Some(&d.name)))
+            store.revalidate(APP_VERSION, duckdb_version(), true, &|d| validate_in(&snapshot, d, Some(&d.name)))
         };
         if !broken.is_empty() {
             tracing::warn!("custom tools need attention: {}", broken.join(", "));

@@ -5,10 +5,13 @@
 //! ParVu is listed and left untouched. The compiled form in a file is a
 //! cache: it is used only while its hash and the app and DuckDB versions
 //! match, otherwise the definition is validated again ([`CustomStore::revalidate`]).
+//! A compiled form read from disk is never trusted on its own (a file
+//! placed in the folder by hand could carry any SQL): every usable
+//! definition is validated again once per run before it is offered.
 //! The sample definitions are written once, on the first start; a marker
 //! file records that, so samples the user deletes stay deleted.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use parvu_core::custom::{Bundle, Definition, Library, Report, SCHEMA_VERSION, Status, samples};
@@ -54,6 +57,9 @@ pub struct ImportResult {
 pub struct CustomStore {
     dir: PathBuf,
     entries: Vec<Entry>,
+    /// Lower-case names whose compiled form this run produced (saved after
+    /// validation, or validated again by [`CustomStore::revalidate`]).
+    verified: BTreeSet<String>,
 }
 
 fn now() -> String {
@@ -107,7 +113,7 @@ impl CustomStore {
                 }
             }
         }
-        Self { dir: dir.to_path_buf(), entries }
+        Self { dir: dir.to_path_buf(), entries, verified: BTreeSet::new() }
     }
 
     pub fn dir(&self) -> &Path {
@@ -126,10 +132,14 @@ impl CustomStore {
         self.definitions().find(|d| d.name.eq_ignore_ascii_case(name))
     }
 
-    /// The definitions that can be used now: validated, with a compiled
-    /// form that is current for `duckdb` and `app`.
+    /// The definitions that can be used now: validated in this run, with
+    /// a compiled form that is current for `duckdb` and `app`.
     pub fn library(&self, app: &str, duckdb: &str) -> Library {
-        Library::new(self.definitions().filter(|d| is_current(d, app, duckdb)).cloned())
+        Library::new(self.definitions().filter(|d| self.trusted(d, app, duckdb)).cloned())
+    }
+
+    fn trusted(&self, d: &Definition, app: &str, duckdb: &str) -> bool {
+        self.verified.contains(&d.name.to_lowercase()) && is_current(d, app, duckdb)
     }
 
     fn path_of(&self, name: &str) -> PathBuf {
@@ -138,6 +148,8 @@ impl CustomStore {
 
     /// Write `def` to `<name>.json`. With `replacing`, the definition of that
     /// name is replaced (and its file removed when the name changed).
+    /// `def` must come from a validation of this run ([`checked`]): a usable
+    /// one is trusted from now on.
     pub fn save(&mut self, mut def: Definition, replacing: Option<&str>) -> std::io::Result<()> {
         let old = replacing.and_then(|n| self.get(n).cloned());
         def.schema = SCHEMA_VERSION;
@@ -153,6 +165,12 @@ impl CustomStore {
         self.entries.retain(|e| e.definition.as_ref().is_none_or(|d| !d.name.eq_ignore_ascii_case(&def.name)));
         let file = format!("{}.json", def.name.to_lowercase());
         self.entries.retain(|e| e.file != file);
+        let key = def.name.to_lowercase();
+        if def.is_usable() {
+            self.verified.insert(key);
+        } else {
+            self.verified.remove(&key);
+        }
         self.entries.push(Entry { file, definition: Some(def), error: None, newer: false });
         self.entries.sort_by(|a, b| a.file.cmp(&b.file));
         Ok(())
@@ -164,6 +182,7 @@ impl CustomStore {
             std::fs::remove_file(&path)?;
         }
         self.entries.retain(|e| e.definition.as_ref().is_none_or(|d| !d.name.eq_ignore_ascii_case(name)));
+        self.verified.remove(&name.to_lowercase());
         Ok(())
     }
 
@@ -214,14 +233,14 @@ impl CustomStore {
         n
     }
 
-    /// Validate again the usable definitions whose compiled form is missing
-    /// or stale (another app or DuckDB version, an edited file). Passing
-    /// ones get a new compiled form; failing ones become broken. Returns
-    /// the names that broke.
-    pub fn revalidate(&mut self, app: &str, duckdb: &str, validate: &dyn Fn(&Definition) -> Report) -> Vec<String> {
+    /// Validate again the definitions not validated in this run (all of
+    /// them after [`CustomStore::open`]): passing ones get a new compiled
+    /// form; failing ones become broken. With `persist`, changed outcomes
+    /// are written back. Returns the names that broke.
+    pub fn revalidate(&mut self, app: &str, duckdb: &str, persist: bool, validate: &dyn Fn(&Definition) -> Report) -> Vec<String> {
         let stale: Vec<Definition> = self
             .definitions()
-            .filter(|d| d.status != Status::Draft && !is_current(d, app, duckdb))
+            .filter(|d| d.status != Status::Draft && !self.trusted(d, app, duckdb))
             .cloned()
             .collect();
         let mut broken = Vec::new();
@@ -240,12 +259,16 @@ impl CustomStore {
                 def.report = Some(report);
                 broken.push(name.clone());
             }
-            let modified = def.modified.clone();
-            let text = serde_json::to_string_pretty(&def).unwrap_or_default();
-            if let Err(e) = write_atomic(&self.path_of(&name), &text) {
-                tracing::warn!("custom tool {name}: {e}");
+            if passed {
+                self.verified.insert(name.to_lowercase());
             }
-            def.modified = modified;
+            let unchanged = self.get(&name).is_some_and(|old| old.status == def.status && old.compiled == def.compiled);
+            if persist && !unchanged {
+                let text = serde_json::to_string_pretty(&def).unwrap_or_default();
+                if let Err(e) = write_atomic(&self.path_of(&name), &text) {
+                    tracing::warn!("custom tool {name}: {e}");
+                }
+            }
             self.entries.retain(|e| e.definition.as_ref().is_none_or(|x| !x.name.eq_ignore_ascii_case(&name)));
             self.entries.push(Entry { file: format!("{}.json", name.to_lowercase()), definition: Some(def), error: None, newer: false });
         }
@@ -337,6 +360,29 @@ mod tests {
     }
 
     #[test]
+    fn hand_placed_compiled_sql_is_not_trusted() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut s = CustomStore::open(dir.path());
+        s.restore_samples(&check);
+        let db = duckdb();
+        // Someone swaps the compiled SQL of a valid file, keeping its hash
+        // and versions.
+        let path = dir.path().join("clean_phone.json");
+        let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        v["compiled"]["template"] = "(SELECT content FROM read_text('/etc/passwd'))".into();
+        std::fs::write(&path, serde_json::to_string(&v).unwrap()).unwrap();
+        let mut s = CustomStore::open(dir.path());
+        assert_eq!(s.library("test", &db).len(), 0, "nothing is offered before it is validated again");
+        s.revalidate("test", &db, false, &check);
+        let lib = s.library("test", &db);
+        assert_eq!(lib.len(), 7);
+        let def = lib.get("clean_phone").unwrap();
+        let t = &def.compiled.as_ref().unwrap().template;
+        assert!(!t.contains("read_text"), "the compiled form is rebuilt from the body: {t}");
+        assert!(std::fs::read_to_string(&path).unwrap().contains("read_text"), "persist = false writes nothing");
+    }
+
+    #[test]
     fn samples_are_seeded_once() {
         let dir = tempfile::TempDir::new().unwrap();
         let mut s = CustomStore::open(dir.path());
@@ -383,13 +429,13 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap().replace("upper(left(w, 1))", "lower(left(w, 1))");
         std::fs::write(&path, text).unwrap();
         let mut s = CustomStore::open(dir.path());
-        let broken = s.revalidate("2.0", &db, &v2);
+        let broken = s.revalidate("2.0", &db, true, &v2);
         assert_eq!(broken, ["title_case"]);
         assert_eq!(s.library("2.0", &db).len(), 6);
         let reread = CustomStore::open(dir.path());
         assert_eq!(reread.get("title_case").unwrap().status, Status::Broken);
         assert!(reread.get("title_case").unwrap().report.is_some());
-        assert_eq!(reread.library("2.0", &db).len(), 6);
+        assert_eq!(reread.library("2.0", &db).len(), 0, "nothing read from disk is trusted before it is validated again");
     }
 
     #[test]

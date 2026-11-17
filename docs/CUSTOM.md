@@ -140,7 +140,7 @@ A definition:
 | `examples[].expected` | the expected output; a function's has one column |
 | `examples[].ordered` | compare table rows in order |
 
-Cells are text or `null`, cast to the column's `dtype`. Files in the folder also carry `status` (`ok`, `draft` or `broken`), `created`, `modified`, `sample`, and two blocks ParVu computes itself: `compiled` (the SQL template, its hash and the ParVu and DuckDB versions it was made with; ignored on import) and `report` (the last validation of a draft or broken tool).
+Cells are text or `null`, cast to the column's `dtype`. Files in the folder also carry `status` (`ok`, `draft` or `broken`), `created`, `modified`, `sample`, and two blocks ParVu computes itself: `compiled` (the SQL template, its hash and the ParVu and DuckDB versions it was made with; ignored on import, and rebuilt from the body each time ParVu starts, so editing it by hand has no effect) and `report` (the last validation of a draft or broken tool).
 
 ## Where they are stored
 
