@@ -93,6 +93,30 @@ fn fill_template(template: &str, args: &[String]) -> String {
     out
 }
 
+/// The slot a custom function's template has for argument `i`.
+const SLOT: &str = "__pv_arg_";
+
+/// `template` with each `__pv_arg_N` replaced by `args[N]`, in one pass.
+/// Custom function templates use these slots: ParVu refuses the text
+/// `__pv_` in a body, so every slot is one its compiler wrote, while `{2}`
+/// may be a regex quantifier.
+pub fn fill_slots(template: &str, args: &[String]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(at) = rest.find(SLOT) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + SLOT.len()..];
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        match after[..digits].parse::<usize>().ok().filter(|i| *i < args.len()) {
+            Some(i) => out.push_str(&args[i]),
+            None => out.push_str(&rest[at..at + SLOT.len() + digits]),
+        }
+        rest = &after[digits..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn paren(s: String, wrap: bool) -> String {
     if wrap { format!("({s})") } else { s }
 }
@@ -270,7 +294,8 @@ impl Compiler<'_> {
                 None => break,
             }
         }
-        Ok(format!("({})", fill_template(template, &sql)))
+        let filled = if f.arg_slots { fill_slots(template, &sql) } else { fill_template(template, &sql) };
+        Ok(format!("({filled})"))
     }
 
     fn function<'e>(

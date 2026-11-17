@@ -16,6 +16,12 @@ pub struct ParamDef {
     /// SQL used for an optional parameter left out (template functions).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<String>,
+    /// The argument types this parameter accepts. `None` accepts anything
+    /// (the built-ins are permissive); a custom function's typed column
+    /// parameters list theirs, and the resolver refuses an argument whose
+    /// type is known and not in the list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepts: Option<Vec<LogicalType>>,
 }
 
 impl ParamDef {
@@ -26,6 +32,7 @@ impl ParamDef {
             required: true,
             description: String::new(),
             default: None,
+            accepts: None,
         }
     }
 
@@ -57,6 +64,20 @@ pub struct FunctionDef {
     /// with no DuckDB function of their own (most Excel functions).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sql_template: Option<String>,
+    /// `sql_template` marks argument `i` as `__pv_arg_i` instead of `{i}`
+    /// (custom functions: a `{2}` in a user's regex is not a slot).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub arg_slots: bool,
+    /// It aggregates the whole column: a column total in formulas.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub aggregate: bool,
+    /// It reads other rows (a window): formulas then read the table in order.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub window: bool,
+    /// A custom function the user defined (not built in): arity is checked
+    /// both ways.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub custom: bool,
 }
 
 impl FunctionDef {
@@ -76,6 +97,23 @@ impl FunctionDef {
             example: example.to_string(),
             sql_name: sql_name.map(str::to_string),
             sql_template: None,
+            arg_slots: false,
+            aggregate: false,
+            window: false,
+            custom: false,
+        }
+    }
+}
+
+impl FunctionDef {
+    /// A user's custom function: `template` marks argument `i` as
+    /// `__pv_arg_i` (see [`crate::compiler::fill_slots`]).
+    pub fn custom(name: &str, params: Vec<ParamDef>, return_type: LogicalType, description: &str, template: &str) -> Self {
+        Self {
+            sql_template: Some(template.to_string()),
+            arg_slots: true,
+            custom: true,
+            ..Self::new(name, params, return_type, description, "", None)
         }
     }
 }
