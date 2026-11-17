@@ -70,6 +70,29 @@ fn precedence(e: &Expr) -> u8 {
     }
 }
 
+/// `template` with `{i}` replaced by `args[i]`, in one pass (an argument's
+/// SQL that contains `{0}` is left alone).
+fn fill_template(template: &str, args: &[String]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        match after.find('}').and_then(|close| after[..close].parse::<usize>().ok().map(|i| (i, close))) {
+            Some((i, close)) if i < args.len() => {
+                out.push_str(&args[i]);
+                rest = &after[close + 1..];
+            }
+            _ => {
+                out.push('{');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 fn paren(s: String, wrap: bool) -> String {
     if wrap { format!("({s})") } else { s }
 }
@@ -156,6 +179,10 @@ impl Compiler<'_> {
             }
             Expr::ColumnRef { table, column, .. } => {
                 Ok(format!("{}.{}", identifier(table), identifier(column)))
+            }
+            Expr::Template { template, args, .. } => {
+                let args = args.iter().map(|a| self.sql(a)).collect::<Result<Vec<_>, _>>()?;
+                Ok(format!("({})", fill_template(template, &args)))
             }
             Expr::Literal { value, .. } => Ok(literal_sql(value)),
             Expr::Call {

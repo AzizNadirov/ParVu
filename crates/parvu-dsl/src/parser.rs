@@ -93,6 +93,11 @@ pub enum Ast {
         op: UnOp,
         operand: Box<Ast>,
     },
+    /// `[first:last]`: a range of columns of the current table (raw tokens).
+    RangeRef {
+        from: String,
+        to: String,
+    },
     /// `table[column] = value`; `column` is the raw token text.
     Assignment {
         table: String,
@@ -118,9 +123,38 @@ impl Ast {
                 UnOp::Minus => "unary_minus",
                 UnOp::Not => "logical_not",
             },
+            Ast::RangeRef { .. } => "range_ref",
             Ast::Assignment { .. } => "assignment",
         }
     }
+}
+
+/// What the parser expected, in words instead of grammar rule names:
+/// "Expected a value, a column like [qty] or a function here".
+fn readable(variant: &pest::error::ErrorVariant<Rule>) -> Option<String> {
+    let pest::error::ErrorVariant::ParsingError { positives, .. } = variant else { return None };
+    let mut words: Vec<&str> = Vec::new();
+    for rule in positives {
+        let w = match rule {
+            Rule::EOI => "the end of the expression",
+            Rule::or_op | Rule::and_op | Rule::cmp_op | Rule::add_op | Rule::mul_op => "an operator such as + or *",
+            Rule::method_suffix => "a method such as .upper()",
+            Rule::call_args => "( after the function name",
+            Rule::ident | Rule::prim_ident => "a name",
+            Rule::string => "a quoted text",
+            Rule::number => "a number",
+            _ => "a value, a column like [qty] or a function",
+        };
+        if !words.contains(&w) {
+            words.push(w);
+        }
+    }
+    let list = match words.as_slice() {
+        [] => return None,
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
+    };
+    Some(format!("Expected {list} here"))
 }
 
 /// Parse source text into an [`Ast`].
@@ -131,7 +165,7 @@ pub fn parse(src: &str) -> Result<Ast, DslError> {
             pest::error::LineColLocation::Span(p, _) => p,
         };
         DslError::Parse {
-            message: e.variant.message().into_owned(),
+            message: readable(&e.variant).unwrap_or_else(|| e.variant.message().into_owned()),
             line,
             column,
         }
@@ -218,6 +252,12 @@ fn build(pair: Pair<'_, Rule>) -> Ast {
         Rule::bare_ref => {
             let column = pair.into_inner().next().unwrap().as_str().to_string();
             Ast::ColumnRef { table: String::new(), column }
+        }
+        Rule::range_ref => {
+            let mut it = pair.into_inner();
+            let from = it.next().unwrap().as_str().to_string();
+            let to = it.next().unwrap().as_str().to_string();
+            Ast::RangeRef { from, to }
         }
         Rule::number => Ast::Number(pair.as_str().to_string()),
         Rule::string => Ast::String(pair.as_str().to_string()),

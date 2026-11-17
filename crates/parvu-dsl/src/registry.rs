@@ -488,6 +488,25 @@ impl FunctionRegistry {
             Some("LEAST"),
         );
 
+        // Neighbouring rows (formulas). Handled in resolver.rs; registered
+        // here for autocomplete and the function list.
+        add(
+            "PREV",
+            vec![p("column", LT::Unknown), opt("rows", LT::Numeric)],
+            LT::Unknown,
+            "The value from the row before (or `rows` rows before), in the table's order; NULL on the first row.",
+            "[total] - PREV([total])",
+            None,
+        );
+        add(
+            "NEXT",
+            vec![p("column", LT::Unknown), opt("rows", LT::Numeric)],
+            LT::Unknown,
+            "The value from the row after (or `rows` rows after), in the table's order; NULL on the last row.",
+            "NEXT([date]) - [date]",
+            None,
+        );
+
         // More text functions
         add(
             "SPLIT_PART",
@@ -787,7 +806,7 @@ mod tests {
     #[test]
     fn defaults() {
         let r = FunctionRegistry::default();
-        assert_eq!(r.all_functions().len(), 33 + 25 + 12);
+        assert_eq!(r.all_functions().len(), 33 + 25 + 12 + 2); // + PREV, NEXT
         assert_eq!(r.lookup("sum").unwrap().name, "SUM");
         assert_eq!(
             r.lookup("countd").unwrap().sql_name.as_deref(),

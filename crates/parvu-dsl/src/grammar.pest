@@ -30,13 +30,16 @@ add_op    = { "+" | "-" }
 mul_op    = { "*" | "/" }
 prefix_op = { "+" | "-" | "!" | not_kw }
 
-primary       = { number | string | boolean | null | column_ref | bare_ref | func_call | "(" ~ expr ~ ")" }
+primary       = { number | string | boolean | null | column_ref | range_ref | bare_ref | func_call | "(" ~ expr ~ ")" }
 method_suffix = { "." ~ ident ~ call_args? }
 func_call     = { prim_ident ~ call_args }
 call_args     = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
 column_ref    = { prim_ident ~ "[" ~ (ident | string) ~ "]" }
 // `[column]`: a column of the current table (formulas).
 bare_ref      = { "[" ~ (ident | string) ~ "]" }
+// `[first:last]`: the columns from first to last, for row-wise SUM, AVG,
+// MIN, MAX and COUNT in formulas.
+range_ref     = { "[" ~ (ident | string) ~ ":" ~ (ident | string) ~ "]" }
 
 number     = @{ "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 string     = @{ "'" ~ (!"'" ~ ANY)* ~ "'" | "\"" ~ (!"\"" ~ ANY)* ~ "\"" }

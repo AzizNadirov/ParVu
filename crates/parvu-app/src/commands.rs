@@ -477,13 +477,24 @@ pub async fn set_formula(
         // Formulas see the file's columns and the formulas', not the steps'.
         let mut catalog = catalog_of(ws);
         catalog.register_table(&table, ws.formula_columns(id)?.into_iter().map(|c| (c.name, c.dtype)));
-        let sql = parvu_dsl::compile_formula(&source, &catalog, &FunctionRegistry::default(), &table)?;
+        let compiled = parvu_dsl::compile_formula(&source, &catalog, &FunctionRegistry::default(), &table)?;
+        // PREV / NEXT read the whole table in order for every page: on a
+        // big table that is slow and needs the table in memory.
+        if compiled.reads_neighbours && ws.table_rows(id)? > NEIGHBOUR_MAX_ROWS {
+            return Err(ApiError::new(
+                "expression",
+                "PREV and NEXT work on tables up to 2,000,000 rows: they read the whole table, in order, for every page.",
+            ));
+        }
         let source = source.trim().trim_start_matches('=').trim().to_string();
-        ws.set_formula(id, Formula { name, source, sql, after })?;
+        ws.set_formula(id, Formula { name, source, sql: compiled.sql, after, totals: compiled.totals })?;
         Ok(ws.summary(id)?)
     })
     .await
 }
+
+/// Largest table a formula with PREV / NEXT may run on.
+const NEIGHBOUR_MAX_ROWS: u64 = 2_000_000;
 
 /// Remove a formula column (undoable).
 #[tauri::command(rename_all = "snake_case")]
@@ -1067,5 +1078,34 @@ pub fn cancel_export(state: State<'_, AppState>, job: u64) {
     if let Some(j) = lock(&state.exports).get(&job) {
         j.cancelled.store(true, Ordering::Relaxed);
         j.interrupt.interrupt();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The expression language and the core agree on where totals go.
+    #[test]
+    fn total_markers_match() {
+        for i in [0, 1, 12] {
+            assert_eq!(parvu_dsl::total_marker(i), parvu_core::formula::total_marker(i));
+        }
+    }
+
+    /// A formula with a total, compiled and run end to end.
+    #[test]
+    fn share_of_total_runs() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.csv");
+        std::fs::write(&path, "qty\n1\n3\n").unwrap();
+        let mut ws = parvu_core::Workspace::new(100, None).unwrap();
+        let id = ws.open(&path).unwrap();
+        let mut catalog = parvu_dsl::Catalog::new();
+        catalog.register_table("t", ws.formula_columns(id).unwrap().into_iter().map(|c| (c.name, c.dtype)));
+        let c = parvu_dsl::compile_formula("= [qty] / SUM([qty])", &catalog, &parvu_dsl::FunctionRegistry::default(), "t").unwrap();
+        let f = parvu_core::formula::Formula { name: "share".into(), source: String::new(), sql: c.sql, after: None, totals: c.totals };
+        ws.set_formula(id, f).unwrap();
+        let page = ws.page(id, 1).unwrap();
+        let shares: Vec<_> = page.rows.iter().map(|r| r[1].clone().unwrap()).collect();
+        assert_eq!(shares, ["0.25", "0.75"]);
     }
 }

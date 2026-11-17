@@ -4907,6 +4907,48 @@
     "sql_name": "LEAST"
    },
    {
+    "name": "PREV",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "rows",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The value from the row before (or `rows` rows before), in the table's order; NULL on the first row.",
+    "example": "[total] - PREV([total])",
+    "sql_name": null
+   },
+   {
+    "name": "NEXT",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "rows",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The value from the row after (or `rows` rows after), in the table's order; NULL on the last row.",
+    "example": "NEXT([date]) - [date]",
+    "sql_name": null
+   },
+   {
     "name": "SPLIT_PART",
     "params": [
      {

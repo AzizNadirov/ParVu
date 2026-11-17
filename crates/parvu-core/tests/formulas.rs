@@ -17,7 +17,7 @@ fn open() -> (TempDir, Workspace, u64) {
 
 /// SQL as the expression language compiles it (`sales.qty`).
 fn f(name: &str, sql: &str, after: Option<&str>) -> Formula {
-    Formula { name: name.into(), source: sql.into(), sql: sql.into(), after: after.map(str::to_string) }
+    Formula { name: name.into(), source: sql.into(), sql: sql.into(), after: after.map(str::to_string), totals: Vec::new() }
 }
 
 fn col(ws: &Workspace, id: u64, name: &str) -> Vec<Option<String>> {
@@ -135,4 +135,55 @@ fn formulas_work_on_parquet_and_stay_lazy() {
     // Edits still work on a Parquet file with a formula.
     ws.edit_cell(id, 0, "qty", Some("50".into())).unwrap();
     assert_eq!(ws.page(id, 1).unwrap().rows[0][2].as_deref(), Some("100"));
+}
+
+/// `= [qty] / SUM([qty])`: the total is computed once per rebuild and
+/// follows cell edits.
+#[test]
+fn column_totals_are_constants_that_follow_edits() {
+    use parvu_core::formula::total_marker;
+    let (_d, mut ws, id) = open();
+    let share = Formula {
+        totals: vec!["SUM(sales.qty)".into()],
+        ..f("share", &format!("sales.qty / ({})", total_marker(0)), None)
+    };
+    ws.set_formula(id, share).unwrap();
+    assert_eq!(col(&ws, id, "share"), s(&["0.25", "0.625", "0.125"]));
+    // The view holds a constant, not a rescan per page.
+    let sql: String = ws
+        .connection()
+        .query_row("SELECT sql FROM duckdb_views() WHERE view_name = 'sales'", [], |r| r.get(0))
+        .unwrap();
+    assert!(sql.contains("CAST('8' AS HUGEINT)") || sql.contains("'8'"), "{sql}");
+    // Edit qty 2 → 12: the total becomes 18.
+    ws.edit_cell(id, 0, "qty", Some("12".into())).unwrap();
+    let got = col(&ws, id, "share");
+    assert_eq!(got[2].as_deref(), Some(&*format!("{}", 1.0 / 18.0)));
+    // Undo goes back to the old total.
+    ws.undo(id).unwrap();
+    assert_eq!(col(&ws, id, "share")[2].as_deref(), Some("0.125"));
+}
+
+/// A total of an empty or all-NULL column is NULL, not an error.
+#[test]
+fn null_totals() {
+    use parvu_core::formula::total_marker;
+    let (_d, mut ws, id) = open();
+    let g = Formula {
+        totals: vec!["MAX(CASE WHEN sales.qty > 100 THEN sales.qty END)".into()],
+        ..f("big", &format!("COALESCE(({}), -1)", total_marker(0)), None)
+    };
+    ws.set_formula(id, g).unwrap();
+    assert_eq!(col(&ws, id, "big"), s(&["-1", "-1", "-1"]));
+}
+
+/// PREV keeps the file's row order under a sort step.
+#[test]
+fn previous_row_in_file_order() {
+    let (_d, mut ws, id) = open();
+    ws.set_formula(id, f("prev_qty", "LAG(sales.qty, 1) OVER ()", None)).unwrap();
+    assert_eq!(col(&ws, id, "prev_qty"), vec![None, Some("2".into()), Some("5".into())]);
+    ws.apply(id, &Operation::Sort { column: "qty".into(), ascending: true }).unwrap();
+    // Sorted by qty: C(1, prev B=5), A(2, none), B(5, prev A=2).
+    assert_eq!(col(&ws, id, "prev_qty"), vec![Some("5".into()), None, Some("2".into())]);
 }
