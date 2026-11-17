@@ -6,6 +6,7 @@
 pub mod chart;
 pub mod clean;
 pub mod colfn;
+pub mod custom;
 pub mod edits;
 pub mod engine;
 pub mod error;

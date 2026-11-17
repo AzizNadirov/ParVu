@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "kind": "operation",
+  "name": "outliers_iqr",
+  "title": "Outliers (IQR rule)",
+  "description": "Opens the rows whose value lies below Q1 − k·IQR or above Q3 + k·IQR, where IQR = Q3 − Q1 (Tukey's fences; k = 1.5 is the usual choice).",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "t", "kind": "table" },
+    { "name": "x", "kind": "column", "type": ["number"], "description": "The numbers to check" },
+    { "name": "k", "kind": "value", "dtype": "DOUBLE", "optional": true, "default": "1.5", "min": 0, "description": "How far outside the quartiles" }
+  ],
+  "result": { "kind": "table" },
+  "placement": "new_table",
+  "body": {
+    "language": "sql",
+    "source": "WITH q AS (\n  SELECT quantile_cont(x, 0.25) AS q1, quantile_cont(x, 0.75) AS q3\n  FROM (SELECT x, 0 AS one FROM t) AS v\n  GROUP BY one\n)\nSELECT t.* FROM t CROSS JOIN q\nWHERE t.x < q.q1 - k * (q.q3 - q.q1)\n   OR t.x > q.q3 + k * (q.q3 - q.q1)"
+  },
+  "examples": [
+    {
+      "name": "one high value",
+      "input": {
+        "columns": [{ "name": "id", "dtype": "BIGINT" }, { "name": "amount", "dtype": "DOUBLE" }],
+        "rows": [["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "100"], ["6", null]]
+      },
+      "args": { "x": "amount", "k": "1.5" },
+      "expected": { "columns": [{ "name": "id" }, { "name": "amount" }], "rows": [["5", "100"]] }
+    },
+    {
+      "name": "none outside",
+      "input": {
+        "columns": [{ "name": "amount", "dtype": "BIGINT" }],
+        "rows": [["1"], ["2"], ["3"]]
+      },
+      "args": { "x": "amount" },
+      "expected": { "columns": [{ "name": "amount" }], "rows": [] }
+    }
+  ]
+}

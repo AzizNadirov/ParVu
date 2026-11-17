@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "kind": "function",
+  "name": "title_case",
+  "title": "Title Case",
+  "description": "Capitalises the first letter of every word and lowercases the rest: \"aNNA de LIMA\" becomes \"Anna De Lima\".",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "text", "kind": "column", "type": ["text"], "description": "The text to change" }
+  ],
+  "result": { "kind": "column", "type": ["text"] },
+  "body": {
+    "language": "sql",
+    "source": "array_to_string(\n  list_transform(string_split(lower(text), ' '), lambda w: upper(left(w, 1)) || substr(w, 2)),\n  ' ')"
+  },
+  "examples": [
+    {
+      "name": "typical",
+      "input": {
+        "columns": [{ "name": "text", "dtype": "VARCHAR" }],
+        "rows": [["aNNA de LIMA"], ["élan vital"], ["x"], [""], [null]]
+      },
+      "expected": {
+        "columns": [{ "name": "result" }],
+        "rows": [["Anna De Lima"], ["Élan Vital"], ["X"], [""], [null]]
+      }
+    }
+  ]
+}

@@ -31,6 +31,13 @@ import type {
   ReplaceRequest,
   SearchHit,
   SearchOptions,
+  CustomArg,
+  CustomDefinition,
+  CustomEntry,
+  CustomExample,
+  CustomParam,
+  ExampleTable,
+  FnOutput,
 } from "../lib/api";
 import type { Translate } from "../lib/i18n";
 
@@ -936,4 +943,370 @@ export function csvOptionsFrom(f: OpenForm): CsvOptions | null {
 export function delimiterLabel(d: string, t: Translate): string {
   const named: Record<string, string> = { ",": "comma", ";": "semicolon", "\t": "tab", "|": "pipe", " ": "space" };
   return named[d] ? t(`open_options.delim.${named[d]}`) : d;
+}
+
+// ---------------------------------------------------------------- custom tools
+
+/** The type sets a signature may use and their families (mirrors the
+ * backend's `custom::signature::TYPE_SETS`). */
+export const TYPE_SET_FAMILIES: Record<string, TypeFamily[]> = {
+  any: [
+    "integer", "decimal", "float", "text", "boolean", "date", "timestamp", "timestamp_tz", "time", "interval",
+    "json", "list", "struct", "map", "binary", "other",
+  ],
+  number: ["integer", "decimal", "float"],
+  integer: ["integer"],
+  decimal: ["decimal"],
+  float: ["float"],
+  text: ["text"],
+  boolean: ["boolean"],
+  date: ["date"],
+  datetime: ["timestamp", "timestamp_tz"],
+  date_or_datetime: ["date", "timestamp", "timestamp_tz"],
+  time: ["time"],
+  interval: ["interval"],
+  json: ["json"],
+  list: ["list"],
+  struct: ["struct"],
+};
+
+/** Families of a list of type set names; empty means any. */
+export function familiesOf(types?: string[]): TypeFamily[] {
+  if (!types?.length) return TYPE_SET_FAMILIES.any;
+  const out: TypeFamily[] = [];
+  for (const n of types) for (const f of TYPE_SET_FAMILIES[n] ?? []) if (!out.includes(f)) out.push(f);
+  return out;
+}
+
+/** The columns a column parameter accepts. */
+export function fittingColumns(param: CustomParam, columns: ColumnMeta[]): ColumnMeta[] {
+  const fams = familiesOf(param.type);
+  return columns.filter((c) => fams.includes(c.family ?? "other"));
+}
+
+const typeText = (types?: string[]) => (types?.length ? types.join(" | ") : "any");
+
+/** `clean_phone(phone: column<text>, prefix: value<VARCHAR> = "+") → column<text>` */
+export function signatureText(def: CustomDefinition): string {
+  const params = def.params.map((p) => {
+    if (p.kind === "table") {
+      const cols = (p.columns ?? []).map((c) => `${c.name}: ${typeText(c.type)}`);
+      return cols.length ? `${p.name}: table{${cols.join(", ")}}` : `${p.name}: table`;
+    }
+    const ty = p.kind === "column" ? `column<${typeText(p.type)}>` : `value<${p.dtype ?? "VARCHAR"}>`;
+    const dflt = p.optional ? (p.default !== undefined && p.default !== null ? ` = ${JSON.stringify(p.default)}` : " = empty") : "";
+    return `${p.name}: ${ty}${dflt}`;
+  });
+  const r = def.result;
+  const result =
+    r.kind === "table"
+      ? "table"
+      : `${r.kind}<${r.same_as ? `same as ${r.same_as}` : typeText(r.type)}>`;
+  return `${def.name}(${params.join(", ")}) → ${result}`;
+}
+
+/** Usable definitions (validated), and the others to show disabled. */
+export function customDefinitions(entries: CustomEntry[]): CustomDefinition[] {
+  return entries.flatMap((e) => (e.definition ? [e.definition] : []));
+}
+
+export const isUsable = (d: CustomDefinition) => d.status === "ok" && !!d.compiled;
+
+/** The functions offered for a column: those whose first column parameter
+ * accepts its family. */
+export function functionsForColumn(defs: CustomDefinition[], family: TypeFamily | undefined): CustomDefinition[] {
+  return defs.filter((d) => {
+    if (d.kind !== "function") return false;
+    const first = d.params.find((p) => p.kind === "column");
+    return !!first && (!family || familiesOf(first.type).includes(family));
+  });
+}
+
+/** Operations by where they put their result. */
+export function operationsFor(defs: CustomDefinition[], newTable: boolean): CustomDefinition[] {
+  return defs.filter((d) => d.kind === "operation" && isNewTable(d) === newTable);
+}
+
+export function isNewTable(d: CustomDefinition): boolean {
+  return d.params.filter((p) => p.kind === "table").length > 1 || d.placement === "new_table";
+}
+
+/** What the apply dialog collects. Column and table arguments are names;
+ * values are text ("" = not given). */
+export interface CustomForm {
+  args: Record<string, string>;
+  toNew: boolean;
+  newName: string;
+}
+
+/** Defaults: the selected column for the first column parameter that fits
+ * it, the first fitting column for the others, value defaults. */
+export function initialCustomForm(def: CustomDefinition, columns: ColumnMeta[], selected?: string, others: { name: string; columns: ColumnMeta[] }[] = []): CustomForm {
+  const args: Record<string, string> = {};
+  const tables = def.params.filter((p) => p.kind === "table");
+  const used = new Set<string>();
+  tables.slice(1).forEach((t, i) => (args[t.name] = others[i]?.name ?? others[0]?.name ?? ""));
+  for (const p of def.params) {
+    if (p.kind === "column") {
+      const cols = columnsFor(def, p, columns, args, others);
+      const fits = fittingColumns(p, cols);
+      const pick = fits.find((c) => c.name === selected && !used.has(c.name)) ?? fits.find((c) => !used.has(c.name)) ?? fits[0];
+      args[p.name] = pick?.name ?? "";
+      if (pick) used.add(pick.name);
+    } else if (p.kind === "value") {
+      args[p.name] = p.default ?? "";
+    }
+  }
+  return { args, toNew: true, newName: "" };
+}
+
+/** The columns a column parameter picks from: this table's, or those of
+ * the other table it belongs to. */
+export function columnsFor(
+  def: CustomDefinition,
+  p: CustomParam,
+  columns: ColumnMeta[],
+  args: Record<string, string>,
+  others: { name: string; columns: ColumnMeta[] }[],
+): ColumnMeta[] {
+  if (def.kind !== "operation") return columns;
+  const tables = def.params.filter((x) => x.kind === "table");
+  const of = p.of ? tables.find((t) => t.name === p.of) : tables[0];
+  if (!of || of === tables[0]) return columns;
+  return others.find((o) => o.name === args[of.name])?.columns ?? [];
+}
+
+/** Problems with the form, as `[parameter, translation key]`. */
+export function customArgProblems(
+  def: CustomDefinition,
+  columns: ColumnMeta[],
+  form: CustomForm,
+  others: { name: string; columns: ColumnMeta[] }[] = [],
+): [string, string][] {
+  const out: [string, string][] = [];
+  const tables = def.params.filter((p) => p.kind === "table");
+  for (const p of def.params) {
+    const v = form.args[p.name] ?? "";
+    if (p.kind === "table") {
+      if (p === tables[0]) continue;
+      const t = others.find((o) => o.name === v);
+      if (!t) out.push([p.name, "custom.apply.choose_table"]);
+      else if ((p.columns ?? []).some((rc) => !t.columns.some((c) => c.name === rc.name))) out.push([p.name, "custom.apply.missing_columns"]);
+    } else if (p.kind === "column") {
+      const meta = columnsFor(def, p, columns, form.args, others).find((c) => c.name === v);
+      if (!v || !meta) out.push([p.name, "custom.apply.choose_column"]);
+      else if (!familiesOf(p.type).includes(meta.family ?? "other")) out.push([p.name, "custom.apply.wrong_type"]);
+    } else {
+      if (!v.trim()) {
+        if (!p.optional) out.push([p.name, "custom.apply.enter_value"]);
+        continue;
+      }
+      if (p.choices?.length && !p.choices.includes(v)) out.push([p.name, "custom.apply.not_a_choice"]);
+      const fam = familyOfType(p.dtype ?? "VARCHAR");
+      if (fam === "integer" || fam === "decimal" || fam === "float") {
+        const n = Number(v);
+        if (!Number.isFinite(n) || (fam === "integer" && !Number.isInteger(n))) out.push([p.name, "custom.apply.not_a_number"]);
+        else if ((p.min !== undefined && p.min !== null && n < p.min) || (p.max !== undefined && p.max !== null && n > p.max))
+          out.push([p.name, "custom.apply.out_of_range"]);
+      }
+    }
+  }
+  if (def.kind === "function" && def.result.kind === "column" && form.toNew && form.newName.trim() && columns.some((c) => c.name === form.newName.trim()))
+    out.push(["", "custom.apply.name_taken"]);
+  return out;
+}
+
+/** The family of a DuckDB type name (a small version of the backend's `TypeFamily::of`). */
+export function familyOfType(dtype: string): TypeFamily {
+  const t = dtype.trim().toUpperCase();
+  if (t.endsWith("]")) return "list";
+  const base = t.split("(")[0].trim();
+  if (["TINYINT", "SMALLINT", "INTEGER", "INT", "BIGINT", "HUGEINT", "UBIGINT", "UINTEGER"].includes(base)) return "integer";
+  if (base === "DECIMAL" || base === "NUMERIC") return "decimal";
+  if (["FLOAT", "DOUBLE", "REAL"].includes(base)) return "float";
+  if (["VARCHAR", "TEXT", "STRING"].includes(base)) return "text";
+  if (base === "BOOLEAN" || base === "BOOL") return "boolean";
+  if (base === "DATE") return "date";
+  if (base.startsWith("TIMESTAMP WITH") || base === "TIMESTAMPTZ") return "timestamp_tz";
+  if (base.startsWith("TIMESTAMP") || base === "DATETIME") return "timestamp";
+  if (base === "TIME") return "time";
+  if (base === "INTERVAL") return "interval";
+  if (base === "JSON") return "json";
+  if (base === "STRUCT") return "struct";
+  return "other";
+}
+
+/** The arguments to send: columns, values given (empty optional values
+ * are left out so the default applies), other tables. */
+export function customArgs(def: CustomDefinition, form: CustomForm): Record<string, CustomArg> {
+  const out: Record<string, CustomArg> = {};
+  const tables = def.params.filter((p) => p.kind === "table");
+  for (const p of def.params) {
+    const v = form.args[p.name] ?? "";
+    if (p.kind === "column") out[p.name] = { column: v };
+    else if (p.kind === "table") {
+      if (p !== tables[0]) out[p.name] = { table: v };
+    } else if (v.trim() !== "" || !p.optional) out[p.name] = { value: v };
+  }
+  return out;
+}
+
+/** The operation the apply dialog returns, or null while the form has a
+ * problem. Summary functions are not operations (their value is shown). */
+export function buildCustomOp(
+  def: CustomDefinition,
+  form: CustomForm,
+  columns: ColumnMeta[],
+  others: { name: string; columns: ColumnMeta[] }[] = [],
+  filter?: RowFilter,
+): Operation | null {
+  if (customArgProblems(def, columns, form, others).length) return null;
+  const args = customArgs(def, form);
+  if (def.kind === "operation") return { op: "custom_operation", name: def.name, args, new_table: isNewTable(def) };
+  if (def.result.kind !== "column") return null;
+  const output: FnOutput = form.toNew ? { to: "new", name: form.newName.trim() } : { to: "in_place" };
+  return { op: "custom_function", name: def.name, args, output, ...(filter ? { where: filter } : {}) };
+}
+
+/** A DuckDB type for an example column of a parameter's type. */
+export function exampleDtype(types?: string[]): string {
+  const f = familiesOf(types)[0];
+  const map: Partial<Record<TypeFamily, string>> = {
+    integer: "BIGINT", decimal: "DECIMAL(18,3)", float: "DOUBLE", text: "VARCHAR", boolean: "BOOLEAN", date: "DATE",
+    timestamp: "TIMESTAMP", timestamp_tz: "TIMESTAMPTZ", time: "TIME", interval: "INTERVAL", json: "JSON",
+  };
+  return types?.length && !types.includes("any") ? (map[f] ?? "VARCHAR") : "VARCHAR";
+}
+
+/** Types offered for example columns. */
+export const EXAMPLE_TYPES = ["VARCHAR", "BIGINT", "DOUBLE", "DECIMAL(18,3)", "BOOLEAN", "DATE", "TIMESTAMP", "TIME", "JSON"];
+
+/** A function example's input has one column per column parameter, named
+ * after it: keep it in step with the signature (types and rows kept). */
+export function syncFunctionExample(def: CustomDefinition, ex: CustomExample): CustomExample {
+  if (def.kind !== "function") return ex;
+  const params = def.params.filter((p) => p.kind === "column");
+  const old = ex.input.columns;
+  const columns = params.map((p) => old.find((c) => c.name === p.name) ?? { name: p.name, dtype: exampleDtype(p.type) });
+  const rows = ex.input.rows.map((r) => columns.map((c) => {
+    const i = old.findIndex((o) => o.name === c.name);
+    return i >= 0 ? (r[i] ?? null) : null;
+  }));
+  const summary = def.result.kind === "value";
+  let expected = ex.expected.rows;
+  if (summary) expected = [expected[0] ?? [null]];
+  else expected = rows.map((_, i) => expected[i] ?? [null]);
+  return { ...ex, input: { columns, rows }, expected: { columns: [{ name: "result" }], rows: expected } };
+}
+
+/** A new, empty example for `def`. */
+export function newExample(def: CustomDefinition, n: number): CustomExample {
+  if (def.kind === "function") {
+    return syncFunctionExample(def, { name: `example ${n}`, input: { columns: [], rows: [[]] }, expected: { columns: [{ name: "result" }], rows: [[null]] }, args: {} });
+  }
+  const cols = def.params.filter((p) => p.kind === "column").map((p) => ({ name: p.name, dtype: exampleDtype(p.type) }));
+  const input: ExampleTable = { columns: cols.length ? cols : [{ name: "a", dtype: "VARCHAR" }], rows: [] };
+  input.rows = [input.columns.map(() => null)];
+  const args: Record<string, Cell> = {};
+  for (const p of def.params) if (p.kind === "column") args[p.name] = p.name;
+  return { name: `example ${n}`, input, args, expected: { columns: input.columns.map((c) => ({ name: c.name })), rows: [] } };
+}
+
+/** A definition to start from. */
+export function newDefinition(kind: "function" | "operation"): CustomDefinition {
+  const def: CustomDefinition =
+    kind === "function"
+      ? {
+          schema: 1, kind, name: "", status: "draft",
+          params: [{ name: "x", kind: "column", type: ["number"] }],
+          result: { kind: "column", type: ["number"] },
+          body: { language: "sql", source: "x * 2" },
+          flags: { uses_current_time: false },
+          examples: [],
+        }
+      : {
+          schema: 1, kind, name: "", status: "draft",
+          params: [{ name: "t", kind: "table" }, { name: "x", kind: "column", type: ["number"] }],
+          result: { kind: "table" },
+          placement: "step",
+          body: { language: "sql", source: "SELECT * FROM t\nWHERE x > 0" },
+          flags: { uses_current_time: false },
+          examples: [],
+        };
+  def.examples = [newExample(def, 1)];
+  return def;
+}
+
+/** A cell typed in an example grid: empty is "no value"; `""` is empty text. */
+export function cellFromInput(text: string): Cell {
+  if (text === "") return null;
+  if (text === '""') return "";
+  return text;
+}
+
+export function cellToInput(c: Cell): string {
+  if (c === null) return "";
+  if (c === "") return '""';
+  return c;
+}
+
+/** The expected table filled from what the body gave. */
+export function expectedFromActual(def: CustomDefinition, actual: ExampleTable): ExampleTable {
+  if (def.kind === "function") return { columns: [{ name: "result" }], rows: actual.rows.map((r) => [r[0] ?? null]) };
+  return { columns: actual.columns.map((c) => ({ name: c.name })), rows: actual.rows.map((r) => [...r]) };
+}
+
+/** A copy with a free name (`name_copy`, `name_copy_2`…). */
+export function duplicateDefinition(def: CustomDefinition, taken: string[]): CustomDefinition {
+  let name = `${def.name}_copy`.slice(0, 40);
+  for (let i = 2; taken.includes(name); i++) name = `${def.name}_copy_${i}`.slice(0, 40);
+  const copy: CustomDefinition = JSON.parse(JSON.stringify(def));
+  return { ...copy, name, sample: false, author: "", status: "draft", compiled: undefined, report: undefined, created: undefined, modified: undefined };
+}
+
+/** What the editor sends: drops the report and compiled form, trims names. */
+export function definitionToSave(def: CustomDefinition): CustomDefinition {
+  const d: CustomDefinition = JSON.parse(JSON.stringify(def));
+  d.name = d.name.trim();
+  d.compiled = undefined;
+  d.report = undefined;
+  for (const p of d.params) {
+    p.name = p.name.trim();
+    if (p.kind !== "value") {
+      delete p.dtype;
+      delete p.default;
+      delete p.optional;
+    }
+    if (p.kind !== "column") delete p.type;
+    if (p.kind === "value" && !p.optional) delete p.default;
+  }
+  if (d.kind === "function") delete d.placement;
+  return d;
+}
+
+/** Menu entries collapse past this many. */
+export const CUSTOM_MENU_MAX = 12;
+
+/** "amount: number, region" → required columns. */
+export function parseRequiredColumns(text: string): { name: string; type?: string[] }[] {
+  return text
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const [name, type] = s.split(":").map((x) => x.trim());
+      return type ? { name, type: [type] } : { name };
+    });
+}
+
+export function formatRequiredColumns(cols?: { name: string; type?: string[] }[]): string {
+  return (cols ?? []).map((c) => (c.type?.length ? `${c.name}: ${c.type.join(" | ")}` : c.name)).join(", ");
+}
+
+/** A check message for people: its key translated, with a translated
+ * reason where the argument is itself a key. */
+export function customCheckText(t: Translate, m: { key: string; args: Record<string, string> }): string {
+  const args: Record<string, string> = { ...m.args };
+  if (args.why) args.why = t(args.why);
+  return t(m.key, args);
 }

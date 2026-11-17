@@ -314,6 +314,31 @@ pub enum Operation {
     /// Running totals, shifts, differences, ranks and rolling values, optionally
     /// per group (pandas `cumsum`, `shift`, `diff`, `rank`, `rolling`).
     Window(WindowSpec),
+
+    // Custom tools (crate::custom)
+    /// A custom row function the user defined (Custom tools), by name, with
+    /// its arguments by parameter name; written in place of its first
+    /// column argument or into a new column right after it.
+    CustomFunction {
+        name: String,
+        #[serde(default)]
+        args: BTreeMap<String, crate::custom::CustomArg>,
+        #[serde(default)]
+        output: Output,
+        /// Only change these rows.
+        #[serde(default, rename = "where", skip_serializing_if = "Option::is_none")]
+        filter: Option<RowFilter>,
+    },
+    /// A custom operation the user defined (Custom tools), by name, with its
+    /// arguments by parameter name. `new_table` must match the definition:
+    /// true when it opens its result as a new table.
+    CustomOperation {
+        name: String,
+        #[serde(default)]
+        args: BTreeMap<String, crate::custom::CustomArg>,
+        #[serde(default)]
+        new_table: bool,
+    },
 }
 
 /// Row-number column added internally to keep or use table order.
@@ -373,6 +398,13 @@ pub struct OpContext<'a> {
     /// Runs a read-only query and returns its rows as text, for operations
     /// that depend on the data (pivot values, bin edges, split widths).
     pub query: &'a dyn Fn(&str) -> Result<Vec<Vec<Cell>>>,
+    /// A custom function or operation by name (the user's library).
+    pub custom: &'a dyn Fn(&str) -> Option<std::sync::Arc<crate::custom::Definition>>,
+}
+
+/// An [`OpContext::custom`] that knows no custom tools.
+pub fn no_custom(_: &str) -> Option<std::sync::Arc<crate::custom::Definition>> {
+    None
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -457,6 +489,7 @@ impl Operation {
                 | Operation::Describe
                 | Operation::Join { .. }
                 | Operation::Append { .. }
+                | Operation::CustomOperation { new_table: true, .. }
         )
     }
 
@@ -473,6 +506,7 @@ impl Operation {
             Operation::Describe => "described".into(),
             Operation::Join { right, .. } => format!("join_{right}"),
             Operation::Append { .. } => "append".into(),
+            Operation::CustomOperation { name, .. } => name.clone(),
             _ => "result".into(),
         }
     }
@@ -1007,6 +1041,12 @@ impl Operation {
                 crate::clean::bin(ctx, column, *method, *bins, edges, labels, output)?
             }
             Operation::Window(spec) => crate::window::window(ctx, spec)?,
+            Operation::CustomFunction { name, args, output, filter } => {
+                crate::custom::fill::build_function(ctx, name, args, output, filter.as_ref())?
+            }
+            Operation::CustomOperation { name, args, new_table } => {
+                crate::custom::fill::build_operation(ctx, name, args, *new_table)?
+            }
         };
         Ok(BuiltOp { sql, label })
     }
@@ -1033,7 +1073,7 @@ mod tests {
     fn build(op: Operation) -> Result<BuiltOp> {
         let c = cols();
         let other = |n: &str| if n == "b" { Some("SELECT * FROM \"b\"".to_string()) } else { None };
-        op.build(&OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other, query: &no_query })
+        op.build(&OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other, query: &no_query, custom: &no_custom })
     }
 
     #[test]
@@ -1056,7 +1096,7 @@ mod tests {
     fn remove_last_column_fails() {
         let c = vec![ColumnMeta::new("only", "BIGINT")];
         let other = |_: &str| None;
-        let ctx = OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other, query: &no_query };
+        let ctx = OpContext { table: "a", current_query: "Q", columns: &c, other_query: &other, query: &no_query, custom: &no_custom };
         assert!(Operation::Remove { column: "only".into() }.build(&ctx).is_err());
         assert_eq!(build(Operation::Remove { column: "id".into() }).unwrap().sql, "SELECT \"name\" FROM (Q)");
     }
@@ -1117,7 +1157,7 @@ mod tests {
     fn duplicate_picks_free_name() {
         let c = vec![ColumnMeta::new("a", "BIGINT"), ColumnMeta::new("a_copy", "BIGINT")];
         let other = |_: &str| None;
-        let ctx = OpContext { table: "t", current_query: "Q", columns: &c, other_query: &other, query: &no_query };
+        let ctx = OpContext { table: "t", current_query: "Q", columns: &c, other_query: &other, query: &no_query, custom: &no_custom };
         let b = Operation::Duplicate { column: "a".into() }.build(&ctx).unwrap();
         assert_eq!(b.sql, "SELECT *, \"a\" AS \"a_copy2\" FROM (Q)");
     }

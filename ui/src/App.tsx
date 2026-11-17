@@ -33,6 +33,7 @@ import {
   type SourceColumn,
   type SheetsView,
   type TabSummary,
+  type CustomDefinition,
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
@@ -107,7 +108,11 @@ import {
   openValueCounts,
   openWindow,
   preloadDialogs,
+  openCustomTools,
+  openCustomEditor,
+  openCustomApply,
 } from "./dialogs/lazy";
+import { CUSTOM_MENU_MAX, customDefinitions, functionsForColumn, isUsable, newDefinition, operationsFor } from "./dialogs/logic";
 import { Icon } from "./components/Icon";
 
 /** Per-tab UI state that lives only in the window. */
@@ -163,6 +168,26 @@ export function App({ boot }: { boot: Bootstrap }) {
   useEffect(() => setErrorTranslator(t), [t]);
   const [themeKey, setThemeKey] = useState(boot.theme.name);
   const [recents, setRecents] = useState(boot.recents);
+  // Custom functions and operations (the manager, the menus).
+  const [customDefs, setCustomDefs] = useState<CustomDefinition[]>([]);
+  const brokenNoticed = useRef(false);
+  const reloadCustom = useCallback(() => {
+    api
+      .customList()
+      .then((l) => {
+        const defs = customDefinitions(l.entries);
+        setCustomDefs(defs);
+        // After an update some may need attention: say so once.
+        const broken = defs.filter((d) => d.status === "broken").length;
+        if (broken && !brokenNoticed.current) {
+          brokenNoticed.current = true;
+          setStatusRef.current?.(broken);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+  const setStatusRef = useRef<((broken: number) => void) | null>(null);
+  useEffect(() => reloadCustom(), [reloadCustom]);
   /** AI clients connected through `parvu mcp --attach`. */
   const [aiClients, setAiClients] = useState(0);
   // Built-in AI assistant: panel, providers, one chat per tab (key 0: no tab).
@@ -271,6 +296,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       }, ms);
     }
   }, []);
+  setStatusRef.current = (broken: number) => status(t("custom.status.broken", { count: broken }), 10000);
 
   const showDialog = useCallback(<T,>(render: (close: Closer<T>) => ReactNode, _dismiss: T): Promise<T> => {
     return new Promise<T>((resolve) => {
@@ -1089,6 +1115,16 @@ export function App({ boot }: { boot: Bootstrap }) {
         ],
       },
       {
+        label: t("custom.menu.functions"),
+        icon: "custom",
+        submenu: [
+          ...customEntries(functionsForColumn(customDefs, page?.columns.find((c) => c.name === column)?.family), column),
+          ...(functionsForColumn(customDefs, page?.columns.find((c) => c.name === column)?.family).length ? [{ type: "separator" as const }] : []),
+          { label: t("custom.menu.new_function"), icon: "plus", onSelect: () => void newCustom("function") },
+          { label: t("custom.menu.manage"), icon: "custom", onSelect: manageCustom },
+        ],
+      },
+      {
         label: t("menu.group.clean"),
         icon: "clean",
         submenu: [
@@ -1411,6 +1447,50 @@ export function App({ boot }: { boot: Bootstrap }) {
       const st = tabUi.current.get(tab.id);
       if (s && st && op.op === "sort_by") st.sort = null;
     });
+
+  /** Apply a custom function or operation from a menu. A summary
+   * function's dialog shows its value; the others return an operation. */
+  const runCustom = async (def: CustomDefinition, selected?: string) =>
+    withTab(async (tab) => {
+      if (def.kind === "operation" && operationsFor([def], true).length && !(await confirmLargeDataset())) return;
+      const cat = def.params.some((p) => p.kind === "table") ? await api.catalog() : [];
+      const others = cat.filter(([n]) => n !== tab.name).map(([name, columns]) => ({ name, columns }));
+      const op = await openCustomApply(ui, {
+        tabId: tab.id,
+        table: tab.name,
+        def,
+        columns: page?.columns ?? [],
+        selected,
+        others,
+        suggest: suggestValues,
+      });
+      if (op) await applyOp(op);
+    });
+
+  const newCustom = async (kind: "function" | "operation") => {
+    try {
+      const l = await api.customList();
+      if (await openCustomEditor(ui, { definition: newDefinition(kind), editing: null, typeSets: l.type_sets, valueTypes: l.value_types }))
+        reloadCustom();
+    } catch (e) {
+      await showError(t("error.operation_failed"), e);
+    }
+  };
+
+  const manageCustom = () => void openCustomTools(ui).then(reloadCustom);
+
+  /** Menu entries for custom tools: usable ones run, drafts and broken
+   * ones are shown disabled; past the limit, "More…" opens the manager. */
+  const customEntries = (defs: CustomDefinition[], selected?: string): MenuEntry[] => {
+    const items: MenuEntry[] = defs.slice(0, CUSTOM_MENU_MAX).map((d) => ({
+      label: isUsable(d) ? d.title || d.name : t(d.status === "draft" ? "custom.menu.draft" : "custom.menu.broken", { name: d.title || d.name }),
+      icon: "custom" as const,
+      disabled: !isUsable(d) || !activeTab,
+      onSelect: () => void runCustom(d, selected),
+    }));
+    if (defs.length > CUSTOM_MENU_MAX) items.push({ label: t("custom.menu.more"), onSelect: manageCustom });
+    return items;
+  };
 
   const runTranspose = async () =>
     withTab(async (tab) => {
@@ -1872,6 +1952,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.operations.drop_duplicates"), icon: "dropDuplicates", disabled: !activeTab, onSelect: () => void runDropDuplicates() },
         { label: t("menu.operations.mark_duplicates"), icon: "markDuplicates", disabled: !activeTab, onSelect: () => void runDropDuplicates(undefined, true) },
         { label: t("menu.operations.drop_null"), icon: "dropNull", disabled: !activeTab, onSelect: () => void runDropNull() },
+        ...(operationsFor(customDefs, false).length
+          ? [{ type: "separator" as const }, ...customEntries(operationsFor(customDefs, false))]
+          : []),
       ],
     },
     {
@@ -1913,6 +1996,12 @@ export function App({ boot }: { boot: Bootstrap }) {
         { type: "separator" },
         { label: t("menu.operations.join"), icon: "join", disabled: !activeTab, onSelect: () => void runJoin() },
         { label: t("menu.operations.append"), icon: "append", disabled: !activeTab, onSelect: () => void runAppend() },
+        ...(operationsFor(customDefs, true).length
+          ? [{ type: "separator" as const }, ...customEntries(operationsFor(customDefs, true))]
+          : []),
+        { type: "separator" },
+        { label: t("custom.menu.new_operation"), icon: "plus", onSelect: () => void newCustom("operation") },
+        { label: t("custom.menu.manage"), icon: "custom", onSelect: manageCustom },
       ],
     },
     {
@@ -2020,6 +2109,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         ),
       ),
       listen<number>("mcp-clients", (e) => setAiClients(e.payload)),
+      // Custom tools changed (any window), or some need attention after an update.
+      listen("custom-changed", () => reloadCustom()),
+
       // The memory guard stopped running queries (memguard.rs).
       listen<number>("memory-guard", (e) => status(t("memory.guard_stopped", { mb: e.payload }), 10000)),
       getCurrentWebview().onDragDropEvent(async (e) => {

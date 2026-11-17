@@ -47,3 +47,6 @@ export { openAiProviders } from "./AiProvidersDialog";
 export { openMcpProposal } from "./McpProposalDialog";
 export { SearchPanel } from "./SearchPanel";
 export type { SearchPanelProps } from "./SearchPanel";
+export { openCustomTools, importCustomFlow, exportCustomFlow } from "./CustomToolsDialog";
+export { openCustomEditor } from "./CustomEditorDialog";
+export { openCustomApply } from "./CustomApplyDialog";

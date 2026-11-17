@@ -323,6 +323,14 @@ impl ReadSession {
             Operation::AddColumn { expression, .. } | Operation::Replace { expression, .. } => expression,
             Operation::Join { right, .. } => return self.view(right).map(|_| ()),
             Operation::Append { tables, .. } => return tables.iter().try_for_each(|t| self.view(t).map(|_| ())),
+            // A custom tool's SQL was guarded when it was saved; its calls
+            // carry names only. Other tables must be open tabs.
+            Operation::CustomFunction { args, .. } | Operation::CustomOperation { args, .. } => {
+                return args.values().try_for_each(|a| match a {
+                    crate::custom::CustomArg::Table(t) => self.view(t).map(|_| ()),
+                    _ => Ok(()),
+                });
+            }
             _ => return Ok(()),
         };
         // `"table"."col"` references must work, as in Workspace::apply.

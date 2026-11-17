@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "kind": "operation",
+  "name": "top_n_per_group",
+  "title": "Top N per group",
+  "description": "Keeps the n rows with the highest score in each group. Rows with an empty score come last; equal scores are split arbitrarily.",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "t", "kind": "table" },
+    { "name": "grp", "kind": "column", "type": ["any"], "description": "The groups" },
+    { "name": "score", "kind": "column", "type": ["number"], "description": "Higher is better" },
+    { "name": "n", "kind": "value", "dtype": "BIGINT", "optional": true, "default": "3", "min": 1, "description": "Rows to keep per group" }
+  ],
+  "result": { "kind": "table" },
+  "placement": "step",
+  "body": {
+    "language": "sql",
+    "source": "SELECT * FROM t\nQUALIFY row_number() OVER (PARTITION BY grp ORDER BY score DESC NULLS LAST) <= n"
+  },
+  "examples": [
+    {
+      "name": "two per region",
+      "input": {
+        "columns": [{ "name": "region", "dtype": "VARCHAR" }, { "name": "revenue", "dtype": "BIGINT" }],
+        "rows": [["east", "10"], ["east", "30"], ["east", "20"], ["west", "5"], ["west", null]]
+      },
+      "args": { "grp": "region", "score": "revenue", "n": "2" },
+      "expected": {
+        "columns": [{ "name": "region" }, { "name": "revenue" }],
+        "rows": [["east", "30"], ["east", "20"], ["west", "5"], ["west", null]]
+      }
+    }
+  ]
+}

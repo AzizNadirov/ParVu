@@ -67,3 +67,6 @@ export const openAiProviders = deferred("openAiProviders");
 export const openMcpProposal = deferred("openMcpProposal");
 
 export const SearchPanel = lazy(() => load().then((m) => ({ default: m.SearchPanel })));
+export const openCustomTools = deferred("openCustomTools");
+export const openCustomEditor = deferred("openCustomEditor");
+export const openCustomApply = deferred("openCustomApply");

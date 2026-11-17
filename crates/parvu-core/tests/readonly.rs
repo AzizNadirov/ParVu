@@ -215,6 +215,14 @@ fn operations_are_checked_like_queries() {
     assert!(ro.check_operation("sales", &join("regions")).is_ok());
     assert!(ro.check_operation("sales", &join("elsewhere")).is_err());
     assert!(ro.check_operation("nowhere", &filter_north()).is_err());
+    // A custom call carries names only; its other tables must be open.
+    let custom = |table: &str| Operation::CustomOperation {
+        name: "anything".into(),
+        args: [("other".to_string(), parvu_core::custom::CustomArg::Table(table.into()))].into(),
+        new_table: true,
+    };
+    assert!(ro.check_operation("sales", &custom("regions")).is_ok());
+    assert!(ro.check_operation("sales", &custom("closed_tab")).is_err());
     let _ = s;
 }
 
@@ -244,6 +252,7 @@ fn operation_schema_covers_every_variant() {
         "sort", "rename", "remove", "change_type", "duplicate", "drop_duplicates", "drop_null", "filter_values",
         "join", "append", "add_column", "replace", "group_by", "pivot", "melt", "transpose", "value_counts",
         "describe", "filter", "fill_null", "sort_by", "select_columns", "slice", "split_column", "bin", "window",
+        "custom_function", "custom_operation",
     ] {
         assert!(text.contains(&format!("\"{op}\"")), "schema lacks {op}");
     }

@@ -87,6 +87,10 @@ Group By, Pivot, Unpivot, Transpose, Value Counts, Describe, Join and Append mak
 
 **Column → New Formula Column**, the **Formula** button or the **+** header after the last column adds a live column computed from each row, such as `[qty] * [price]` or `[price] / SUM([price])`. The formula bar opens above the grid while you write it, with autocomplete; click a column header to insert it. Formulas update when cells change and are remembered for the file. Typing `=` in a cell is just a value. See [DSL.md](DSL.md) for the functions, including about 100 Excel ones (`XLOOKUP`, `COUNTIF`, `TEXT`…).
 
+### Custom functions and operations
+
+Add your own tools to the menus: a function such as `clean_phone(phone)` appears under **Column → Custom functions** for text columns, and an operation such as `top_n_per_group` under **Rows** (it changes the table) or **Table** (it opens a new one). You write the body in SQL, declare the parameters' types, and give examples that must pass before ParVu saves it. **Table → Manage custom tools…** lists them, with import and export to share them. ParVu comes with seven samples. See [CUSTOM.md](CUSTOM.md).
+
 ### Charts
 
 Select a column and press `Ctrl+Shift+C`: ParVu suggests a chart (a date → a line over time, a number → its distribution, text → a bar per value). Then:

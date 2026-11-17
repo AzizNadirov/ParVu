@@ -42,6 +42,10 @@ pub struct AppState {
     pub attach: crate::mcp_attach::Attach,
     /// The built-in AI assistant's chats and running questions.
     pub assistant: crate::ai_assistant::Assistant,
+    /// Custom functions and operations (`~/.ParVu/custom`).
+    pub custom: Mutex<crate::custom_store::CustomStore>,
+    /// The usable ones, as handed to each workspace.
+    pub custom_library: Mutex<Arc<parvu_core::custom::Library>>,
 }
 
 /// Lock a mutex, recovering the data if a panicking thread poisoned it.
@@ -62,6 +66,8 @@ impl AppState {
             pending_crash: Mutex::new(pending_crash),
             attach: Default::default(),
             assistant: Default::default(),
+            custom: Mutex::new(crate::custom_store::CustomStore::open(&crate::custom_store::CustomStore::default_dir())),
+            custom_library: Mutex::new(Default::default()),
         }
     }
 
@@ -78,6 +84,7 @@ impl AppState {
         };
         let mut ws = Workspace::new(page_size, Some(&temp)).map_err(ApiError::from)?;
         ws.set_detect_options(detect);
+        ws.set_custom(lock(&self.custom_library).clone());
         // The PARVU_MEMORY_LIMIT_MB environment variable, if set, wins.
         if std::env::var_os("PARVU_MEMORY_LIMIT_MB").is_none() {
             ws.set_memory_limit_mb(memory_mb.max(0) as u64).map_err(ApiError::from)?;

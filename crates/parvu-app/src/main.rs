@@ -4,6 +4,8 @@
 mod ai_assistant;
 mod column_types;
 mod commands;
+mod custom;
+mod custom_store;
 mod error;
 #[cfg(test)]
 mod excel_tests;
@@ -104,6 +106,7 @@ fn main() {
             mcp::mark_app_running();
             let state = app.state::<AppState>();
             state.attach.set_active_window("main");
+            custom::start(app.handle());
             {
                 let limit_app = app.handle().clone();
                 let notify_app = app.handle().clone();
@@ -207,6 +210,16 @@ fn main() {
             ai_assistant::ai_ask,
             ai_assistant::ai_cancel,
             ai_assistant::ai_clear_chat,
+            custom::custom_list,
+            custom::custom_validate,
+            custom::custom_save,
+            custom::custom_delete,
+            custom::custom_restore_samples,
+            custom::custom_export,
+            custom::custom_import_preview,
+            custom::custom_import,
+            custom::custom_value,
+            custom::custom_preview,
         ])
         .build(tauri::generate_context!())
         .expect("error while running ParVu")

@@ -96,6 +96,12 @@ impl AppPaths {
         self.base.join("themes")
     }
 
+    /// `custom/` (not created): custom functions and operations, one JSON
+    /// file each.
+    pub fn custom_dir(&self) -> PathBuf {
+        self.base.join("custom")
+    }
+
     /// `logs/`, created if missing (like Python `get_log_dir`).
     pub fn ensure_logs_dir(&self) -> std::io::Result<PathBuf> {
         let dir = self.logs_dir();
@@ -146,6 +152,7 @@ mod tests {
         assert_eq!(p.recents_file(), PathBuf::from("/b/history/recents.json"));
         assert_eq!(p.logs_dir(), PathBuf::from("/b/logs"));
         assert_eq!(p.themes_dir(), PathBuf::from("/b/themes"));
+        assert_eq!(p.custom_dir(), PathBuf::from("/b/custom"));
         assert_eq!(legacy_app_dir(), home_dir().join(".ParVu"));
     }
 }
