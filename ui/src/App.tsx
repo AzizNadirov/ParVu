@@ -115,7 +115,17 @@ import {
   openCustomApply,
   openSaveSteps,
 } from "./dialogs/lazy";
-import { CUSTOM_MENU_MAX, customAggregates, customDefinitions, functionsForColumn, isUsable, newDefinition, operationsFor } from "./dialogs/logic";
+import {
+  CUSTOM_MENU_MAX,
+  customAggregates,
+  customDefinitions,
+  functionsForColumn,
+  isUsable,
+  newDefinition,
+  operationsFor,
+  signatureText,
+  sqlCallable,
+} from "./dialogs/logic";
 import { Icon } from "./components/Icon";
 
 /** Per-tab UI state that lives only in the window. */
@@ -414,6 +424,17 @@ export function App({ boot }: { boot: Bootstrap }) {
   }, [allMethods]);
   // Custom functions complete beside the built-ins.
   useEffect(() => setSchema((old) => ({ ...old, functions: [...boot.functions, ...customFns] })), [boot.functions, customFns]);
+  // …and in the SQL editor, where SQL mode expands their calls.
+  const sqlFunctions = useMemo(
+    () =>
+      sqlCallable(customDefs).map((d) => ({
+        name: d.name,
+        detail: t(d.result.kind === "value" ? "editor.custom_summary" : "editor.custom_function"),
+        signature: signatureText(d),
+        description: d.description || d.title || "",
+      })),
+    [customDefs, t],
+  );
 
   const loadPage = useCallback(
     async (id: number, p: number) => {
@@ -2486,6 +2507,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                   onRun={() => void execute()}
                   schema={schema}
                   keywords={settings.sql_keywords ?? []}
+                  sqlFunctions={sqlFunctions}
                   fontFamily={sqlFont}
                   fontSize={sqlSize}
                 />

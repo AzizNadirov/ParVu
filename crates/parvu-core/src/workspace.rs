@@ -886,8 +886,17 @@ impl Workspace {
 
     /// Run user SQL as the tab's new query. Recorded as a step so undo works.
     /// The tab's name is the table under the steps (SQL mode).
+    /// Calls of custom functions are expanded first (see
+    /// [`crate::custom::sqlmode`]): the step keeps the expanded SQL, so it
+    /// doesn't change when a definition does.
     pub fn run_sql(&mut self, id: TabId, sql: &str, label: Option<StepLabel>) -> Result<StepLabel> {
-        self.push_query(id, sql, label, None, None)
+        let x = self.expand_custom(sql)?;
+        self.push_query(id, &x.sql, label, None, None).map_err(|e| x.explain(e))
+    }
+
+    /// `sql` with its custom function calls expanded with the current library.
+    pub fn expand_custom(&self, sql: &str) -> Result<crate::custom::sqlmode::Expanded> {
+        crate::custom::sqlmode::expand(&self.conn, sql, &self.custom)
     }
 
     /// Make `sql` the tab's query as one step, recording how it was made:
@@ -1114,15 +1123,19 @@ impl Workspace {
                     return Err(CoreError::invalid("This operation changes the table itself; it doesn't make a new table"));
                 }
                 let built = self.build_op(id, op)?;
+                crate::engine::validate(&self.conn, &built.sql)?;
                 (built.sql, built.label, op.result_suffix())
             }
             Derivation::Sql { sql } => {
                 let short: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
                 let short = if short.chars().count() > 60 { format!("{}…", short.chars().take(60).collect::<String>()) } else { short };
-                (sql.trim().trim_end_matches(';').to_string(), StepLabel::new("step.query", &[("sql", &short)]), "query".into())
+                // Custom functions are expanded with the current library,
+                // so Refresh follows their current definitions.
+                let x = self.expand_custom(sql.trim().trim_end_matches(';'))?;
+                crate::engine::validate(&self.conn, &x.sql).map_err(|e| x.explain(e))?;
+                (x.sql, StepLabel::new("step.query", &[("sql", &short)]), "query".into())
             }
         };
-        crate::engine::validate(&self.conn, &sql)?;
         Ok(ResultPlan {
             sql,
             table: format!("__pv_res_{}", NEXT_RESULT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
@@ -1373,7 +1386,7 @@ impl Workspace {
                 steps: t.steps.iter().map(|s| s.label.clone()).collect(),
             })
             .collect();
-        crate::readonly::ReadSession::new(self.clone_connection()?, tables)
+        crate::readonly::ReadSession::new(self.clone_connection()?, tables, self.custom.clone())
     }
 
     /// Undo the most recent step (a transform or a cell edit).

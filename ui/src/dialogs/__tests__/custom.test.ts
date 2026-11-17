@@ -20,6 +20,7 @@ import {
   newDefinition,
   operationsFor,
   signatureText,
+  sqlCallable,
   syncFunctionExample,
   aggChoice,
   buildGroupByOp,
@@ -71,6 +72,17 @@ const topN: CustomDefinition = {
 };
 
 describe("custom tools", () => {
+  it("offers SQL mode the usable functions without a list of columns", () => {
+    const lists: CustomDefinition = {
+      ...cleanPhone,
+      name: "concat_cols",
+      params: [{ name: "cols", kind: "columns", type: ["text"] }],
+    };
+    const draft: CustomDefinition = { ...cleanPhone, name: "a_draft", status: "draft" };
+    const avg: CustomDefinition = { ...cleanPhone, name: "avg_of", result: { kind: "value" } };
+    expect(sqlCallable([topN, lists, draft, cleanPhone, avg]).map((d) => d.name)).toEqual(["avg_of", "clean_phone"]);
+  });
+
   it("expands type sets and filters columns by family", () => {
     expect(familiesOf(["number"])).toEqual(["integer", "decimal", "float"]);
     expect(familiesOf([])).toContain("text");

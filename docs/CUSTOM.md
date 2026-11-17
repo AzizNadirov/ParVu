@@ -35,7 +35,27 @@ Autocomplete lists custom functions beside the built-ins (marked *custom*, and *
 
 **Formulas follow the current definition.** When a custom function changes, the formulas that call it are compiled again. When it is deleted or needs attention, the formula is **kept**: its column is empty and shows a warning icon in the header, and opening the formula shows why. Fix the formula, or bring the function back (Restore samples for a sample), and the column fills again. The same happens when a file opens with a remembered formula that no longer compiles.
 
-Custom functions are not available in SQL mode, and operations are not callable from expressions.
+Operations are not callable from expressions.
+
+### In SQL mode
+
+A usable custom function can be called by name in SQL mode, as if DuckDB had it:
+
+```sql
+SELECT clean_phone(Phone) AS phone, clean_phone(Phone, '00') AS intl FROM contacts WHERE clean_phone(Phone) IS NOT NULL;
+SELECT region, weighted_average(price, qty) FROM sales GROUP BY region;
+SELECT *, weighted_average(price, qty) OVER (PARTITION BY region) AS region_avg FROM sales;
+```
+
+- **How it works.** Before the query runs, ParVu replaces each call with the function's compiled SQL, the arguments put in place of its parameters. DuckDB never sees the name, so nothing is registered in the database. The step in Applied Steps (and its label) keeps that **expanded** SQL, like every other step: changing or deleting the function later doesn't change it, and Undo works as usual. The SQL editor keeps what you typed. **SQL to new tab** expands the same way, and Refresh of such a tab uses the functions' current definitions.
+- **Arguments.** A column parameter takes any expression (`clean_phone(lower(Phone))`, `clean_phone(a || b)`, another custom call). A value parameter takes any expression too, cast to its declared type. Optional values may be left out and take their default. Arguments can be named: `clean_phone(prefix := '00', phone := Phone)`. A wrong number of arguments is refused with the signature, e.g. "clean_phone takes 1 to 2 arguments: clean_phone(phone: column<text>, prefix: value<VARCHAR> = "+") → column<text>".
+- **Summary functions** (one value) are aggregates: over the whole table, per group with `GROUP BY`, or per window with `OVER (…)`. A summary function's SQL may hold several aggregates (`weighted_average` is `sum(x * w) / sum(…)`); `OVER (…)` and `FILTER (WHERE …)` on the call are given to **each** of them, so `weighted_average(price, qty) OVER (PARTITION BY region)` is `sum(…) OVER (PARTITION BY region) / sum(…) OVER (PARTITION BY region)`. `DISTINCT` or `ORDER BY` inside the call is refused, and so is `FILTER` when the function's own SQL already filters an aggregate.
+- **Types.** Column types aren't checked before the query runs (an argument can be any expression); DuckDB checks them. When its error comes from inside a custom function, the message starts with the function's name and signature, e.g. "clean_phone: an argument has a type this function doesn't take. It is clean_phone(phone: column<text>, …)".
+- **Not callable in SQL mode:** functions with a list-of-columns parameter (`columns`), custom operations (use them from the menus), and `OVER` on a row function. Each is refused with a message naming the function. Drafts and tools that need attention are refused too.
+- **DuckDB wins.** A name DuckDB itself has is never expanded. (Saving refuses such names, but a later DuckDB may add one.)
+- A name inside a string (`'clean_phone'`) or a quoted column name (`"clean_phone"`) is left alone, and a query that calls no custom function runs exactly as typed.
+- An unaliased call keeps the column name DuckDB would give it: `SELECT clean_phone(Phone)` gives a column named `clean_phone(Phone)`.
+- Autocomplete in the SQL editor lists the callable custom functions (marked *custom function* or *custom summary*), with their signature and description.
 
 ## Defining one
 
@@ -183,7 +203,8 @@ The headless MCP server (`parvu mcp`) loads the same folder, so `apply_operation
 ## AI clients and the assistant
 
 - `apply_operation` takes a columns argument as `{"columns": ["store", "item"]}`, and a summary function of one column as a Group By aggregation: `{"column": "x", "func": "custom", "custom": {"name": "percentile_value", "values": {"p": "0.5"}}}`.
-- `list_custom_tools` gives an AI client (and the built-in assistant) each usable tool: name, kind, typed signature, description, one example, and how to call it (`apply_operation` with `custom_function` / `custom_operation`, or `set_formula`).
+- `list_custom_tools` gives an AI client (and the built-in assistant) each usable tool: name, kind, typed signature, description, one example, and how to call it (`apply_operation` with `custom_function` / `custom_operation`, `set_formula`, or by name in `query`).
+- `query` expands custom function calls the same way as SQL mode, **before** the read-only check, so the check sees the SQL that actually runs: a file function inside an argument (`clean_phone((SELECT content FROM read_text('/etc/passwd')))`) is still refused.
 - `propose_custom_tool` lets the AI suggest a new tool: a full definition with examples. ParVu runs every check (the same safety guard refuses file functions and other tables) and returns the report, so the AI can correct it. In the window, ParVu then asks whether to open the proposal in the editor, prefilled, with a note saying who proposed it. **Nothing is saved unless you save it there.** The headless `parvu mcp` only validates proposals, even with `--allow-write`. See [MCP.md](MCP.md).
 
 ## The samples
@@ -202,6 +223,7 @@ The headless MCP server (`parvu mcp`) loads the same folder, so `apply_operation
 
 ## Not in this version
 
-- Calling custom functions in SQL mode, and calling one custom function from another's body.
+- Calling one custom function from another's body.
+- Calling a function with a list-of-columns parameter, or a custom operation, in SQL mode.
 - Passing a list of columns to a custom function in an expression or formula.
 - A parameter for the name of a new column (a row function's output column is chosen in the dialog).

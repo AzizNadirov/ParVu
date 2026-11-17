@@ -1066,6 +1066,14 @@ export function customDefinitions(entries: CustomEntry[]): CustomDefinition[] {
 
 export const isUsable = (d: CustomDefinition) => d.status === "ok" && !!d.compiled;
 
+/** The custom functions SQL mode can call (by name, in a SELECT): usable
+ * functions without a list-of-columns parameter. */
+export function sqlCallable(defs: CustomDefinition[]): CustomDefinition[] {
+  return defs
+    .filter((d) => d.kind === "function" && isUsable(d) && !d.params.some((p) => p.kind === "columns"))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** The functions offered for a column: those whose first column parameter
  * accepts its family. */
 export function functionsForColumn(defs: CustomDefinition[], family: TypeFamily | undefined): CustomDefinition[] {

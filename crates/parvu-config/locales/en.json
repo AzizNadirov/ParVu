@@ -664,6 +664,8 @@
   "editor.preview_empty": "Preview: (enter an expression)",
   "editor.preview_invalid": "Preview: (invalid — {error})",
   "editor.run_hint": "Ctrl+Enter to run",
+  "editor.custom_function": "custom function",
+  "editor.custom_summary": "custom summary · GROUP BY or OVER",
   "error.append_needs_tab": "Open another tab to append.",
   "error.empty_query": "Empty Query",
   "error.empty_query_msg": "Please enter a SQL query.",

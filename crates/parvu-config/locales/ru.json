@@ -664,6 +664,8 @@
   "editor.preview_empty": "Предпросмотр: (введите выражение)",
   "editor.preview_invalid": "Предпросмотр: (ошибка — {error})",
   "editor.run_hint": "Ctrl+Enter — выполнить",
+  "editor.custom_function": "пользовательская функция",
+  "editor.custom_summary": "пользовательская сводная · GROUP BY или OVER",
   "error.append_needs_tab": "Откройте ещё одну вкладку для добавления.",
   "error.empty_query": "Пустой запрос",
   "error.empty_query_msg": "Пожалуйста, введите SQL запрос.",
