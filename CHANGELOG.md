@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.6]
+
+Operations are grouped by what they touch (Rows, Column, Table), and table operations open their result in a new tab. Column formulas speak about 100 Excel functions, Excel workbooks keep all their sheets, conditions follow the column's type and can limit a change to some rows, and big files can no longer take all of the computer's memory.
+
 ### Added
 - **Conditions follow the column's type.**
   - In **Filter Rows** (and everywhere conditions are written), the operators fit the column: no "contains" for numbers, and yes/no columns get = / ≠ / empty.

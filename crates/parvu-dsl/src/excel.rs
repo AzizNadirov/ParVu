@@ -296,7 +296,7 @@ pub fn catalog() -> Vec<ExcelEntry> {
         "AVERAGE", "COUNT", "COUNTA", "COUNTBLANK", "MIN", "MAX", "MEDIAN", "MODE", "STDEV", "STDEV.P", "VAR", "VAR.P", "LARGE",
         "SMALL", "PERCENTILE", "QUARTILE", "CORREL",
     ]));
-    out.push(use_("statistics", "RANK", "Operations → Running Totals, Ranks and Rolling → Rank"));
+    out.push(use_("statistics", "RANK", "Column → Transform → Running Totals, Ranks and Rolling → Rank"));
     out.extend(same("conditional", &["COUNTIF", "COUNTIFS", "SUMIF", "SUMIFS", "AVERAGEIF", "AVERAGEIFS", "MAXIFS", "MINIFS"]));
     out.extend(same("logical", &["IF", "IFS", "IFERROR", "IFNA", "AND", "OR", "NOT", "XOR", "SWITCH", "CHOOSE"]));
     out.push(use_("logical", "TRUE", "Write TRUE"));
@@ -313,18 +313,18 @@ pub fn catalog() -> Vec<ExcelEntry> {
         "EDATE", "EOMONTH", "DATEDIF", "DAYS", "NETWORKDAYS", "YEARFRAC", "DATEVALUE",
     ]));
     out.extend(same("lookup", &["XLOOKUP", "VLOOKUP"]));
-    out.push(use_("lookup", "INDEX", "XLOOKUP to find a value; Data → First, Last or Random Rows for rows by position"));
+    out.push(use_("lookup", "INDEX", "XLOOKUP to find a value; Rows → First, Last or Random Rows for rows by position"));
     out.push(use_("lookup", "MATCH", "XLOOKUP to find a value; FIND or SEARCH for a position in text"));
-    out.push(use_("lookup", "HLOOKUP", "Reshape → Transpose, then XLOOKUP"));
+    out.push(use_("lookup", "HLOOKUP", "Table → Transpose, then XLOOKUP"));
     out.push(use_("lookup", "LOOKUP", "XLOOKUP"));
     out.push(use_("lookup", "OFFSET", "PREV and NEXT for neighbouring rows"));
-    out.push(use_("tables", "FILTER", "Data → Filter Rows"));
-    out.push(use_("tables", "SORT", "Data → Sort"));
-    out.push(use_("tables", "UNIQUE", "Show Unique Values in the column menu, or Data → Drop Duplicates"));
-    out.push(use_("tables", "TRANSPOSE", "Reshape → Transpose"));
-    out.push(use_("tables", "SUBTOTAL", "Reshape → Group By"));
-    out.push(use_("tables", "GROUPBY", "Reshape → Group By"));
-    out.push(use_("tables", "PIVOTBY", "Reshape → Pivot Table"));
+    out.push(use_("tables", "FILTER", "Rows → Filter Rows"));
+    out.push(use_("tables", "SORT", "Rows → Sort"));
+    out.push(use_("tables", "UNIQUE", "Column → Analyze → Unique Values, or Rows → Drop Duplicates"));
+    out.push(use_("tables", "TRANSPOSE", "Table → Transpose"));
+    out.push(use_("tables", "SUBTOTAL", "Table → Group By"));
+    out.push(use_("tables", "GROUPBY", "Table → Group By"));
+    out.push(use_("tables", "PIVOTBY", "Table → Pivot Table"));
     out
 }
 
