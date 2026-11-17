@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>ParVu icon concept 09: Parquet Weave</title><rect x="24" y="24" width="464" height="464" rx="108" fill="#6750A4"/>
+  <g fill="#FFFFFF">
+    <rect x="80" y="80" width="164" height="70" rx="18"/>
+    <rect x="80" y="174" width="164" height="70" rx="18"/>
+    <rect x="268" y="268" width="164" height="70" rx="18"/>
+    <rect x="268" y="362" width="164" height="70" rx="18"/>
+  </g>
+  <g fill="#B69DF8">
+    <rect x="268" y="80" width="70" height="164" rx="18"/>
+    <rect x="362" y="80" width="70" height="164" rx="18"/>
+    <rect x="80" y="268" width="70" height="164" rx="18"/>
+    <rect x="174" y="268" width="70" height="164" rx="18"/>
+  </g>
+</svg>

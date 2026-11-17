@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **A new app icon.** Three columns cut into chunks on ParVu's violet, with one chunk in amber: the way a Parquet file stores data. It's drawn by hand at 16 and 24 px so it stays sharp in the taskbar and file lists. Linux uses it for `.parquet` and `.csv` files too.
+
 ## [1.0.0-alpha.7]
 
 The release candidate for ParVu 1.0.0, the first stable version. Before this release every feature went through a full manual test pass in the real app: files and sheets, row and column operations, table operations and formulas, a 160-million-row file under a memory cap, settings, themes and languages, and the MCP server. Each bug found was fixed and the fix tested again. The fixes below are what changed since 1.0.0-alpha.6.

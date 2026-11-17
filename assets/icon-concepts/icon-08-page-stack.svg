@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>ParVu icon concept 08: Page Stack</title><rect x="24" y="24" width="464" height="464" rx="108" fill="#4F378B"/>
+  <rect x="176" y="80" width="256" height="256" rx="40" fill="#9A82DB"/>
+  <rect x="128" y="128" width="256" height="256" rx="40" fill="#D0BCFF"/>
+  <rect x="80" y="176" width="256" height="256" rx="40" fill="#FFFFFF"/>
+  <rect x="116" y="212" width="184" height="52" rx="16" fill="#6750A4"/>
+  <rect x="116" y="288" width="184" height="36" rx="14" fill="#B69DF8"/>
+  <rect x="116" y="348" width="120" height="36" rx="14" fill="#B69DF8"/>
+</svg>
