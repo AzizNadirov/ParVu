@@ -15,6 +15,7 @@
 
 ### Fixed
 - **Autocomplete shows function help again.** The signature and description beside a suggested function were clipped and never appeared.
+- **Column names with a double quote in expressions.** Assigning a column in the expression editor broke when another column's name contained `"`; the name is now quoted properly.
 
 ## [1.0.0-alpha.7]
 

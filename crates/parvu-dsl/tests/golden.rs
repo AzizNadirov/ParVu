@@ -208,7 +208,7 @@ fn golden_custom_functions() {
         (
             "sales[mobile] = clean_phone(sales[name], '00')",
             "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \
-             \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", (CASE WHEN (length(regexp_replace((sales.name), \
+             \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", (CASE WHEN (length(regexp_replace((sales.name), \
              '[^0-9]', '', 'g')) < 7) THEN NULL ELSE (CAST(('00') AS VARCHAR) || regexp_replace((sales.name), '[^0-9]', '', 'g')) END) \
              AS \"mobile\" FROM sales",
         ),

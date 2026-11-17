@@ -246,23 +246,29 @@ pub fn build_assignment_query(
     value_sql: &str,
     all_cols: &[String],
 ) -> String {
+    let col = quote_ident(column);
     if all_cols.is_empty() {
-        return format!("SELECT *, {value_sql} AS \"{column}\" FROM {table}");
+        return format!("SELECT *, {value_sql} AS {col} FROM {table}");
     }
     let mut parts: Vec<String> = all_cols
         .iter()
         .map(|c| {
             if c == column {
-                format!("{value_sql} AS \"{c}\"")
+                format!("{value_sql} AS {col}")
             } else {
-                format!("\"{c}\"")
+                quote_ident(c)
             }
         })
         .collect();
     if !all_cols.iter().any(|c| c == column) {
-        parts.push(format!("{value_sql} AS \"{column}\""));
+        parts.push(format!("{value_sql} AS {col}"));
     }
     format!("SELECT {} FROM {table}", parts.join(", "))
+}
+
+/// `"name"` with inner quotes doubled (DuckDB identifier quoting).
+fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
 }
 
 /// SQL preview of an expression (assignments shown as
