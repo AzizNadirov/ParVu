@@ -2,9 +2,9 @@
 
 ## [Unreleased]
 
-## [1.0.0]
+## [1.0.0-alpha.7]
 
-The first stable ParVu. Before this release every feature went through a full manual test pass in the real app: files and sheets, row and column operations, table operations and formulas, a 160-million-row file under a memory cap, settings, themes and languages, and the MCP server. Each bug found was fixed and the fix tested again. The fixes below are what changed since 1.0.0-alpha.6.
+The release candidate for ParVu 1.0.0, the first stable version. Before this release every feature went through a full manual test pass in the real app: files and sheets, row and column operations, table operations and formulas, a 160-million-row file under a memory cap, settings, themes and languages, and the MCP server. Each bug found was fixed and the fix tested again. The fixes below are what changed since 1.0.0-alpha.6.
 
 ### Highlights
 - **Opens Parquet, CSV, JSON and Excel**, including workbooks with several sheets. Big files are read in place, and only the page on screen is loaded.
