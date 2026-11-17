@@ -192,7 +192,8 @@ export type MadeTable = { kind: "opened"; summary: TabSummary } | { kind: "too_b
 
 /** Operations whose result is a different table: they open a new tab. */
 export const TABLE_OPS = ["group_by", "pivot", "melt", "transpose", "value_counts", "describe", "join", "append"] as const;
-export const isTableOp = (op: Operation): boolean => (TABLE_OPS as readonly string[]).includes(op.op);
+export const isTableOp = (op: Operation): boolean =>
+  (TABLE_OPS as readonly string[]).includes(op.op) || (op.op === "custom_operation" && op.new_table);
 
 /** A column formula: the column it makes, what the user typed, and where it sits. */
 /** A sheet of a workbook as it will be saved. */
@@ -281,7 +282,130 @@ export type Operation =
       output: string;
     }
   // column functions
-  | ({ op: "window" } & WindowSpec);
+  | ({ op: "window" } & WindowSpec)
+  // custom tools
+  | { op: "custom_function"; name: string; args: Record<string, CustomArg>; output: FnOutput; where?: RowFilter }
+  | { op: "custom_operation"; name: string; args: Record<string, CustomArg>; new_table: boolean };
+
+// ---------------------------------------------------------------- custom tools
+
+/** An argument of a custom function or operation (backend `CustomArg`). */
+export type CustomArg = { column: string } | { value: string } | { table: string };
+
+export type CustomKind = "function" | "operation";
+export type CustomParamKind = "column" | "value" | "table";
+export type CustomResultKind = "column" | "value" | "table";
+export type CustomStatus = "ok" | "draft" | "broken";
+
+export interface RequiredColumn {
+  name: string;
+  type?: string[];
+}
+
+export interface CustomParam {
+  name: string;
+  kind: CustomParamKind;
+  /** Column parameters: type set names (`number`, `text`, `any`…). */
+  type?: string[];
+  /** Value parameters: the DuckDB type. */
+  dtype?: string;
+  optional?: boolean;
+  default?: string;
+  choices?: string[];
+  min?: number;
+  max?: number;
+  /** Column parameters of an operation: their table parameter. */
+  of?: string;
+  /** Table parameters: columns the table must have. */
+  columns?: RequiredColumn[];
+  description?: string;
+}
+
+export interface ExampleTable {
+  columns: { name: string; dtype?: string }[];
+  rows: Cell[][];
+}
+
+export interface CustomExample {
+  name: string;
+  input: ExampleTable;
+  tables?: Record<string, ExampleTable>;
+  args?: Record<string, Cell>;
+  expected: ExampleTable;
+  ordered?: boolean;
+}
+
+export interface CustomCheck {
+  id: string;
+  status: "pass" | "warning" | "fail" | "skipped";
+  message: StepLabel;
+  example?: number;
+}
+
+export interface ExampleOutcome {
+  name: string;
+  passed: boolean;
+  error?: string;
+  actual?: ExampleTable;
+  /** `[row, column]`; -1 for a whole row or the column names. */
+  mismatches?: [number, number][];
+}
+
+export interface CustomReport {
+  checks: CustomCheck[];
+  examples: ExampleOutcome[];
+  compiled?: CustomCompiled;
+}
+
+export interface CustomCompiled {
+  template: string;
+  hash: string;
+  shape: "row" | "summary" | "table";
+  reads_other_rows: boolean;
+  result_types: Record<string, string>;
+  app: string;
+  duckdb: string;
+}
+
+export interface CustomDefinition {
+  schema: number;
+  kind: CustomKind;
+  name: string;
+  title?: string;
+  description?: string;
+  author?: string;
+  sample?: boolean;
+  status: CustomStatus;
+  params: CustomParam[];
+  result: { kind: CustomResultKind; type?: string[]; same_as?: string; columns?: RequiredColumn[] };
+  placement?: "step" | "new_table";
+  body: { language: "sql"; source: string };
+  flags: { uses_current_time: boolean };
+  examples: CustomExample[];
+  compiled?: CustomCompiled;
+  report?: CustomReport;
+  created?: string;
+  modified?: string;
+}
+
+/** One file of the custom tools folder. */
+export interface CustomEntry {
+  file: string;
+  definition?: CustomDefinition;
+  /** The file could not be read. */
+  error?: string;
+  /** Made by a newer ParVu. */
+  newer?: boolean;
+}
+
+export interface CustomListing {
+  entries: CustomEntry[];
+  type_sets: string[];
+  value_types: string[];
+  folder: string;
+}
+
+export type ImportClash = "replace" | "rename" | "skip";
 
 export type ChartKind = "bar" | "line" | "area" | "scatter" | "histogram";
 export type TimeUnit = "auto" | "none" | "day" | "week" | "month" | "quarter" | "year";
@@ -867,4 +991,26 @@ export const api = {
     call<number>("ai_ask", { provider_id: providerId, tab_id: tabId, question }),
   aiCancel: (runId: number, tabId: number | null) => call<boolean>("ai_cancel", { run_id: runId, tab_id: tabId }),
   aiClearChat: (tabId: number | null) => call<void>("ai_clear_chat", { tab_id: tabId }),
+
+  customList: () => call<CustomListing>("custom_list"),
+  /** Run every check without saving; `editing` is the name it had when opened. */
+  customValidate: (definition: CustomDefinition, editing: string | null) =>
+    call<CustomReport>("custom_validate", { definition, editing }),
+  /** Validate and save; a failing definition is saved only with `draft`. */
+  customSave: (definition: CustomDefinition, editing: string | null, draft: boolean) =>
+    call<{ saved: boolean; status: CustomStatus; report: CustomReport }>("custom_save", { definition, editing, draft }),
+  customDelete: (name: string) => call<void>("custom_delete", { name }),
+  customRestoreSamples: () => call<number>("custom_restore_samples"),
+  /** `names` empty: every definition. Returns how many were written. */
+  customExport: (names: string[], path: string) => call<number>("custom_export", { names, path }),
+  customImportPreview: (path: string) =>
+    call<{ name: string; kind: CustomKind; title: string; exists: boolean }[]>("custom_import_preview", { path }),
+  customImport: (path: string, decisions: Record<string, ImportClash>) =>
+    call<{ imported: string[]; drafts: string[]; skipped: string[] }>("custom_import", { path, decisions }),
+  /** A summary function's value over the whole tab, as a job. */
+  customValue: (id: number, name: string, args: Record<string, CustomArg>, options?: JobOptions) =>
+    startJob((job) => call<Cell>("custom_value", { id, name, args, job }), options),
+  /** The first rows an operation gives, as a job. */
+  customPreview: (id: number, op: Operation, rows: number, options?: JobOptions) =>
+    startJob((job) => call<ExampleTable>("custom_preview", { id, op, rows, job }), options),
 };

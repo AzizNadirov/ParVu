@@ -377,6 +377,11 @@ impl ParvuMcp {
         }
         let temp = parvu_config::paths::user_cache_dir().join("duckdb");
         let mut ws = Workspace::new(100, Some(&temp)).map_err(|e| e.to_string())?;
+        // Custom operations the user saved can be applied here too (tests
+        // never read the user's folder).
+        if !cfg!(test) {
+            ws.set_custom(crate::custom::headless_library());
+        }
         for f in &options.files {
             ws.open(f).map_err(|e| format!("{}: {e}", f.display()))?;
         }
