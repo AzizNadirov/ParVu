@@ -216,6 +216,10 @@ pub struct ParvuMcp {
 pub struct OpenFileArgs {
     /// Path of a Parquet, CSV, TSV, JSON / JSON Lines or Excel file inside an allowed folder.
     pub path: String,
+    /// For an Excel workbook: the sheet to open (default: the first visible one).
+    /// The result lists the workbook's sheets.
+    #[serde(default)]
+    pub sheet: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -772,10 +776,16 @@ impl ParvuMcp {
         let out = try_tool!(
             Self::blocking(move || {
                 let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
-                let id = ws.open(&path).map_err(|e| e.to_string())?;
+                let csv = parvu_core::types::CsvOptions::default();
+                let id = ws.open_sheet(&path, &csv, args.sheet.as_deref()).map_err(|e| e.to_string())?;
                 let s = ws.summary(id).map_err(|e| e.to_string())?;
                 let cols = ws.columns(id).map_err(|e| e.to_string())?;
-                Ok(json!({ "table": s.name, "rows": s.total_rows, "columns": columns_json(&cols) }))
+                let mut out = json!({ "table": s.name, "rows": s.total_rows, "columns": columns_json(&cols) });
+                if let Ok(v) = ws.sheets(id) {
+                    out["sheet"] = json!(v.current);
+                    out["sheets"] = json!(v.sheets.iter().map(|x| json!({ "name": x.name, "hidden": x.hidden })).collect::<Vec<_>>());
+                }
+                Ok(out)
             })
             .await
         );
@@ -1257,7 +1267,7 @@ mod tool_tests {
     async fn open_query_apply_undo() {
         let (dir, s) = server(false);
         let p = dir.path().join("sales.csv").display().to_string();
-        let r = s.open_file(Parameters(OpenFileArgs { path: p })).await.unwrap();
+        let r = s.open_file(Parameters(OpenFileArgs { path: p, sheet: None })).await.unwrap();
         assert_ne!(r.is_error, Some(true), "{}", text(&r));
         assert!(text(&r).contains("\"table\":\"sales\""));
 
@@ -1284,7 +1294,7 @@ mod tool_tests {
     async fn headless_formulas() {
         let (dir, s) = server(false);
         let p = dir.path().join("sales.csv").display().to_string();
-        s.open_file(Parameters(OpenFileArgs { path: p })).await.unwrap();
+        s.open_file(Parameters(OpenFileArgs { path: p, sheet: None })).await.unwrap();
         let args = SetFormulaArgs {
             table: "sales".into(),
             name: "double".into(),
@@ -1303,22 +1313,22 @@ mod tool_tests {
         let outside = tempfile::tempdir().unwrap();
         let f = outside.path().join("x.csv");
         std::fs::write(&f, "a\n1\n").unwrap();
-        let r = s.open_file(Parameters(OpenFileArgs { path: f.display().to_string() })).await.unwrap();
+        let r = s.open_file(Parameters(OpenFileArgs { path: f.display().to_string(), sheet: None })).await.unwrap();
         assert_eq!(r.is_error, Some(true));
         // `..` does not escape after canonicalisation.
         let sneaky = dir.path().join("..").join(outside.path().file_name().unwrap()).join("x.csv");
-        let r = s.open_file(Parameters(OpenFileArgs { path: sneaky.display().to_string() })).await.unwrap();
+        let r = s.open_file(Parameters(OpenFileArgs { path: sneaky.display().to_string(), sheet: None })).await.unwrap();
         assert_eq!(r.is_error, Some(true));
 
         let export = |path: PathBuf| ExportArgs { table: "sales".into(), path: path.display().to_string(), overwrite: false };
         let p = dir.path().join("sales.csv").display().to_string();
-        s.open_file(Parameters(OpenFileArgs { path: p })).await.unwrap();
+        s.open_file(Parameters(OpenFileArgs { path: p, sheet: None })).await.unwrap();
         let r = s.export(Parameters(export(dir.path().join("out.csv")))).await.unwrap();
         assert_eq!(r.is_error, Some(true), "export needs --allow-write");
 
         let (dir, s) = server(true);
         let p = dir.path().join("sales.csv").display().to_string();
-        s.open_file(Parameters(OpenFileArgs { path: p })).await.unwrap();
+        s.open_file(Parameters(OpenFileArgs { path: p, sheet: None })).await.unwrap();
         let r = s.export(Parameters(export(dir.path().join("out.parquet")))).await.unwrap();
         assert_ne!(r.is_error, Some(true), "{}", text(&r));
         assert!(dir.path().join("out.parquet").is_file());

@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use calamine::{Data, Reader, open_workbook_auto};
+use calamine::Data;
 use duckdb::Connection;
 use duckdb::types::{TimeUnit, Value};
 use serde::{Deserialize, Serialize};
@@ -96,6 +96,7 @@ pub fn register_source(
     path: &Path,
     options: DetectOptions,
     csv: &CsvOptions,
+    sheet: Option<&str>,
 ) -> Result<Vec<SourceColumn>> {
     if !path.is_file() {
         return Err(CoreError::FileNotFound(path.display().to_string()));
@@ -119,7 +120,7 @@ pub fn register_source(
         }
     }
     if format == FileFormat::Excel {
-        load_excel(conn, excel_table, path)?;
+        load_excel(conn, excel_table, path, sheet)?;
     }
     let base = base_select(format, path, excel_table).unwrap_or_default();
     // Text columns that read as dates, numbers… get that type on top of the
@@ -232,14 +233,14 @@ fn cell_value(cell: &Data, ty: ExcelType) -> Value {
     }
 }
 
-/// Read the first worksheet of an Excel file into table `table`.
-/// The first row is the header.
-pub fn load_excel(conn: &Connection, table: &str, path: &Path) -> Result<()> {
-    let mut wb = open_workbook_auto(path).map_err(|e| CoreError::Excel(e.to_string()))?;
-    let range = wb
-        .worksheet_range_at(0)
-        .ok_or_else(|| CoreError::Excel("workbook has no sheets".into()))?
-        .map_err(|e| CoreError::Excel(e.to_string()))?;
+/// Read a worksheet of an Excel file (`sheet`, or the first visible one)
+/// into table `table`. The first row is the header.
+pub fn load_excel(conn: &Connection, table: &str, path: &Path, sheet: Option<&str>) -> Result<()> {
+    let name = match sheet {
+        Some(s) => s.to_string(),
+        None => crate::workbook::first_sheet(path)?,
+    };
+    let range = crate::workbook::read_sheet(path, &name)?;
 
     let mut rows = range.rows();
     let header = rows.next().unwrap_or(&[]);

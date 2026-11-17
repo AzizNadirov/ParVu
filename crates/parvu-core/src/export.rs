@@ -281,7 +281,7 @@ fn is_number(dt: &DataType) -> bool {
     )
 }
 
-fn xlsx_err(e: rust_xlsxwriter::XlsxError) -> CoreError {
+pub(crate) fn xlsx_err(e: rust_xlsxwriter::XlsxError) -> CoreError {
     CoreError::Excel(e.to_string())
 }
 
@@ -316,9 +316,18 @@ fn xlsx_kind(arr: &ArrayRef) -> XlsxKind {
 }
 
 fn write_excel(conn: &Connection, query: &str, path: &Path) -> Result<u64> {
+    let mut wb = rust_xlsxwriter::Workbook::new();
+    let ws = wb.add_worksheet_with_constant_memory().map_err(xlsx_err)?;
+    let rows = write_query_sheet(ws, conn, query)?;
+    wb.save(path).map_err(xlsx_err)?;
+    Ok(rows)
+}
+
+/// Write the result of `query` into `ws`, a header row and then the rows.
+pub(crate) fn write_query_sheet(ws: &mut rust_xlsxwriter::Worksheet, conn: &Connection, query: &str) -> Result<u64> {
     use duckdb::arrow::datatypes::{Date32Type, TimestampMicrosecondType};
     use chrono::Datelike;
-    use rust_xlsxwriter::{Format, Workbook};
+    use rust_xlsxwriter::Format;
 
     let total = crate::engine::count_rows(conn, query)?;
     if total + 1 > EXCEL_MAX_ROWS {
@@ -327,8 +336,6 @@ fn write_excel(conn: &Connection, query: &str, path: &Path) -> Result<u64> {
             EXCEL_MAX_ROWS - 1
         )));
     }
-    let mut wb = Workbook::new();
-    let ws = wb.add_worksheet_with_constant_memory().map_err(xlsx_err)?;
     let header = Format::new().set_bold();
     let date_fmt = Format::new().set_num_format("yyyy-mm-dd");
     let datetime_fmt = Format::new().set_num_format("yyyy-mm-dd hh:mm:ss");
@@ -389,7 +396,6 @@ fn write_excel(conn: &Connection, query: &str, path: &Path) -> Result<u64> {
             row += 1;
         }
     }
-    wb.save(path).map_err(xlsx_err)?;
     Ok(u64::from(row - 1))
 }
 

@@ -8,7 +8,7 @@ use crate::column_types::{ColumnTypes, SavedFormula};
 use parvu_core::colfn::{ColumnFn, JsonKey};
 use parvu_core::formula::Formula;
 use parvu_core::types::{CsvOptions, Reading, SourceColumn};
-use parvu_core::workspace::CsvPreview;
+use parvu_core::workspace::{CsvPreview, SheetsView};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -315,6 +315,7 @@ pub async fn open_file(
     window: WebviewWindow,
     path: PathBuf,
     options: Option<CsvOptions>,
+    sheet: Option<String>,
 ) -> ApiResult<TabSummary> {
     let p = path.clone();
     let summary = with_ws(state.clone(), window, move |ws| {
@@ -332,17 +333,8 @@ pub async fn open_file(
             }
             None => store.csv_for(&p).unwrap_or_default(),
         };
-        let id = ws.open_with(&p, &csv)?;
-        // Types the user chose for this file before ("Read as").
-        let chosen = ColumnTypes::load(&ColumnTypes::file()).for_file(&p);
-        if let Err(e) = ws.apply_source_readings(id, &chosen) {
-            tracing::warn!("could not apply the column types chosen for {}: {e}", p.display());
-        }
-        // And the formulas made for it.
-        let formulas = ColumnTypes::load(&ColumnTypes::file()).formulas_for(&p);
-        if !formulas.is_empty() {
-            restore_formulas(ws, id, formulas);
-        }
+        let id = ws.open_sheet(&p, &csv, sheet.as_deref())?;
+        restore_remembered(ws, id)?;
         Ok(ws.summary(id)?)
     })
     .await?;
@@ -518,10 +510,57 @@ pub(crate) fn remember_formulas(summary: &TabSummary) {
         .collect();
     let file = ColumnTypes::file();
     let mut store = ColumnTypes::load(&file);
-    store.remember_formulas(&summary.path, saved);
+    store.remember_formulas(&summary.path, summary.stored_sheet.as_deref(), saved);
     if let Err(e) = store.save(&file) {
         tracing::warn!("could not save {}: {e}", file.display());
     }
+}
+
+/// Put back what was chosen for the file (or sheet) of tab `id` before:
+/// "Read as" types, then formulas.
+fn restore_remembered(ws: &mut Workspace, id: TabId) -> ApiResult<()> {
+    let s = ws.summary(id)?;
+    let store = ColumnTypes::load(&ColumnTypes::file());
+    let chosen = store.for_file(&s.path, s.stored_sheet.as_deref());
+    if let Err(e) = ws.apply_source_readings(id, &chosen) {
+        tracing::warn!("could not apply the column types chosen for {}: {e}", s.path.display());
+    }
+    let formulas = store.formulas_for(&s.path, s.stored_sheet.as_deref());
+    if !formulas.is_empty() {
+        restore_formulas(ws, id, formulas);
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------- Excel sheets
+
+/// The sheets of the workbook tab `id` shows, with unsaved sheet changes.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn excel_sheets(state: State<'_, AppState>, window: WebviewWindow, id: TabId) -> ApiResult<SheetsView> {
+    with_ws(state, window, move |ws| Ok(ws.sheets(id)?)).await
+}
+
+/// Rename, hide, show, delete, restore, move or duplicate a sheet; saved
+/// with the workbook.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn sheet_op(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    op: parvu_core::workbook::SheetOp,
+) -> ApiResult<SheetsView> {
+    with_ws(state, window, move |ws| Ok(ws.sheet_op(id, &op)?)).await
+}
+
+/// Show another sheet of the workbook in tab `id` (the tab starts afresh).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_sheet(state: State<'_, AppState>, window: WebviewWindow, id: TabId, sheet: String) -> ApiResult<TabSummary> {
+    with_ws(state, window, move |ws| {
+        ws.set_sheet(id, &sheet)?;
+        restore_remembered(ws, id)?;
+        Ok(ws.summary(id)?)
+    })
+    .await
 }
 
 /// Put back the formulas remembered for the file of tab `id`, one by one;
@@ -631,7 +670,7 @@ pub async fn set_source_reading(
         let summary = ws.summary(id)?;
         let file = ColumnTypes::file();
         let mut store = ColumnTypes::load(&file);
-        store.remember(&summary.path, &column, reading);
+        store.remember(&summary.path, summary.stored_sheet.as_deref(), &column, reading);
         if let Err(e) = store.save(&file) {
             tracing::warn!("could not save {}: {e}", file.display());
         }
@@ -823,7 +862,7 @@ pub async fn undo(state: State<'_, AppState>, window: WebviewWindow, id: TabId) 
         {
             let file = ColumnTypes::file();
             let mut store = ColumnTypes::load(&file);
-            store.forget(&summary.path, column);
+            store.forget(&summary.path, summary.stored_sheet.as_deref(), column);
             if let Err(e) = store.save(&file) {
                 tracing::warn!("could not save {}: {e}", file.display());
             }

@@ -67,6 +67,8 @@ struct Tab {
     csv: CsvOptions,
     /// Column formulas, in order (live: between the cell edits and the steps).
     formulas: Vec<Formula>,
+    /// The worksheet shown, as named in the file (Excel only).
+    sheet: Option<String>,
 }
 
 impl Tab {
@@ -133,6 +135,29 @@ pub struct TabSummary {
     pub pending_edits: usize,
     /// Column formulas of the table.
     pub formulas: Vec<Formula>,
+    /// The worksheet shown (Excel), as it will be named after saving.
+    pub sheet: Option<String>,
+    /// The workbook's sheets were renamed, hidden, deleted… and not saved.
+    pub sheets_changed: bool,
+    /// The worksheet's name in the file as stored (for per-sheet settings).
+    #[serde(skip)]
+    pub stored_sheet: Option<String>,
+}
+
+/// The sheets of the workbook a tab shows, for its sheet menu.
+#[derive(Debug, Clone, Serialize)]
+pub struct SheetsView {
+    /// The sheet this tab shows (its name after saving).
+    pub current: String,
+    pub sheets: Vec<crate::workbook::PlanSheet>,
+    /// Sheets (by stored name) open in some tab of this window.
+    pub open: Vec<String>,
+    pub changed: bool,
+}
+
+/// The key of a workbook's pending sheet changes.
+fn book_key(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// What "Open with options" shows before opening.
@@ -192,6 +217,8 @@ pub struct Workspace {
     page_size: u64,
     /// How files opened from now on are typed.
     detect: DetectOptions,
+    /// Sheet changes not saved yet, by workbook.
+    workbooks: std::collections::HashMap<PathBuf, crate::workbook::WorkbookPlan>,
 }
 
 impl Workspace {
@@ -207,7 +234,14 @@ impl Workspace {
                 crate::sql::quote_literal(&dir.to_string_lossy())
             ))?;
         }
-        Ok(Self { conn, tabs: Vec::new(), next_id: 1, page_size: page_size.max(1), detect: DetectOptions::default() })
+        Ok(Self {
+            conn,
+            tabs: Vec::new(),
+            next_id: 1,
+            page_size: page_size.max(1),
+            detect: DetectOptions::default(),
+            workbooks: Default::default(),
+        })
     }
 
     /// How files opened from now on are typed (detection on or off, the
@@ -513,13 +547,30 @@ impl Workspace {
     /// Open `path` like [`Workspace::open`], reading a CSV file with `csv`
     /// (delimiter, header, rows to skip…; ignored for other formats).
     pub fn open_with(&mut self, path: &Path, csv: &CsvOptions) -> Result<TabId> {
+        self.open_sheet(path, csv, None)
+    }
+
+    /// Open `path` like [`Workspace::open_with`]; for an Excel workbook,
+    /// show `sheet` (by its stored name), or the first visible one. A sheet
+    /// asked for by name gets a table name with the sheet's: `sales_q1`.
+    pub fn open_sheet(&mut self, path: &Path, csv: &CsvOptions, sheet: Option<&str>) -> Result<TabId> {
         let path = path.to_path_buf();
         if !path.is_file() {
             return Err(CoreError::FileNotFound(path.display().to_string()));
         }
         let format = FileFormat::require(&path)?;
+        let sheet = match (format, sheet) {
+            (FileFormat::Excel, Some(s)) => Some(s.to_string()),
+            (FileFormat::Excel, None) => Some(crate::workbook::first_sheet(&path)?),
+            _ => None,
+        };
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("data");
-        let base = slugify_name(stem);
+        let explicit = format == FileFormat::Excel && sheet.is_some() && sheet != Some(crate::workbook::first_sheet(&path)?);
+        let base = if explicit {
+            slugify_name(&format!("{stem}_{}", sheet.as_deref().unwrap_or_default()))
+        } else {
+            slugify_name(stem)
+        };
         let mut name = base.clone();
         let mut n = 2;
         while self.tabs.iter().any(|t| t.name == name) {
@@ -528,7 +579,7 @@ impl Workspace {
         }
 
         let src = source_view(&name);
-        let source = match register_source(&self.conn, &src, &excel_table(&name), &path, self.detect, csv) {
+        let source = match register_source(&self.conn, &src, &excel_table(&name), &path, self.detect, csv, sheet.as_deref()) {
             Ok(s) => s,
             Err(e) => {
                 self.drop_relations(&name);
@@ -549,7 +600,19 @@ impl Workspace {
         let id = self.next_id;
         self.next_id += 1;
         tracing::info!("opened {} as {name} ({} rows)", path.display(), engine.total_rows());
-        self.tabs.push(Tab { id, name, path, format, engine, edits: EditQueue::new(), steps: Vec::new(), source, csv: csv.clone(), formulas: Vec::new() });
+        self.tabs.push(Tab {
+            id,
+            name,
+            path,
+            format,
+            engine,
+            edits: EditQueue::new(),
+            steps: Vec::new(),
+            source,
+            csv: csv.clone(),
+            formulas: Vec::new(),
+            sheet,
+        });
         Ok(id)
     }
 
@@ -567,6 +630,11 @@ impl Workspace {
         let idx = self.tabs.iter().position(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
         let tab = self.tabs.remove(idx);
         self.drop_relations(&tab.name);
+        // Sheet changes of a workbook no tab shows any more are dropped.
+        let key = book_key(&tab.path);
+        if !self.tabs.iter().any(|t| book_key(&t.path) == key) {
+            self.workbooks.remove(&key);
+        }
         Ok(())
     }
 
@@ -587,6 +655,12 @@ impl Workspace {
             steps: t.steps.iter().map(|s| s.label.clone()).collect(),
             pending_edits: t.edits.len(),
             formulas: t.formulas.clone(),
+            sheet: t.sheet.as_ref().map(|s| {
+                let plan = self.workbooks.get(&book_key(&t.path));
+                plan.and_then(|p| p.saved_name(s)).unwrap_or(s).to_string()
+            }),
+            sheets_changed: t.sheet.is_some() && self.workbooks.contains_key(&book_key(&t.path)),
+            stored_sheet: t.sheet.clone(),
         })
     }
 
@@ -1023,22 +1097,99 @@ impl Workspace {
     /// `target`, or back to its own file. The tab then reopens from the
     /// written file with no pending steps. Returns rows written.
     pub fn save(&mut self, id: TabId, target: Option<&Path>) -> Result<u64> {
-        let (query, out, name) = {
+        let (query, out, name, from, sheet) = {
             let t = self.tab(id)?;
             let out = target.map(Path::to_path_buf).unwrap_or_else(|| t.path.clone());
-            (t.engine.current_query().to_string(), out, t.name.clone())
+            (t.engine.current_query().to_string(), out, t.name.clone(), t.path.clone(), t.sheet.clone())
         };
         FileFormat::require(&out)?;
+        let ext = out.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        if ext == "xls" {
+            return Err(CoreError::invalid(
+                "ParVu can't write the old .xls format: use Save As and choose an .xlsx file",
+            ));
+        }
+        // A workbook is written whole: every sheet, with the sheet changes.
+        if let (Some(own), "xlsx") = (sheet, ext.as_str()) {
+            let key = book_key(&from);
+            let plan = match self.workbooks.get(&key) {
+                Some(p) => p.clone(),
+                None => crate::workbook::WorkbookPlan::from_file(&from)?,
+            };
+            let rows = crate::workbook::write_workbook(&self.conn, &from, &out, &plan, &own, &query)?;
+            let same_file = book_key(&out) == key;
+            if same_file {
+                // Other tabs of this workbook now show sheets with their new names.
+                for t in self.tabs.iter_mut().filter(|t| t.id != id && book_key(&t.path) == key) {
+                    if let Some(s) = t.sheet.as_deref().and_then(|s| plan.saved_name(s)) {
+                        t.sheet = Some(s.to_string());
+                    }
+                }
+                self.workbooks.remove(&key);
+            }
+            let new_name = plan.saved_name(&own).unwrap_or(&own).to_string();
+            self.reload(id, &name, &out, Some(&new_name))?;
+            return Ok(rows);
+        }
         let rows = export(&self.conn, &query, &ExportOptions::for_path(&out))?;
-        self.reload(id, &name, &out)?;
+        let sheet = if ext == "xlsx" { Some(crate::workbook::first_sheet(&out)?) } else { None };
+        self.reload(id, &name, &out, sheet.as_deref())?;
         Ok(rows)
     }
 
+    /// The sheets of the workbook tab `id` shows, with unsaved changes.
+    pub fn sheets(&self, id: TabId) -> Result<SheetsView> {
+        let t = self.tab(id)?;
+        let Some(own) = t.sheet.as_deref() else {
+            return Err(CoreError::invalid("This table is not an Excel workbook"));
+        };
+        let key = book_key(&t.path);
+        let (plan, changed) = match self.workbooks.get(&key) {
+            Some(p) => (p.clone(), true),
+            None => (crate::workbook::WorkbookPlan::from_file(&t.path)?, false),
+        };
+        let open = self.tabs.iter().filter(|x| book_key(&x.path) == key).filter_map(|x| x.sheet.clone()).collect();
+        Ok(SheetsView { current: plan.saved_name(own).unwrap_or(own).to_string(), sheets: plan.sheets, open, changed })
+    }
+
+    /// Rename, hide, show, delete, restore, move or duplicate a sheet of the
+    /// workbook tab `id` shows. Saved with the workbook.
+    pub fn sheet_op(&mut self, id: TabId, op: &crate::workbook::SheetOp) -> Result<SheetsView> {
+        let path = self.tab(id)?.path.clone();
+        if self.tab(id)?.sheet.is_none() {
+            return Err(CoreError::invalid("This table is not an Excel workbook"));
+        }
+        let key = book_key(&path);
+        let stored = crate::workbook::WorkbookPlan::from_file(&path)?;
+        let mut plan = self.workbooks.get(&key).cloned().unwrap_or_else(|| stored.clone());
+        let shown: Vec<String> = self.tabs.iter().filter(|t| book_key(&t.path) == key).filter_map(|t| t.sheet.clone()).collect();
+        plan.apply(op, &shown)?;
+        if plan.differs_from(&stored) {
+            self.workbooks.insert(key, plan);
+        } else {
+            self.workbooks.remove(&key);
+        }
+        self.sheets(id)
+    }
+
+    /// Show another sheet of the workbook in tab `id` (by its stored name).
+    /// The tab starts afresh: its steps, cell edits and formulas go.
+    pub fn set_sheet(&mut self, id: TabId, sheet: &str) -> Result<()> {
+        let (name, path) = {
+            let t = self.tab(id)?;
+            if t.sheet.is_none() {
+                return Err(CoreError::invalid("This table is not an Excel workbook"));
+            }
+            (t.name.clone(), t.path.clone())
+        };
+        self.reload(id, &name, &path, Some(sheet))
+    }
+
     /// Point the tab at `path` again from scratch (after a save).
-    fn reload(&mut self, id: TabId, name: &str, path: &Path) -> Result<()> {
+    fn reload(&mut self, id: TabId, name: &str, path: &Path, sheet: Option<&str>) -> Result<()> {
         let src = source_view(name);
         // ParVu writes standard files, so the parsing options no longer apply.
-        let source = register_source(&self.conn, &src, &excel_table(name), path, self.detect, &CsvOptions::default())?;
+        let source = register_source(&self.conn, &src, &excel_table(name), path, self.detect, &CsvOptions::default(), sheet)?;
         // The saved file holds the formulas' values as ordinary columns.
         create_views(&self.conn, name, &[], &[])?;
         let engine = QueryEngine::new(&self.conn, name, self.page_size)?;
@@ -1051,6 +1202,7 @@ impl Workspace {
         tab.source = source;
         tab.csv = CsvOptions::default();
         tab.formulas.clear();
+        tab.sheet = sheet.map(str::to_string);
         Ok(())
     }
 

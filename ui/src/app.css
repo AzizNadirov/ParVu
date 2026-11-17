@@ -325,3 +325,19 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
 .pv-job.compact .small-btn { min-height: 18px; padding: 0 6px; }
 .pv-job.compact .pv-progress { height: 3px; }
 .status-bar .pv-status-job { flex: 0 1 320px; min-width: 160px; }
+
+/* ---------- Excel sheet chip (in the editor header, not a tab) ---------- */
+.sheet-chip {
+  min-height: 24px;
+  padding: 0 6px 0 10px;
+  gap: 2px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-full);
+  color: var(--md-on-surface);
+  font-weight: 500;
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheet-chip.changed { border-color: var(--pv-colors-accent-warning); }

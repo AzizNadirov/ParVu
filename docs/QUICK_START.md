@@ -9,6 +9,8 @@
 
 Each file opens in its own tab at the bottom of the window. The table is named after the file: `sales 2024.csv` becomes `sales_2024`.
 
+An Excel workbook opens on its first visible sheet. The **Sheet: … ▾** button next to the table name lists all sheets: show another one in the tab, open sheets in their own tabs, or rename, hide, duplicate, reorder and delete sheets (saved with the workbook).
+
 ## Look around
 
 - Move between pages with the pagination bar, or type a page number.

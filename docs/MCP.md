@@ -88,7 +88,7 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 | Tool | What it does |
 |---|---|
 | `list_tables` | Open tables with row and column counts |
-| `open_file` | Open a Parquet, CSV, TSV, JSON / JSON Lines or Excel file from an allowed folder |
+| `open_file` | Open a Parquet, CSV, TSV, JSON / JSON Lines or Excel file from an allowed folder; for a workbook, optionally a `sheet` (the result lists its sheets) |
 | `describe_table` | Columns and types, row count, applied steps |
 | `sample_rows` | First, last or random rows |
 | `column_stats` | Rows, nulls, distinct values, min, max, mean, standard deviation |
