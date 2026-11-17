@@ -251,6 +251,7 @@ function CustomApplyDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation |
                 </tbody>
               </table>
             </div>
+            {preview.rows.length === 0 && <span className="pv-hint">{t("custom.apply.no_rows")}</span>}
           </div>
         )}
         {previewError && <div className="error-text small">{previewError}</div>}

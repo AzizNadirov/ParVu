@@ -108,7 +108,7 @@ function CustomToolsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: { c
   const edit = async (d: CustomDefinition, editing: string | null) => {
     if (!listing) return;
     const saved = await openCustomEditor(ui, { definition: d, editing, typeSets: listing.type_sets, valueTypes: listing.value_types });
-    if (saved) await reload(d.name.trim());
+    if (saved) await reload(saved);
   };
 
   useEffect(() => {

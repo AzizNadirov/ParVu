@@ -29,8 +29,9 @@ pub struct ExampleOutcome {
     /// The output it gave.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actual: Option<ExampleTable>,
-    /// `[row, column]` of each expected cell that differs (row = -1 for a
-    /// missing or extra row, column = -1 for a column name).
+    /// What differs: `[row, column]` of an expected cell; `[row, -1]` an
+    /// expected row with no equal row in the output; `[-1, -1]` the column
+    /// names; `[-2, -1]` output rows that were not expected.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mismatches: Vec<[i64; 2]>,
 }
@@ -195,7 +196,8 @@ pub fn compare(def: &Definition, ex: &Example, actual: &ExampleTable) -> Vec<[i6
                         }
                     }
                 }
-                _ => out.push([r as i64, -1]),
+                (Some(_), None) => out.push([r as i64, -1]),
+                _ => out.push([-2, -1]),
             }
         }
     } else {
@@ -211,9 +213,10 @@ pub fn compare(def: &Definition, ex: &Example, actual: &ExampleTable) -> Vec<[i6
             }
         }
         if free.iter().any(|f| *f) {
-            out.push([-1, -1]);
+            out.push([-2, -1]);
         }
     }
+    out.dedup();
     out
 }
 

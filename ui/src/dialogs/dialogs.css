@@ -262,7 +262,7 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-where { min-width: 0; max-width: 100%; }
 
 /* Custom tools */
-.pv-ok { color: var(--pv-colors-accent-secondary, var(--md-primary)); }
+.pv-ok { color: var(--md-primary); }
 .pv-bad { color: var(--md-error); }
 .pv-tag-warn { color: var(--pv-colors-accent-warning, var(--md-on-surface-variant)); border-color: currentColor; }
 .pv-tag-bad { color: var(--md-error); border-color: currentColor; }
@@ -299,7 +299,7 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-custom-report { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pv-custom-report button.text { display: flex; gap: 6px; align-items: flex-start; text-align: left; height: auto; min-height: 24px; padding: 2px 6px; white-space: normal; color: inherit; }
 .pv-custom-report button.text:disabled { opacity: 1; cursor: default; }
-.pv-check-pass .pv-icon { color: var(--pv-colors-accent-secondary, var(--md-primary)); }
+.pv-check-pass .pv-icon { color: var(--md-primary); }
 .pv-check-warning .pv-icon { color: var(--pv-colors-accent-warning, var(--md-on-surface-variant)); }
 .pv-check-fail { color: var(--md-error); }
 .pv-check-skipped { color: var(--md-on-surface-variant); }

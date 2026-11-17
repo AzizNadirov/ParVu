@@ -308,6 +308,7 @@ function ExampleEditor(props: {
               <Icon name="plus" /> {t("custom.editor.add_column")}
             </button>
           </div>
+          {marks.some(([r]) => r === -2) && <div className="pv-hint">{t("custom.editor.extra_rows")}</div>}
           {outcome?.actual && marks.some(([r, c]) => r === -1 && c === -1) && (
             <div className="pv-hint">
               {t("custom.editor.actual_columns", { columns: outcome.actual.columns.map((c) => c.name).join(", ") })}
@@ -434,7 +435,7 @@ function ParamRow(props: {
 
 /** Define or edit a custom function or operation: signature, SQL body,
  * examples; Validate runs every check, Save only after it passes. */
-function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<boolean>; a: Args }) {
+function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | null>; a: Args }) {
   const t = ui.t;
   const [def, setDef] = useState<CustomDefinition>(() => {
     const d: CustomDefinition = JSON.parse(JSON.stringify(a.definition));
@@ -498,7 +499,7 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<boolean>; 
       setValidatedKey(currentKey);
       if (r.saved) {
         ui.status(t(r.status === "ok" ? "custom.status.saved" : "custom.status.saved_draft", { name: def.name }), 4000);
-        close(true);
+        close(definitionToSave(def).name);
       }
     } catch (e) {
       setError(errorMessage(e));
@@ -531,7 +532,7 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<boolean>; 
   return (
     <Dialog
       title={t(a.editing ? "custom.editor.title_edit" : fn ? "custom.editor.title_new_function" : "custom.editor.title_new_operation", { name: a.editing ?? "" })}
-      onClose={() => close(false)}
+      onClose={() => close(null)}
       className="pv-dialog-custom-editor"
       footer={
         <>
@@ -541,7 +542,7 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<boolean>; 
             </button>
             {busy && <span className="pv-hint">{t("custom.editor.validating")}</span>}
           </div>
-          <button onClick={() => close(false)}>{t("btn.cancel")}</button>
+          <button onClick={() => close(null)}>{t("btn.cancel")}</button>
           <button disabled={busy || !def.name.trim()} onClick={() => void save(true)} title={t("custom.editor.save_draft_hint")}>
             {t("custom.editor.save_draft")}
           </button>
@@ -777,6 +778,7 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<boolean>; 
   );
 }
 
-export function openCustomEditor(ui: Ui, a: Args): Promise<boolean> {
-  return ui.showDialog<boolean>((close) => <CustomEditorDialog ui={ui} close={close} a={a} />, false);
+/** Resolves with the name it was saved under, or null when cancelled. */
+export function openCustomEditor(ui: Ui, a: Args): Promise<string | null> {
+  return ui.showDialog<string | null>((close) => <CustomEditorDialog ui={ui} close={close} a={a} />, null);
 }
