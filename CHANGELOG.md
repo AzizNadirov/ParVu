@@ -9,6 +9,13 @@
   - **Live, like Excel:** change a cell and the formulas using it update at once. Cell editing stays available, and undo covers adding, changing and removing a formula.
   - Formula columns show an *fx* icon. Their cells open the formula instead of being edited directly.
   - Saving writes the computed values.
+- **Filling, as in a spreadsheet.** Drag the square at the corner of a selection to fill the cells next to it, down, up, left or right. ParVu continues the series instead of copying:
+  - numbers by their step (1, 2 → 3, 4; one number is copied);
+  - dates by day, or by month or year when the seeds share a day of the month (31 Jan, 29 Feb → 31 Mar keeps to month ends); timestamps keep their format;
+  - month and day names in English, Russian and Azerbaijani (Jan → Feb, пн → вт), keeping their case;
+  - text ending in a number (Item 1 → Item 2, INV-007 → INV-008);
+  - anything else repeats the selected cells.
+  - **Fill Down, Up, Right and Left** in the Data menu and the cell menu copy the selection's edge row or column; Ctrl+D fills down and Ctrl+R fills right. Every fill is one step that undo reverts. Formula columns are left as they are.
 
 ## [1.0.0-alpha.5]
 

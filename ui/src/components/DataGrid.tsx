@@ -12,6 +12,7 @@ import {
   type GridColumn,
   type GridSelection,
   type Item,
+  type Rectangle,
   type Theme,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
@@ -66,6 +67,8 @@ export interface DataGridProps {
   onCurrentCell?(row: number, col: number): void;
   /** A formula column's cell was opened (Enter or double-click). */
   onFormulaCell?(column: string): void;
+  /** The fill handle was dragged from `source` to cover `dest` (page coordinates). */
+  onFill?(source: Rectangle, dest: Rectangle): void;
 }
 
 /** Type icons for the column headers (built once). */
@@ -317,6 +320,14 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         onCellActivated={([col]) => {
           const name = page.columns[col]?.name;
           if (name && props.formulaColumns?.includes(name)) handlers.current.onFormulaCell?.(name);
+        }}
+        fillHandle={page.editable && !!props.onFill}
+        allowedFillDirections="orthogonal"
+        onFillPattern={(e) => {
+          // ParVu writes the series itself (one edit step) instead of
+          // Glide's plain copy.
+          e.preventDefault();
+          handlers.current.onFill?.(e.patternSource, e.fillDestination);
         }}
         rowMarkers="number"
         rowMarkerStartIndex={page.offset + 1}

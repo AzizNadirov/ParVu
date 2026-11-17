@@ -33,6 +33,7 @@ import {
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
 import { formulaBody, formulaRefs, newFormulaName, refColors, refFor } from "./lib/formula";
+import { fillEdge, fillFromHandle, type FillCell, type FillDirection, type Rect } from "./lib/fill";
 import { FormulaBar, type FormulaBarHandle } from "./components/FormulaBar";
 import { isDark } from "./lib/chart";
 import { DATE_FILTERS, EXTRACT_FNS, fnLabelKey, hasTime, isDateFamily, previewValues, TEXT_FNS, type FnName } from "./lib/colfn";
@@ -951,6 +952,19 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
   ];
 
+  /** Fill down / up / right / left for the selection. */
+  const fillMenu = (): MenuEntry[] => {
+    const range = grid.current?.selectionRange();
+    const rows = !page?.editable || (range?.height ?? 0) < 2;
+    const cols = !page?.editable || (range?.width ?? 0) < 2;
+    return [
+      { label: t("context.fill_down"), shortcut: "Ctrl+D", disabled: rows, onSelect: () => void fillRange("down") },
+      { label: t("context.fill_up"), disabled: rows, onSelect: () => void fillRange("up") },
+      { label: t("context.fill_right"), shortcut: "Ctrl+R", disabled: cols, onSelect: () => void fillRange("right") },
+      { label: t("context.fill_left"), disabled: cols, onSelect: () => void fillRange("left") },
+    ];
+  };
+
   const cellMenu = (row: number, col: number): MenuEntry[] => {
     const sel = grid.current?.selection();
     const copy = (format: "tsv" | "csv" | "markdown", headers = false) => {
@@ -970,12 +984,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       { type: "separator" },
       { label: t("context.filter_by_value"), onSelect: () => void applyOp({ op: "filter_values", column, values: [value] }) },
       { label: t("context.filter_custom"), onSelect: () => void runFilterFromCell(column, value) },
-      {
-        label: t("context.fill_down"),
-        shortcut: "Ctrl+D",
-        disabled: !page?.editable || (grid.current?.selectionRange()?.height ?? 0) < 2,
-        onSelect: () => void fillDown(),
-      },
+      { label: t("context.fill"), disabled: !page?.editable, submenu: fillMenu() },
       {
         label: t("context.set_null"),
         disabled: !page?.editable || value === null,
@@ -1153,36 +1162,63 @@ export function App({ boot }: { boot: Bootstrap }) {
       if (op) await applyOp(op);
     });
 
-  /** Copy the first row of the selection into the selected rows below it (Ctrl+D). */
-  const fillDown = async () =>
+  /** Write filled cells as one edit step. Formula columns and unchanged cells are skipped. */
+  const writeFill = async (cells: FillCell[]) =>
     withTab(async (tab) => {
-      const range = grid.current?.selectionRange();
-      if (!page || !range || range.height < 2) {
-        status(t("status.fill_down_select"), 4000);
-        return;
-      }
+      if (!page) return;
       if (!page.editable) {
         status(t("status.read_only"), 4000);
         return;
       }
-      const cells = [];
-      for (let c = range.x; c < range.x + range.width; c++) {
-        const column = page.columns[c]?.name;
+      const formulas = new Set(tab.formulas.map((f) => f.name));
+      let skipped = false;
+      const edits: { row: number; column: string; value: Cell }[] = [];
+      for (const c of cells) {
+        const column = page.columns[c.col]?.name;
         if (!column) continue;
-        const value = page.rows[range.y]?.[c] ?? null;
-        for (let r = range.y + 1; r < range.y + range.height; r++) cells.push({ row: page.offset + r, column, value });
+        if (formulas.has(column)) {
+          skipped = true;
+          continue;
+        }
+        if ((page.rows[c.row]?.[c.col] ?? null) === c.value) continue;
+        edits.push({ row: page.offset + c.row, column, value: c.value });
+      }
+      if (!edits.length) {
+        if (skipped) status(t("status.fill_skipped_formulas"), 6000);
+        return;
       }
       try {
-        const s = await api.editCells(tab.id, cells);
+        const s = await api.editCells(tab.id, edits);
         upsertTab(s);
         await loadPage(tab.id, page.page);
         const last = s.steps[s.steps.length - 1];
-        if (last) status(t("steps.applied", { step: stepText(t, last) }), 4000);
+        if (skipped) status(t("status.fill_skipped_formulas"), 6000);
+        else if (last) status(t("steps.applied", { step: stepText(t, last) }), 4000);
       } catch (e) {
         await loadPage(tab.id, page.page);
         status(t("status.edit_rejected", { error: errorMessage(e) }), 8000);
       }
     });
+
+  /** Copy the selection's edge row or column over the rest (Ctrl+D down, Ctrl+R right). */
+  const fillRange = async (direction: FillDirection) =>
+    withTab(async () => {
+      const range = grid.current?.selectionRange();
+      const vertical = direction === "down" || direction === "up";
+      if (!page || !range || (vertical ? range.height : range.width) < 2) {
+        status(t(vertical ? "status.fill_rows_select" : "status.fill_columns_select"), 4000);
+        return;
+      }
+      await writeFill(fillEdge((r, c) => page.rows[r]?.[c] ?? null, range, direction));
+    });
+  const fillDown = () => fillRange("down");
+  const fillRight = () => fillRange("right");
+
+  /** The fill handle was dragged: continue each column's (or row's) series. */
+  const fillHandle = (source: Rect, dest: Rect) => {
+    if (!page) return;
+    void writeFill(fillFromHandle((r, c) => page.rows[r]?.[c] ?? null, source, dest));
+  };
 
   const showChart = async (selected?: string) =>
     withTab(async (tab) => {
@@ -1443,6 +1479,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.data.columns"), disabled: !activeTab, onSelect: () => void runOpDialog(openColumns) },
         { label: t("menu.data.slice"), disabled: !activeTab, onSelect: () => void runSlice() },
         { type: "separator" },
+        { label: t("context.fill"), disabled: !activeTab || !page?.editable, submenu: fillMenu() },
         { label: t("menu.data.fill_null"), disabled: !activeTab, onSelect: () => void runOpDialog(openFillNull) },
         { label: t("menu.operations.drop_null"), disabled: !activeTab, onSelect: () => void runDropNull() },
         { label: t("menu.operations.drop_duplicates"), disabled: !activeTab, onSelect: () => void runDropDuplicates() },
@@ -1512,8 +1549,8 @@ export function App({ boot }: { boot: Bootstrap }) {
       /* the tab may have been closed meanwhile */
     }
   };
-  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi, toggleAi });
-  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, showChart, refreshFromAi, toggleAi };
+  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi });
+  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1538,6 +1575,8 @@ export function App({ boot }: { boot: Bootstrap }) {
       else if (ctrl && e.shiftKey && k === "c" && !typing) run(() => h.activeTab && void h.showChart());
       else if (ctrl && e.shiftKey && k === "a") run(() => h.toggleAi());
       else if (ctrl && !e.shiftKey && k === "d" && !typing) run(() => h.activeTab && void h.fillDown());
+      // Ctrl+R fills right, as in a spreadsheet (and never reloads the window).
+      else if (ctrl && !e.shiftKey && k === "r" && !typing) run(() => h.activeTab && void h.fillRight());
       else if (ctrl && k === "f") run(h.openSearch);
       else if (ctrl && (k === "/" || e.code === "Slash")) run(() => void openShortcutsDialog(ui));
       else if (e.key === "F3") run(() => (h.search ? (e.shiftKey ? searchKeys.current?.prev() : searchKeys.current?.next()) : h.openSearch()));
@@ -1824,6 +1863,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                 onHeaderClick={(c) => (formulaEdit ? formulaBar.current?.insert(refFor(c)) : void sortBy(c))}
                 onHeaderMenu={(c, x, y) => setMenu({ x, y, items: headerMenu(c) })}
                 onCellMenu={(r, c, x, y) => setMenu({ x, y, items: cellMenu(r, c) })}
+                onFill={fillHandle}
                 onEdit={(r, c, v) => void editCell(r, c, v)}
                 frozen={st?.frozen ?? 0}
                 widths={st?.widths ?? NO_WIDTHS}

@@ -905,7 +905,7 @@ impl Workspace {
         Ok(true)
     }
 
-    /// Edit several cells as one step (fill down). Cells whose value does not
+    /// Edit several cells as one step (a fill). Cells whose value does not
     /// change are skipped; returns how many changed. Same rules as
     /// [`Workspace::edit_cell`].
     pub fn edit_cells(&mut self, id: TabId, edits: &[(u64, String, Cell)]) -> Result<usize> {

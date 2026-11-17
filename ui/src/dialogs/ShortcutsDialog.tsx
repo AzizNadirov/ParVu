@@ -28,6 +28,8 @@ export const SHORTCUT_GROUPS: [string, [string, string][]][] = [
       ["shortcuts.action.filter", "Ctrl+Shift+L"],
       ["shortcuts.action.group_by", "Ctrl+G"],
       ["shortcuts.action.fill_down", "Ctrl+D"],
+      ["shortcuts.action.fill_right", "Ctrl+R"],
+      ["shortcuts.action.fill_handle", "shortcuts.value.fill_handle"],
       ["shortcuts.action.chart", "Ctrl+Shift+C"],
       ["shortcuts.action.ai_panel", "Ctrl+Shift+A"],
     ],
