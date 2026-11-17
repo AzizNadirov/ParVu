@@ -82,9 +82,10 @@ describe("settings form", () => {
 
   it("keeps the View choices", () => {
     const f = settingsToForm({ ...settings, query_panel_collapsed: true, show_ai_panel: true }, "en", "x");
-    expect([f.showQueryPanel, f.queryCollapsed, f.showSteps, f.showAi]).toEqual([true, true, true, true]);
-    const v = formToValues({ ...f, showSteps: false });
-    expect([v.show_query_panel, v.query_panel_collapsed, v.show_steps_panel, v.show_ai_panel]).toEqual([true, true, false, true]);
+    // New installs start with the query panel and Applied Steps collapsed.
+    expect([f.showQueryPanel, f.queryCollapsed, f.showSteps, f.showAi]).toEqual([true, true, false, true]);
+    const v = formToValues({ ...f, showSteps: true });
+    expect([v.show_query_panel, v.query_panel_collapsed, v.show_steps_panel, v.show_ai_panel]).toEqual([true, true, true, true]);
   });
 
   it("flags out-of-range numbers", () => {

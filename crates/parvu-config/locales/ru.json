@@ -1453,7 +1453,7 @@
   "settings.group.view": "Вид",
   "settings.label.show_query_panel": "Показывать панель SQL-запроса",
   "settings.label.query_collapsed": "Начинать со свёрнутой панелью SQL-запроса",
-  "settings.label.show_steps": "Показывать применённые шаги",
+  "settings.label.show_steps": "Разворачивать применённые шаги",
   "settings.label.show_ai": "Показывать панель AI-ассистента",
   "settings.hint.view": "Изменения в меню «Вид» тоже запоминаются здесь."
 }
