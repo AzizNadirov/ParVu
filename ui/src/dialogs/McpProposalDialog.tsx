@@ -27,6 +27,7 @@ function McpProposalDialog({ ui, close, p }: { ui: Ui; close: Closer<boolean>; p
       <div className="pv-callout pv-proposal-step">
         <strong>{step}</strong>
         {p.rationale && <div className="muted">{t("mcp.proposal.why", { rationale: p.rationale })}</div>}
+        {p.kind === "new_table" && <div className="muted">{t("mcp.proposal.new_table", { table: p.table })}</div>}
       </div>
       <div>
         <RichText

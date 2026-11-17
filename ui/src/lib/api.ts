@@ -172,7 +172,27 @@ export interface TabSummary {
   sheet: string | null;
   /** Sheets were renamed, hidden, deleted… and not saved yet. */
   sheets_changed: boolean;
+  /** A table operation's result not saved to a file yet (its `path` is empty). */
+  origin: Origin | null;
 }
+
+/** How a result tab was made: a table operation or a SQL query. */
+export type Derivation = { kind: "op"; op: Operation } | { kind: "sql"; sql: string };
+
+/** Where a result tab came from. */
+export interface Origin {
+  source_id: number;
+  source: string;
+  label: StepLabel;
+  derivation: Derivation;
+}
+
+/** What making a result tab did. */
+export type MadeTable = { kind: "opened"; summary: TabSummary } | { kind: "too_big"; limit: number };
+
+/** Operations whose result is a different table: they open a new tab. */
+export const TABLE_OPS = ["group_by", "pivot", "melt", "transpose", "value_counts", "describe", "join", "append"] as const;
+export const isTableOp = (op: Operation): boolean => (TABLE_OPS as readonly string[]).includes(op.op);
 
 /** A column formula: the column it makes, what the user typed, and where it sits. */
 /** A sheet of a workbook as it will be saved. */
@@ -624,7 +644,8 @@ export interface McpProposal {
   client: string;
   tab_id: number;
   table: string;
-  kind: "operation" | "undo";
+  /** "new_table": a table operation, which opens its result in a new tab. */
+  kind: "operation" | "new_table" | "formula" | "undo";
   label: StepLabel;
   rationale: string | null;
   sql: string | null;
@@ -775,6 +796,14 @@ export const api = {
   runExpression: (id: number, text: string) => call<TabSummary>("run_expression", { id, text }),
   previewExpression: (id: number, text: string) => call<ExpressionPreview>("preview_expression", { id, text }),
   applyOp: (id: number, op: Operation) => call<TabSummary>("apply_op", { id, op }),
+  /** A table operation or query into a new tab, as a job. */
+  makeTable: (id: number, derivation: Derivation, options?: JobOptions) =>
+    startJob((job) => call<MadeTable>("make_table", { id, derivation, job }), options),
+  /** Compute a result tab again from its source's current data. */
+  refreshTable: (id: number, options?: JobOptions) => startJob((job) => call<MadeTable>("refresh_table", { id, job }), options),
+  /** Write a result too big for memory to a file; returns rows written. */
+  tableToFile: (id: number, derivation: Derivation, path: string, options?: JobOptions) =>
+    startJob((job) => call<number>("table_to_file", { id, derivation, path, job }), options),
   addComputedColumn: (id: number, name: string, text: string) =>
     call<TabSummary>("add_computed_column", { id, name, text }),
   replaceValues: (id: number, request: ReplaceRequest) => call<TabSummary>("replace_values", { id, request }),

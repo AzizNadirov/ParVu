@@ -18,6 +18,8 @@ import {
   type ColumnMeta,
   type CsvOptions,
   setErrorTranslator,
+  isTableOp,
+  type Derivation,
   type DatePartName,
   type TimeUnitName,
   type AiRunEvent,
@@ -198,6 +200,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   const workbookConfirmed = useRef(new Set<string>());
   // "Formulas are columns" is said once a session.
   const formulaHintShown = useRef(false);
+  /** SQL mode: run the query into a new tab instead of changing this one. */
+  const [sqlToNewTab, setSqlToNewTab] = useState(false);
   const saveAsRef = useRef<(tab: TabSummary) => Promise<boolean>>(async () => false);
   // How each column of the active tab's CSV file is read ("Read as").
   const [sourceCols, setSourceCols] = useState<SourceColumn[]>([]);
@@ -512,11 +516,91 @@ export function App({ boot }: { boot: Bootstrap }) {
   // ------------------------------------------------------------ actions
   const withTab = <T,>(fn: (tab: TabSummary) => T): T | undefined => (activeTab ? fn(activeTab) : undefined);
 
+  /** Write a result too big for memory to a file the user picks, then open it. */
+  const resultToFile = useCallback(
+    async (tab: TabSummary, derivation: Derivation, limit: number) => {
+      if (!(await ui.confirm(t("table.too_big_title"), t("table.too_big_msg", { limit })))) return;
+      const path = await saveDialog({
+        title: t("dialog.save_as"),
+        defaultPath: `${tab.name}_result.parquet`,
+        filters: [
+          { name: "Parquet", extensions: ["parquet"] },
+          { name: "CSV", extensions: ["csv", "tsv"] },
+        ],
+      });
+      if (!path) return;
+      try {
+        const rows = await jobResult(api.tableToFile(tab.id, derivation, path, { label: t("table.writing") }));
+        if (rows !== null) await openPath(path);
+      } catch (e) {
+        await showError(t("error.operation_failed"), e);
+      }
+    },
+    [ui, t, openPath, showError],
+  );
+
+  /** A table operation or query: its result opens in a new tab, computed as a job. */
+  const makeTable = useCallback(
+    async (tab: TabSummary, derivation: Derivation): Promise<TabSummary | null> => {
+      let r;
+      try {
+        r = await jobResult(api.makeTable(tab.id, derivation, { label: t("table.computing") }));
+      } catch (e) {
+        await showError(t("error.operation_failed"), e);
+        return null;
+      }
+      if (!r) return null;
+      if (r.kind === "too_big") {
+        await resultToFile(tab, derivation, r.limit);
+        return null;
+      }
+      const s = r.summary;
+      tabUi.current.set(s.id, newTabUi(s.name));
+      upsertTab(s);
+      switchTo(s.id);
+      void refreshSchema();
+      status(t("table.opened", { name: s.name, source: tab.name }), 6000);
+      return s;
+    },
+    [t, showError, resultToFile, upsertTab, switchTo, refreshSchema, status],
+  );
+
+  /** Compute a result tab again from its source (↻ on its chip). */
+  const refreshResult = useCallback(
+    async (tab: TabSummary) => {
+      if ((tab.pending_edits || tab.steps.length) && !(await ui.confirm(t("table.refresh_title"), t("table.refresh_msg", { name: tab.name }))))
+        return;
+      let r;
+      try {
+        r = await jobResult(api.refreshTable(tab.id, { label: t("table.refreshing", { name: tab.name }) }));
+      } catch (e) {
+        await showError(t("error.operation_failed"), e);
+        return;
+      }
+      if (!r) return;
+      if (r.kind === "too_big") {
+        await ui.alert(t("table.too_big_title"), t("table.too_big_refresh", { limit: r.limit }), "warning");
+        return;
+      }
+      upsertTab(r.summary);
+      const st = tabUi.current.get(tab.id);
+      if (st) st.sort = null;
+      if (tab.id === active) await loadPage(tab.id, 1);
+      void refreshSchema();
+      status(t("table.refreshed", { name: tab.name }), 5000);
+    },
+    [ui, t, showError, upsertTab, active, loadPage, refreshSchema, status],
+  );
+
   const execute = useCallback(async () => {
     if (!activeTab) return;
     const text = editorText.trim();
     if (!text) {
       await ui.alert(t("error.empty_query"), t("error.empty_query_msg"), "warning");
+      return;
+    }
+    if (mode === "sql" && sqlToNewTab) {
+      await makeTable(activeTab, { kind: "sql", sql: text });
       return;
     }
     const id = activeTab.id;
@@ -527,14 +611,15 @@ export function App({ boot }: { boot: Bootstrap }) {
       () => (mode === "sql" ? api.runSql(id, text) : api.runExpression(id, text)),
       mode === "sql" ? t("error.query_error") : t("error.expression"),
     );
-  }, [activeTab, editorText, mode, mutate, t, ui]);
+  }, [activeTab, editorText, mode, mutate, makeTable, sqlToNewTab, t, ui]);
 
   const applyOp = useCallback(
     async (op: Operation) => {
       if (!activeTab) return;
+      if (isTableOp(op)) return makeTable(activeTab, { kind: "op", op });
       return mutate(activeTab.id, () => api.applyOp(activeTab.id, op), t("error.operation_failed"));
     },
-    [activeTab, mutate, t],
+    [activeTab, mutate, makeTable, t],
   );
 
   const undo = useCallback(async () => {
@@ -1395,7 +1480,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     async (tab: TabSummary): Promise<boolean> => {
       const path = await saveDialog({
         title: t("dialog.save_as"),
-        defaultPath: tab.path,
+        defaultPath: tab.path || `${tab.name}.parquet`,
         filters: [
           { name: "Parquet", extensions: ["parquet"] },
           { name: "CSV", extensions: ["csv", "tsv"] },
@@ -1411,9 +1496,14 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const save = useCallback(async () => {
     if (!activeTab) return;
+    // A result tab is not a file yet.
+    if (activeTab.origin) {
+      await saveAs(activeTab);
+      return;
+    }
     if (!activeTab.steps.length && !activeTab.pending_edits && !activeTab.sheets_changed) return;
     await saveTab(activeTab, null);
-  }, [activeTab, saveTab]);
+  }, [activeTab, saveTab, saveAs]);
 
   /** Ask about unsaved edits of `tab`. True when it may be closed. */
   const resolveUnsaved = useCallback(
@@ -1428,6 +1518,16 @@ export function App({ boot }: { boot: Bootstrap }) {
           { id: "save", label: t("btn.save"), primary: true },
         ]);
         if (choice === "save") return saveTab(tab, null);
+        return choice === "discard";
+      }
+      if (tab.origin) {
+        if (tab.id !== active) switchTo(tab.id);
+        const choice = await ui.ask(t("table.unsaved_title"), t("table.unsaved_msg", { name: tab.name }), [
+          { id: "discard", label: t("dialog.unsaved.discard"), danger: true },
+          { id: "cancel", label: t("btn.cancel") },
+          { id: "save", label: t("table.save_as"), primary: true },
+        ]);
+        if (choice === "save") return saveAsRef.current(tab);
         return choice === "discard";
       }
       if (!tab.pending_edits) return true;
@@ -1677,6 +1777,15 @@ export function App({ boot }: { boot: Bootstrap }) {
   const refreshFromAi = async (id: number) => {
     try {
       const s = await api.tabSummary(id);
+      if (!tabUi.current.has(id)) {
+        // A table operation by the AI opened a new tab.
+        tabUi.current.set(id, newTabUi(s.name));
+        upsertTab(s);
+        switchTo(id);
+        void refreshSchema();
+        status(t("table.opened", { name: s.name, source: s.origin?.source ?? "" }), 6000);
+        return;
+      }
       upsertTab(s);
       if (id === active) await loadPage(id, 1);
       const last = s.steps[s.steps.length - 1];
@@ -1902,6 +2011,26 @@ export function App({ boot }: { boot: Bootstrap }) {
                       <Icon name="chevronDown" size={16} />
                     </button>
                   )}
+                  {activeTab.origin && (
+                    <span className="origin-chip">
+                      <button
+                        className="text small-btn"
+                        disabled={!tabs.some((x) => x.id === activeTab.origin?.source_id)}
+                        aria-label={t("table.go_to_source", { source: activeTab.origin.source })}
+                        onClick={() => activeTab.origin && switchTo(activeTab.origin.source_id)}
+                      >
+                        {t("table.from", { source: activeTab.origin.source, what: stepText(t, activeTab.origin.label) })}
+                      </button>
+                      <button
+                        className="icon"
+                        disabled={!tabs.some((x) => x.id === activeTab.origin?.source_id)}
+                        aria-label={t("table.refresh")}
+                        onClick={() => void refreshResult(activeTab)}
+                      >
+                        <Icon name="reset" size={16} />
+                      </button>
+                    </span>
+                  )}
                   <span className="spacer" />
                   <span className="muted">{t("editor.mode")}</span>
                   <div className="segmented">
@@ -1954,6 +2083,12 @@ export function App({ boot }: { boot: Bootstrap }) {
                     <Icon name="info" />
                     {t("btn.table_info")}
                   </button>
+                  {mode === "sql" && (
+                    <label className="check small">
+                      <input type="checkbox" checked={sqlToNewTab} onChange={(e) => setSqlToNewTab(e.target.checked)} />
+                      {t("table.sql_new_tab")}
+                    </label>
+                  )}
                   <span className="muted small">{t("editor.run_hint")}</span>
                   <span className="spacer" />
                   <button className="text" onClick={() => void runOpDialog(openFilter)}>

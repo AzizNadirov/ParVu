@@ -391,6 +391,40 @@ fn sentinel_literal(raw: &str) -> String {
 }
 
 impl Operation {
+    /// Operations whose result is a different table (grouped, pivoted,
+    /// joined…). They open their result in a new tab instead of changing
+    /// the table they run on.
+    pub fn is_table_op(&self) -> bool {
+        matches!(
+            self,
+            Operation::GroupBy { .. }
+                | Operation::Pivot { .. }
+                | Operation::Melt { .. }
+                | Operation::Transpose { .. }
+                | Operation::ValueCounts { .. }
+                | Operation::Describe
+                | Operation::Join { .. }
+                | Operation::Append { .. }
+        )
+    }
+
+    /// What a table operation's result is called after its source table:
+    /// `by_region`, `pivot`, `join_customers`…
+    pub fn result_suffix(&self) -> String {
+        match self {
+            Operation::GroupBy { by, .. } if by.is_empty() => "summary".into(),
+            Operation::GroupBy { by, .. } => format!("by_{}", by.join("_")),
+            Operation::Pivot { .. } => "pivot".into(),
+            Operation::Melt { .. } => "unpivoted".into(),
+            Operation::Transpose { .. } => "transposed".into(),
+            Operation::ValueCounts { columns, .. } => format!("{}_counts", columns.join("_")),
+            Operation::Describe => "described".into(),
+            Operation::Join { right, .. } => format!("join_{right}"),
+            Operation::Append { .. } => "append".into(),
+            _ => "result".into(),
+        }
+    }
+
     pub fn build(&self, ctx: &OpContext) -> Result<BuiltOp> {
         let cur = ctx.current_query;
         let q = quote_ident;

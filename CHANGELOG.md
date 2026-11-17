@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- **Table operations open their result in a new tab.** Group By, Pivot, Unpivot, Transpose, Value Counts, Describe, Join and Append no longer replace the table you run them on. The source keeps its data, steps and edits.
+  - **The new tab is named after what happened:** `orders_by_region`, `orders_pivot`, `orders_join_customers`…
+  - **It's a table of its own:** cells can be edited, formula columns added, and any operation applied to it.
+  - **A chip by the table name shows where it came from:** `from orders · Group By region`. Click it to go to the source; **↻** computes the result again from the source's current data.
+  - **It's not a file yet:** it shows the unsaved dot, `Ctrl+S` opens Save As, and closing it asks first.
+  - **The result is computed in the background** with progress and Stop. A result over 5,000,000 rows isn't kept in memory: ParVu offers to write it straight to a Parquet or CSV file and open that.
+  - **SQL:** the new **Result in new tab** box next to Execute Query runs a query into a new tab.
+  - **AI clients** get the same rule: a table operation opens a new table, named in the answer, and the approval card says so.
 - **Menus by what an operation touches: Rows, Column and Table.** They replace Data, Reshape and Operations.
   - **Rows:** filter, sort, first/last/random rows, drop duplicates, drop empty rows.
   - **Column:** names the selected column (`Column: qty`) and holds everything that adds or changes a column: formulas, rename, duplicate, remove, types, text and date functions, replace, fill missing, split, merge, bin, running totals. A column header's right-click menu is the same menu, plus sort, filter, freeze and formatting.

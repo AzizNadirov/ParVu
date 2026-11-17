@@ -69,6 +69,10 @@ struct Tab {
     formulas: Vec<Formula>,
     /// The worksheet shown, as named in the file (Excel only).
     sheet: Option<String>,
+    /// A table operation's result: where it came from (until saved).
+    origin: Option<Origin>,
+    /// The in-memory table holding a result's rows (until saved).
+    result_table: Option<String>,
 }
 
 impl Tab {
@@ -117,6 +121,80 @@ pub struct OpPreview {
     pub rows: Vec<Vec<crate::page::Cell>>,
 }
 
+/// Rows a table operation's result may have in memory. A bigger result is
+/// written to a file instead ([`Materialized::TooBig`]).
+pub const RESULT_ROW_LIMIT: u64 = 5_000_000;
+
+/// Names of the in-memory tables holding results (unique per process).
+static NEXT_RESULT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// How a result tab was made from its source.
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Derivation {
+    /// A table operation (Group By, Pivot, Join…).
+    Op { op: Operation },
+    /// A SQL query run "into a new tab".
+    Sql { sql: String },
+}
+
+/// Where a result tab came from.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Origin {
+    pub source_id: TabId,
+    /// The source tab's table name.
+    pub source: String,
+    /// What was done, e.g. "Group By region".
+    pub label: StepLabel,
+    pub derivation: Derivation,
+}
+
+/// A result to compute: [`Workspace::plan_result`], then [`materialize`] on
+/// any connection (a job), then [`Workspace::add_result`] or
+/// [`Workspace::replace_result`].
+#[derive(Debug, Clone)]
+pub struct ResultPlan {
+    /// The result's SQL over the source's current data.
+    pub sql: String,
+    /// The in-memory table to fill.
+    pub table: String,
+    /// The new tab's table name.
+    pub name: String,
+    pub origin: Origin,
+}
+
+/// What [`materialize`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", content = "rows", rename_all = "snake_case")]
+pub enum Materialized {
+    /// The result table holds this many rows.
+    Rows(u64),
+    /// More than [`RESULT_ROW_LIMIT`] rows: nothing was kept.
+    TooBig,
+}
+
+/// Compute `plan` into its in-memory table. Reads at most one row past the
+/// limit, so a huge join stops early instead of filling memory.
+pub fn materialize(conn: &Connection, plan: &ResultPlan) -> Result<Materialized> {
+    let table = quote_ident(&plan.table);
+    conn.execute_batch(&format!(
+        "CREATE TABLE {table} AS SELECT * FROM ({}) LIMIT {}",
+        plan.sql,
+        RESULT_ROW_LIMIT + 1
+    ))?;
+    let rows: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?;
+    if rows as u64 > RESULT_ROW_LIMIT {
+        conn.execute_batch(&format!("DROP TABLE IF EXISTS {table}"))?;
+        return Ok(Materialized::TooBig);
+    }
+    Ok(Materialized::Rows(rows.max(0) as u64))
+}
+
+/// Drop a result table that will not be used (a cancelled or failed job).
+pub fn discard_result(conn: &Connection, plan: &ResultPlan) {
+    let _ = conn.execute_batch(&format!("DROP TABLE IF EXISTS {}", quote_ident(&plan.table)));
+}
+
 /// Everything the UI shows about a tab apart from the data itself.
 #[derive(Debug, Clone, Serialize)]
 pub struct TabSummary {
@@ -142,6 +220,9 @@ pub struct TabSummary {
     /// The worksheet's name in the file as stored (for per-sheet settings).
     #[serde(skip)]
     pub stored_sheet: Option<String>,
+    /// A table operation's result not saved to a file yet: where it came
+    /// from. Its `path` is empty.
+    pub origin: Option<Origin>,
 }
 
 /// The sheets of the workbook a tab shows, for its sheet menu.
@@ -628,6 +709,8 @@ impl Workspace {
             csv: csv.clone(),
             formulas: Vec::new(),
             sheet,
+            origin: None,
+            result_table: None,
         });
         Ok(id)
     }
@@ -646,6 +729,9 @@ impl Workspace {
         let idx = self.tabs.iter().position(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
         let tab = self.tabs.remove(idx);
         self.drop_relations(&tab.name);
+        if let Some(table) = &tab.result_table {
+            let _ = self.conn.execute_batch(&format!("DROP TABLE IF EXISTS {}", quote_ident(table)));
+        }
         // Sheet changes of a workbook no tab shows any more are dropped.
         let key = book_key(&tab.path);
         if !self.tabs.iter().any(|t| book_key(&t.path) == key) {
@@ -677,6 +763,7 @@ impl Workspace {
             }),
             sheets_changed: t.sheet.is_some() && self.workbooks.contains_key(&book_key(&t.path)),
             stored_sheet: t.sheet.clone(),
+            origin: t.origin.clone(),
         })
     }
 
@@ -894,6 +981,152 @@ impl Workspace {
         Ok(crate::types::best_reading(&self.conn, &sample, column, 0.9)?.unwrap_or(Reading::Text))
     }
 
+    /// A table name not used by any tab: `base`, `base_2`…
+    fn unique_name(&self, base: &str) -> String {
+        let mut name = base.to_string();
+        let mut n = 2;
+        while self.tabs.iter().any(|t| t.name == name) {
+            name = format!("{base}_{n}");
+            n += 1;
+        }
+        name
+    }
+
+    /// Plan a result tab from tab `id`: a table operation or a SQL query.
+    /// Checks that the SQL binds; nothing changes yet.
+    pub fn plan_result(&self, id: TabId, derivation: Derivation) -> Result<ResultPlan> {
+        let t = self.tab(id)?;
+        let (sql, label, suffix) = match &derivation {
+            Derivation::Op { op } => {
+                if !op.is_table_op() {
+                    return Err(CoreError::invalid("This operation changes the table itself; it doesn't make a new table"));
+                }
+                let built = self.build_op(id, op)?;
+                (built.sql, built.label, op.result_suffix())
+            }
+            Derivation::Sql { sql } => {
+                let short: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+                let short = if short.chars().count() > 60 { format!("{}…", short.chars().take(60).collect::<String>()) } else { short };
+                (sql.trim().trim_end_matches(';').to_string(), StepLabel::new("step.query", &[("sql", &short)]), "query".into())
+            }
+        };
+        crate::engine::validate(&self.conn, &sql)?;
+        Ok(ResultPlan {
+            sql,
+            table: format!("__pv_res_{}", NEXT_RESULT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
+            name: self.unique_name(&slugify_name(&format!("{}_{suffix}", t.name))),
+            origin: Origin { source_id: t.id, source: t.name.clone(), label, derivation },
+        })
+    }
+
+    /// Open a computed result (see [`materialize`]) as a new tab.
+    pub fn add_result(&mut self, plan: ResultPlan) -> Result<TabId> {
+        let name = self.unique_name(&plan.name);
+        let src = source_view(&name);
+        let result = (|| {
+            self.conn.execute_batch(&format!(
+                "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
+                quote_ident(&src),
+                quote_ident(&plan.table)
+            ))?;
+            create_views(&self.conn, &name, &[], &[])?;
+            QueryEngine::new(&self.conn, &name, self.page_size)
+        })();
+        let engine = match result {
+            Ok(e) => e,
+            Err(e) => {
+                self.drop_relations(&name);
+                discard_result(&self.conn, &plan);
+                return Err(e);
+            }
+        };
+        let id = self.next_id;
+        self.next_id += 1;
+        tracing::info!("result {name} from {} ({} rows)", plan.origin.source, engine.total_rows());
+        self.tabs.push(Tab {
+            id,
+            name,
+            path: PathBuf::new(),
+            format: FileFormat::Parquet,
+            engine,
+            edits: EditQueue::new(),
+            steps: Vec::new(),
+            source: Vec::new(),
+            csv: CsvOptions::default(),
+            formulas: Vec::new(),
+            sheet: None,
+            origin: Some(plan.origin),
+            result_table: Some(plan.table),
+        });
+        Ok(id)
+    }
+
+    /// The plan that computes result tab `id` again from its source's
+    /// current data (Refresh).
+    pub fn refresh_plan(&self, id: TabId) -> Result<ResultPlan> {
+        let t = self.tab(id)?;
+        let origin = t.origin.as_ref().ok_or_else(|| CoreError::invalid("This table was not made by a table operation"))?;
+        if self.tab(origin.source_id).is_err() {
+            return Err(CoreError::invalid(format!("The table it came from ({}) is closed", origin.source)));
+        }
+        let mut plan = self.plan_result(origin.source_id, origin.derivation.clone())?;
+        plan.name = t.name.clone();
+        Ok(plan)
+    }
+
+    /// Show a newly computed result in tab `id` (Refresh). Cell edits and
+    /// steps are dropped; formulas are kept when they still apply.
+    pub fn replace_result(&mut self, id: TabId, plan: ResultPlan) -> Result<()> {
+        let (name, old, formulas) = {
+            let t = self.tab(id)?;
+            (t.name.clone(), t.result_table.clone(), t.formulas.clone())
+        };
+        let src = source_view(&name);
+        let swap = (|| {
+            self.conn.execute_batch(&format!(
+                "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
+                quote_ident(&src),
+                quote_ident(&plan.table)
+            ))?;
+            let formulas = match create_views(&self.conn, &name, &[], &formulas) {
+                Ok(()) => formulas,
+                Err(_) => {
+                    create_views(&self.conn, &name, &[], &[])?;
+                    Vec::new()
+                }
+            };
+            Ok::<_, CoreError>((QueryEngine::new(&self.conn, &name, self.page_size)?, formulas))
+        })();
+        let (engine, formulas) = match swap {
+            Ok(v) => v,
+            Err(e) => {
+                // Back to the previous rows.
+                if let Some(old) = &old {
+                    let _ = self.conn.execute_batch(&format!(
+                        "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
+                        quote_ident(&src),
+                        quote_ident(old)
+                    ));
+                    let t = self.tab(id)?;
+                    let _ = create_views(&self.conn, &name, t.edits.all(), &t.formulas);
+                }
+                discard_result(&self.conn, &plan);
+                return Err(e);
+            }
+        };
+        if let Some(old) = old {
+            let _ = self.conn.execute_batch(&format!("DROP TABLE IF EXISTS {}", quote_ident(&old)));
+        }
+        let tab = self.tab_mut(id)?;
+        tab.engine = engine;
+        tab.edits.clear();
+        tab.steps.clear();
+        tab.formulas = formulas;
+        tab.origin = Some(plan.origin);
+        tab.result_table = Some(plan.table);
+        Ok(())
+    }
+
     /// Apply a table operation as a new step.
     pub fn apply(&mut self, id: TabId, op: &Operation) -> Result<StepLabel> {
         let built = self.build_op(id, op)?;
@@ -1106,7 +1339,8 @@ impl Workspace {
     }
 
     pub fn has_unsaved_changes(&self, id: TabId) -> Result<bool> {
-        Ok(!self.tab(id)?.steps.is_empty())
+        let t = self.tab(id)?;
+        Ok(!t.steps.is_empty() || t.result_table.is_some())
     }
 
     /// Write the tab's current result (edits and transforms applied) to
@@ -1115,6 +1349,9 @@ impl Workspace {
     pub fn save(&mut self, id: TabId, target: Option<&Path>) -> Result<u64> {
         let (query, out, name, from, sheet) = {
             let t = self.tab(id)?;
+            if target.is_none() && t.result_table.is_some() {
+                return Err(CoreError::invalid("This table is not a file yet: use Save As"));
+            }
             let out = target.map(Path::to_path_buf).unwrap_or_else(|| t.path.clone());
             (t.engine.current_query().to_string(), out, t.name.clone(), t.path.clone(), t.sheet.clone())
         };
@@ -1219,6 +1456,11 @@ impl Workspace {
         tab.csv = CsvOptions::default();
         tab.formulas.clear();
         tab.sheet = sheet.map(str::to_string);
+        // A saved result is a file now.
+        tab.origin = None;
+        if let Some(table) = tab.result_table.take() {
+            let _ = self.conn.execute_batch(&format!("DROP TABLE IF EXISTS {}", quote_ident(&table)));
+        }
         Ok(())
     }
 
