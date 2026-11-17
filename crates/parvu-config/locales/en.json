@@ -1455,5 +1455,15 @@
   "settings.label.query_collapsed": "Start with the SQL Query panel collapsed",
   "settings.label.show_steps": "Expand Applied Steps",
   "settings.label.show_ai": "Show the AI assistant panel",
-  "settings.hint.view": "Changes made in the View menu are remembered here too."
+  "settings.hint.view": "Changes made in the View menu are remembered here too.",
+  "menu.operations.mark_duplicates": "Mark Duplicates…",
+  "dialog.drop_duplicates.keep_none": "None: drop every duplicated row",
+  "dialog.mark_duplicates.title": "Mark Duplicates",
+  "dialog.mark_duplicates.mark": "Mark:",
+  "dialog.mark_duplicates.but_first": "Every repeat after the first",
+  "dialog.mark_duplicates.but_last": "Every repeat before the last",
+  "dialog.mark_duplicates.all": "Every duplicated row, first included",
+  "dialog.mark_duplicates.name": "New column:",
+  "step.drop_duplicates_all": "Drop every duplicated row on {columns}",
+  "step.mark_duplicates": "Mark duplicates on {columns} as {name}"
 }

@@ -91,6 +91,9 @@ import {
   mdiTableRowRemove,
   mdiTextSearch,
   mdiTranslate,
+  mdiCheckboxMultipleMarkedOutline,
+  mdiFileDocumentOutline,
+  mdiPencilBoxOutline,
 } from "@mdi/js";
 
 export const icons = {
@@ -184,14 +187,33 @@ export const icons = {
   paste: mdiContentPaste,
   table: mdiTableLarge,
   editCell: mdiTableEdit,
+  markDuplicates: mdiCheckboxMultipleMarkedOutline,
+  file: mdiFileDocumentOutline,
+  editMenu: mdiPencilBoxOutline,
 } as const;
 
-export type IconName = keyof typeof icons;
+/** Icons drawn as short text where no picture fits, e.g. "dt" for data
+ * types (pandas' `df.dtypes`). */
+export const glyphs = {
+  dtype: "dt",
+} as const;
+
+export type IconName = keyof typeof icons | keyof typeof glyphs;
 
 export function Icon({ name, size = 18, className }: { name: IconName; size?: number; className?: string }) {
+  const cls = `pv-icon${className ? ` ${className}` : ""}`;
+  if (name in glyphs) {
+    return (
+      <svg className={cls} viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+        <text x="12" y="16.5" textAnchor="middle" fontSize="14" fontWeight="700" fontFamily="monospace" fill="currentColor">
+          {glyphs[name as keyof typeof glyphs]}
+        </text>
+      </svg>
+    );
+  }
   return (
-    <svg className={`pv-icon${className ? ` ${className}` : ""}`} viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
-      <path d={icons[name]} fill="currentColor" />
+    <svg className={cls} viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <path d={icons[name as keyof typeof icons]} fill="currentColor" />
     </svg>
   );
 }

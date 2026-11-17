@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- **Duplicates:**
+  - **Drop Duplicates** can also keep **none**: every row that has a duplicate goes, as pandas `keep=False` does.
+  - The new **Mark Duplicates** adds a yes/no column instead of dropping rows, like pandas `duplicated()`: every repeat after the first, before the last, or every duplicated row.
+  - Both are in **Rows** and in the column menu's **Clean** group, with that column already ticked.
+- **A slimmer query panel.** Collapsed, it's one line: the title, then Table Info, Filter, Group by, Chart, Formula, Join and Append. The SQL / Expression switch shows only while it's open. The menu-bar titles (File, Edit, View…) have icons, and the column menu's Type group uses a `dt` icon.
 - **Menus with icons, and shorter right-click menus.**
   - Every menu item has an icon.
   - The column menu, both the right-click menu on a header and Column in the menu bar, is grouped into named submenus: **Column** (rename, duplicate, remove), **Type**, **Transform**, **Clean**, **Analyze**, plus the column type's own functions (Text, Extract, Dates…). The header menu keeps Sort and Filter at the top and adds **New Table from This Column** and **Display** (freeze, formatting).

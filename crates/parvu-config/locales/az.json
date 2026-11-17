@@ -1455,5 +1455,15 @@
   "settings.label.query_collapsed": "SQL sorğu paneli yığılmış başlasın",
   "settings.label.show_steps": "Tətbiq olunmuş addımları açıq göstər",
   "settings.label.show_ai": "AI köməkçi panelini göstər",
-  "settings.hint.view": "Görünüş menyusundakı dəyişikliklər də burada yadda saxlanılır."
+  "settings.hint.view": "Görünüş menyusundakı dəyişikliklər də burada yadda saxlanılır.",
+  "menu.operations.mark_duplicates": "Təkrarları işarələ…",
+  "dialog.drop_duplicates.keep_none": "Heç biri: bütün təkrarlanan sətirləri sil",
+  "dialog.mark_duplicates.title": "Təkrarları işarələ",
+  "dialog.mark_duplicates.mark": "İşarələ:",
+  "dialog.mark_duplicates.but_first": "Birincidən sonrakı hər təkrar",
+  "dialog.mark_duplicates.but_last": "Sonuncudan əvvəlki hər təkrar",
+  "dialog.mark_duplicates.all": "Birinci daxil, bütün təkrarlanan sətirlər",
+  "dialog.mark_duplicates.name": "Yeni sütun:",
+  "step.drop_duplicates_all": "{columns} üzrə bütün təkrarlanan sətirlər silindi",
+  "step.mark_duplicates": "{columns} üzrə təkrarlar {name} sütununda işarələndi"
 }

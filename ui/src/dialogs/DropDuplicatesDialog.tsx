@@ -3,19 +3,25 @@ import type { Ui, Closer } from "../lib/ui";
 import type { Keep, Operation } from "../lib/api";
 import { Dialog } from "../components/Dialog";
 import { RichText, SubmitOnEnter } from "./common";
-import { buildDropDuplicatesOp } from "./logic";
+import { buildDropDuplicatesOp, buildMarkDuplicatesOp } from "./logic";
 import "./dialogs.css";
 
 interface Args {
   table: string;
   columns: string[];
+  /** Ticked at the start (the column a menu was opened on). */
+  selected?: string;
+  /** Mark Duplicates: add a yes/no column instead of dropping rows. */
+  mark?: boolean;
 }
 
 function DropDuplicatesDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>; a: Args }) {
   const t = ui.t;
-  const [checked, setChecked] = useState<Set<string>>(() => new Set());
+  const [checked, setChecked] = useState<Set<string>>(() => new Set(a.selected ? [a.selected] : []));
   const [keep, setKeep] = useState<Keep>("first");
-  const submit = () => close(buildDropDuplicatesOp(a.columns, checked, keep));
+  const [name, setName] = useState("is_duplicate");
+  const op = a.mark ? buildMarkDuplicatesOp(a.columns, checked, keep, name) : buildDropDuplicatesOp(a.columns, checked, keep);
+  const submit = () => op && close(op);
   const toggle = (c: string) =>
     setChecked((s) => {
       const n = new Set(s);
@@ -26,14 +32,14 @@ function DropDuplicatesDialog({ ui, close, a }: { ui: Ui; close: Closer<Operatio
 
   return (
     <Dialog
-      title={t("dialog.drop_duplicates.title")}
+      title={t(a.mark ? "dialog.mark_duplicates.title" : "dialog.drop_duplicates.title")}
       onClose={() => close(null)}
       onSubmit={submit}
       className="pv-dialog-narrow"
       footer={
         <>
           <button onClick={() => close(null)}>{t("btn.cancel")}</button>
-          <button className="primary" disabled={a.columns.length === 0} onClick={submit}>
+          <button className="primary" disabled={a.columns.length === 0 || !op} onClick={submit}>
             {t("btn.ok")}
           </button>
         </>
@@ -60,12 +66,29 @@ function DropDuplicatesDialog({ ui, close, a }: { ui: Ui; close: Closer<Operatio
           ))}
         </div>
         <label className="row">
-          {t("dialog.drop_duplicates.keep")}
+          {t(a.mark ? "dialog.mark_duplicates.mark" : "dialog.drop_duplicates.keep")}
           <select value={keep} onChange={(e) => setKeep(e.target.value as Keep)}>
-            <option value="first">{t("dialog.drop_duplicates.keep_first")}</option>
-            <option value="last">{t("dialog.drop_duplicates.keep_last")}</option>
+            {a.mark ? (
+              <>
+                <option value="first">{t("dialog.mark_duplicates.but_first")}</option>
+                <option value="last">{t("dialog.mark_duplicates.but_last")}</option>
+                <option value="none">{t("dialog.mark_duplicates.all")}</option>
+              </>
+            ) : (
+              <>
+                <option value="first">{t("dialog.drop_duplicates.keep_first")}</option>
+                <option value="last">{t("dialog.drop_duplicates.keep_last")}</option>
+                <option value="none">{t("dialog.drop_duplicates.keep_none")}</option>
+              </>
+            )}
           </select>
         </label>
+        {a.mark && (
+          <label className="row">
+            {t("dialog.mark_duplicates.name")}
+            <input className="grow" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+        )}
       </SubmitOnEnter>
     </Dialog>
   );

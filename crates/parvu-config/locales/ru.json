@@ -1455,5 +1455,15 @@
   "settings.label.query_collapsed": "Начинать со свёрнутой панелью SQL-запроса",
   "settings.label.show_steps": "Разворачивать применённые шаги",
   "settings.label.show_ai": "Показывать панель AI-ассистента",
-  "settings.hint.view": "Изменения в меню «Вид» тоже запоминаются здесь."
+  "settings.hint.view": "Изменения в меню «Вид» тоже запоминаются здесь.",
+  "menu.operations.mark_duplicates": "Отметить дубликаты…",
+  "dialog.drop_duplicates.keep_none": "Ни одной: удалить все повторяющиеся строки",
+  "dialog.mark_duplicates.title": "Отметить дубликаты",
+  "dialog.mark_duplicates.mark": "Отметить:",
+  "dialog.mark_duplicates.but_first": "Каждый повтор после первого",
+  "dialog.mark_duplicates.but_last": "Каждый повтор до последнего",
+  "dialog.mark_duplicates.all": "Все повторяющиеся строки, включая первую",
+  "dialog.mark_duplicates.name": "Новый столбец:",
+  "step.drop_duplicates_all": "Удалены все повторяющиеся строки по {columns}",
+  "step.mark_duplicates": "Дубликаты по {columns} отмечены в {name}"
 }

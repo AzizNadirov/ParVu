@@ -20,6 +20,8 @@
   font-weight: 400;
 }
 .menubar-title:hover:not(:disabled), .menubar-title.open { background: var(--pv-colors-menu-hover); }
+.menubar-title { gap: 6px; }
+.menubar-title .pv-icon { color: var(--md-on-surface-variant); }
 
 .workspace {
   flex: 1 1 auto; min-height: 0;
@@ -39,7 +41,7 @@
   border-radius: var(--md-shape-l);
 }
 .editor-toolbar { flex: 0 0 auto; }
-.editor-panel.collapsed { min-height: 0; padding-bottom: 8px; }
+.editor-panel.collapsed { min-height: 0; padding-top: 4px; padding-bottom: 4px; }
 .editor-toolbar .panel-toggle { width: 28px; height: 28px; min-height: 28px; padding: 0; margin-left: -4px; }
 .editor-toolbar strong { font-weight: 500; }
 .segmented {

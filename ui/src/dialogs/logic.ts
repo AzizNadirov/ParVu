@@ -57,6 +57,13 @@ export function buildDropDuplicatesOp(allColumns: string[], selected: Iterable<s
   return { op: "drop_duplicates", columns: allColumns.filter((c) => set.has(c)), keep };
 }
 
+/** A yes/no column for duplicated rows; null without a name. */
+export function buildMarkDuplicatesOp(allColumns: string[], selected: Iterable<string>, keep: Keep, name: string): Operation | null {
+  const set = new Set(selected);
+  if (!name.trim()) return null;
+  return { op: "mark_duplicates", columns: allColumns.filter((c) => set.has(c)), keep, name: name.trim() };
+}
+
 /** `null_value` is null for real NULLs, otherwise the sentinel text as typed. */
 export function buildDropNullOp(column: string, useSentinel: boolean, sentinel: string): Operation | null {
   if (!column) return null;
