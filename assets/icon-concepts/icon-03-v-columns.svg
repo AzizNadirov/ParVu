@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>ParVu icon concept 03: V of Columns</title><rect x="24" y="24" width="464" height="464" rx="108" fill="#EADDFF"/>
+  <g fill="#6750A4">
+    <rect x="64" y="96" width="64" height="136" rx="18"/>
+    <rect x="144" y="96" width="64" height="228" rx="18"/>
+    <rect x="304" y="96" width="64" height="228" rx="18"/>
+    <rect x="384" y="96" width="64" height="136" rx="18"/>
+  </g>
+  <rect x="224" y="96" width="64" height="320" rx="18" fill="#21005D"/>
+</svg>

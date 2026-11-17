@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- ParVu at 24 px: the master redrawn on whole pixels (columns 4 px, 2 px apart; 1 px gaps). -->
+  <rect x="0.5" y="0.5" width="23" height="23" rx="5.5" fill="#6750A4"/>
+  <g fill="#FFFFFF">
+    <rect x="4" y="4" width="4" height="6" rx="1"/>
+    <rect x="4" y="11" width="4" height="9" rx="1"/>
+    <rect x="10" y="4" width="4" height="3" rx="1"/>
+    <rect x="10" y="17" width="4" height="3" rx="1"/>
+    <rect x="16" y="4" width="4" height="9" rx="1"/>
+    <rect x="16" y="14" width="4" height="6" rx="1"/>
+  </g>
+  <rect x="10" y="8" width="4" height="8" rx="1" fill="#FFC66B"/>
+</svg>

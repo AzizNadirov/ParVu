@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>ParVu icon concept 02: Grid Lens</title><rect x="24" y="24" width="464" height="464" rx="108" fill="#4F378B"/>
+  <g fill="#7F67BE">
+    <rect x="76" y="76" width="104" height="104" rx="22"/>
+    <rect x="204" y="76" width="104" height="104" rx="22"/>
+    <rect x="332" y="76" width="104" height="104" rx="22"/>
+    <rect x="76" y="204" width="104" height="104" rx="22"/>
+    <rect x="332" y="204" width="104" height="104" rx="22"/>
+    <rect x="76" y="332" width="104" height="104" rx="22"/>
+    <rect x="204" y="332" width="104" height="104" rx="22"/>
+  </g>
+  <path d="M316 316 L404 404" stroke="#FFFFFF" stroke-width="52" stroke-linecap="round" fill="none"/>
+  <circle cx="228" cy="228" r="112" fill="#21005D" stroke="#FFFFFF" stroke-width="40"/>
+  <g fill="#EADDFF">
+    <rect x="168" y="168" width="52" height="52" rx="12"/>
+    <rect x="236" y="168" width="52" height="52" rx="12"/>
+    <rect x="168" y="236" width="52" height="52" rx="12"/>
+    <rect x="236" y="236" width="52" height="52" rx="12"/>
+  </g>
+</svg>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>ParVu icon concept 01: Column Chunks</title><rect x="24" y="24" width="464" height="464" rx="108" fill="#6750A4"/>
+  <g fill="#FFFFFF">
+    <rect x="88" y="100" width="84" height="124" rx="20"/>
+    <rect x="88" y="254" width="84" height="158" rx="20"/>
+    <rect x="214" y="100" width="84" height="76" rx="20"/>
+    <rect x="214" y="352" width="84" height="60" rx="20"/>
+    <rect x="340" y="100" width="84" height="188" rx="20"/>
+    <rect x="340" y="318" width="84" height="94" rx="20"/>
+  </g>
+  <rect x="214" y="206" width="84" height="116" rx="20" fill="#FFC66B"/>
+</svg>
