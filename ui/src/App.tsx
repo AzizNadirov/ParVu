@@ -1599,7 +1599,7 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   /** Ask about unsaved edits of `tab`. True when it may be closed. */
   const resolveUnsaved = useCallback(
-    async (tab: TabSummary): Promise<boolean> => {
+    async (tab: TabSummary, closingTab = false): Promise<boolean> => {
       // Sheet changes belong to the workbook: they go with its last tab.
       const lastOfBook = tab.sheets_changed && !tabs.some((x) => x.id !== tab.id && x.path === tab.path);
       if (lastOfBook) {
@@ -1622,6 +1622,18 @@ export function App({ boot }: { boot: Bootstrap }) {
         if (choice === "save") return saveAsRef.current(tab);
         return choice === "discard";
       }
+      // Closing one tab with steps (filters, operations) but no cell edits:
+      // the window asks about these once for all tabs when it closes.
+      if (closingTab && !tab.pending_edits && tab.steps.length && settings.warn_on_exit_with_transforms) {
+        if (tab.id !== active) switchTo(tab.id);
+        const choice = await ui.ask(t("dialog.close_tab.title", { name: tab.name }), t("dialog.close_tab.steps", { count: tab.steps.length }), [
+          { id: "discard", label: t("dialog.unsaved.discard"), danger: true },
+          { id: "cancel", label: t("btn.cancel") },
+          { id: "save", label: t("btn.save"), primary: true },
+        ]);
+        if (choice === "save") return saveTab(tab, null);
+        return choice === "discard";
+      }
       if (!tab.pending_edits) return true;
       if (tab.id !== active) switchTo(tab.id);
       const choice = await openUnsavedChanges(ui, { count: tab.pending_edits });
@@ -1629,13 +1641,13 @@ export function App({ boot }: { boot: Bootstrap }) {
       if (choice === "save") return saveTab(tab, null);
       return true;
     },
-    [active, switchTo, ui, saveTab, tabs, t],
+    [active, switchTo, ui, saveTab, tabs, t, settings.warn_on_exit_with_transforms],
   );
 
   const closeTab = useCallback(
     async (id: number) => {
       const tab = tabs.find((x) => x.id === id);
-      if (!tab || !(await resolveUnsaved(tab))) return;
+      if (!tab || !(await resolveUnsaved(tab, true))) return;
       try {
         await api.closeTab(id);
       } catch {

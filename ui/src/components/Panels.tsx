@@ -203,7 +203,9 @@ export function Welcome(props: {
             <strong>{t("welcome.recent")}</strong>
             {props.recents.slice(0, 10).map((r) => (
               <button key={r} className="link ellipsis" title={r} onClick={() => props.onOpen(r)}>
-                {r}
+                {/* The file name first: long folders are what gets cut off. */}
+                <span className="recent-name">{r.split(/[\\/]/).pop()}</span>
+                <span className="recent-dir muted">{r.slice(0, Math.max(0, r.length - (r.split(/[\\/]/).pop()?.length ?? 0) - 1))}</span>
               </button>
             ))}
           </div>

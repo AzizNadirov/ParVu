@@ -1480,5 +1480,7 @@
   "where.match": "Rows that match",
   "where.hint": "Other rows keep their value; a new column is empty there.",
   "where.hint_set": "Only these rows change; the others keep their value.",
-  "pagination.rows_one": "1 row"
+  "pagination.rows_one": "1 row",
+  "dialog.close_tab.title": "Close {name}?",
+  "dialog.close_tab.steps": "Its {count} applied steps are not saved. Save writes them to the file."
 }

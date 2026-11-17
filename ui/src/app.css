@@ -240,6 +240,8 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
   overflow: hidden;
 }
 .welcome .recents button.link:hover:not(:disabled) { background: var(--md-hover); }
+.welcome .recents .recent-name { font-weight: 500; margin-right: 8px; }
+.welcome .recents .recent-dir { font-size: 0.9em; }
 
 /* Glide's overlay editor */
 #portal .gdg-style { font-family: var(--pv-layout-table-font-family), sans-serif; border-radius: var(--md-shape-xs); }

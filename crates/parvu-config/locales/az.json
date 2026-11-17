@@ -1480,5 +1480,7 @@
   "where.match": "Uyğun gələn sətirlər:",
   "where.hint": "Digər sətirlər dəyərini saxlayır; yeni sütunda onlar boş qalır.",
   "where.hint_set": "Yalnız bu sətirlər dəyişir; digərləri dəyərini saxlayır.",
-  "pagination.rows_one": "1 sətir"
+  "pagination.rows_one": "1 sətir",
+  "dialog.close_tab.title": "{name} bağlansın?",
+  "dialog.close_tab.steps": "Tətbiq olunmuş {count} addım saxlanmayıb. Saxla onları fayla yazacaq."
 }
