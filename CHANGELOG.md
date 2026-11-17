@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- **A new start screen.** With no file open, ParVu shows two columns.
+  - **Left:** a drop zone with **Open File** and **Open with Options**, the path box, and your five most recent files (format, name, folder, plus a link to the rest). With no recent files yet, three steps from a file to an answer appear instead.
+  - **Right:** the AI assistant (it says **Add a model** until one is set up) and **Connect an AI client**, keyboard shortcuts and the expression guide, what's new with a link to the release notes, and theme and language pickers.
+
 ### Fixed
 - **Data safety:**
   - **Undo of a second edit of a cell** went back to the file's value, losing the first edit too.
