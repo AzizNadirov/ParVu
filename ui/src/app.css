@@ -144,6 +144,8 @@
   background: var(--pv-colors-table-background);
 }
 .grid-host, .grid-empty { position: absolute; inset: 0; }
+.grid-new-column { width: 44px; border: none; border-left: 1px solid var(--md-outline-variant); border-radius: 0; padding: 0; font-size: 18px; cursor: pointer; background: var(--pv-colors-table-header-background); color: var(--pv-colors-table-header-foreground); }
+.grid-new-column:hover { background: var(--pv-colors-button-hover); }
 .busy-bar {
   position: absolute; left: 0; right: 0; top: 0; height: 4px;
   background: color-mix(in srgb, var(--md-primary) 20%, transparent);
@@ -303,6 +305,7 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
   background: var(--md-surface-container-low);
 }
 .formula-bar.editing { border-color: var(--md-primary); background: var(--md-surface); }
+.formula-bar .formula-icon { display: inline-flex; padding: 0 6px; color: var(--md-primary); }
 .formula-bar .formula-target { font-weight: 600; color: var(--md-on-surface-variant); white-space: nowrap; }
 .formula-bar .pv-formula-error { text-decoration: underline wavy var(--md-error); text-decoration-skip-ink: none; text-underline-offset: 3px; }
 .formula-bar .formula-name { width: 140px; font-weight: 600; }

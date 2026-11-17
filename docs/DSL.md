@@ -280,11 +280,11 @@ SELECT * FROM data WHERE score IS NULL OR score <> -1
 
 The first argument must be a column reference. The second (optional) must be a
 literal (string, integer, or float). Available in the UI under
-**Operations → Drop Null Values...** and via the column header context menu.
+**Rows → Drop Rows with Empty Values…** and via the column header context menu.
 
 ## Column Formulas
 
-A formula column (type `=` in a cell, or use the *fx* button of the formula bar) computes every row from an expression and updates when cells change. Formulas use bare `[column]` references; three forms exist only in formulas:
+A formula column (**Column → New Formula Column**, the **Formula** button, or the **+** header after the last column; the formula bar opens while you write it) computes every row from an expression and updates when cells change. Formulas use bare `[column]` references; three forms exist only in formulas:
 
 | Formula | Meaning |
 |---|---|

@@ -71,9 +71,9 @@ Hover for exact values, tick **Show the numbers as a table** to read them, and *
 
 While no transform is applied, you can type into any cell. Edited cells are highlighted, and values that don't fit the column type are rejected.
 
-- `Ctrl+D` copies the top value of each selected column down the selection, and `Ctrl+R` the left value of each row to the right (one undoable step each). **Data → Fill** also fills up and left.
+- `Ctrl+D` copies the top value of each selected column down the selection, and `Ctrl+R` the left value of each row to the right (one undoable step each). **Edit → Fill** also fills up and left.
 - Drag the small square at the corner of a selection to fill the next cells with a series: `1, 2` → `3, 4`, dates by day or month, `Jan` → `Feb`, `Item 1` → `Item 2`. Anything else is repeated.
-- **Data → Fill → Series…** fills the selection from its first cell with a step you choose: add it, multiply by it, or step dates by days, weeks, months or years, optionally up to a stop value.
+- **Edit → Fill → Series…** fills the selection from its first cell with a step you choose: add it, multiply by it, or step dates by days, weeks, months or years, optionally up to a stop value.
 - `Ctrl+S` saves edits and transforms back into the file.
 - File → Save As (`Ctrl+Shift+S`) writes a new Parquet, CSV, JSON or Excel file.
 - File → Export (`Ctrl+E`) writes the current result with options: columns, types, date formats, delimiter, compression.

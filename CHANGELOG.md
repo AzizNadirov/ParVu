@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- **Menus by what an operation touches: Rows, Column and Table.** They replace Data, Reshape and Operations.
+  - **Rows:** filter, sort, first/last/random rows, drop duplicates, drop empty rows.
+  - **Column:** names the selected column (`Column: qty`) and holds everything that adds or changes a column: formulas, rename, duplicate, remove, types, text and date functions, replace, fill missing, split, merge, bin, running totals. A column header's right-click menu is the same menu, plus sort, filter, freeze and formatting.
+  - **Table:** group by, pivot, unpivot, transpose, value counts, describe, join and append.
+  - **Fill** (down, up, right, left, Series…) moved to **Edit**.
 - **Excel functions.** About 100 of Excel's most used functions work in formulas and expressions under their Excel names and argument order: `ROUNDUP`, `MROUND`, `IFS`, `SWITCH`, `IFERROR`, `PROPER`, `TEXTJOIN`, `TEXTBEFORE`, `DATEDIF`, `EOMONTH`, `NETWORKDAYS`, `AVERAGE`, `MEDIAN`, `LARGE`, `COUNTIF`, `SUMIFS`, `MAXIFS`, `XLOOKUP`, `VLOOKUP`, `TEXT` with Excel format codes, and more.
   - Conditional totals take Excel's criteria (`"North"`, `">10"`, `"a*"`), and `COUNTIF([region], [region])` counts the rows like this one.
   - `XLOOKUP` and `VLOOKUP` look up values in another open tab.
@@ -14,7 +19,7 @@
   - "Read as" choices and formulas are remembered per sheet.
   - AI clients can open a given sheet (`open_file` takes `sheet` and lists the sheets).
 - **Column formulas and the formula bar.** A formula column computes every row from an expression such as `= [qty] * [price]`.
-  - **Starting a formula:** type `=` in a cell, use the *fx* button of the new formula bar above the grid, or choose **New Formula Column After This** in the column menu.
+  - **Starting a formula:** **Column → New Formula Column** (or the same item in a column header's menu), the **Formula** button, or the **+** header after the last column. The formula bar opens above the grid while you write, and closes when you apply or cancel. Typing `=` in a cell is just a value.
   - **Writing it:** the bar has the expression language's highlighting and autocomplete. Each column the formula refers to gets its own colour, both in the bar and as a tinted column in the grid, and clicking a column header inserts it.
   - **Live, like Excel:** change a cell and the formulas using it update at once. Cell editing stays available, and undo covers adding, changing and removing a formula.
   - Formula columns show an *fx* icon. Their cells open the formula instead of being edited directly.
@@ -31,7 +36,7 @@
   - month and day names in English, Russian and Azerbaijani (Jan → Feb, пн → вт), keeping their case;
   - text ending in a number (Item 1 → Item 2, INV-007 → INV-008);
   - anything else repeats the selected cells.
-  - **Series…** (Data → Fill, or the cell menu) fills from the first selected cell with a step you choose: linear, growth, or dates by days, weeks, months or years, with an optional stop value.
+  - **Series…** (Edit → Fill, or the cell menu) fills from the first selected cell with a step you choose: linear, growth, or dates by days, weeks, months or years, with an optional stop value.
   - **Fill Down, Up, Right and Left** in the Data menu and the cell menu copy the selection's edge row or column; Ctrl+D fills down and Ctrl+R fills right. Every fill is one step that undo reverts. Formula columns are left as they are.
 
 ### Fixed

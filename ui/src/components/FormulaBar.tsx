@@ -1,6 +1,7 @@
-// The formula bar above the grid: shows the selected cell (or the formula
-// of a formula column) and edits column formulas in the expression
-// language, with highlighting, autocomplete and coloured references.
+// The formula bar above the grid, shown only while a column formula is
+// written or changed (Column → New Formula Column, the header menu, the
+// `+` header, a formula column's cell). The expression language with
+// highlighting, autocomplete and coloured references.
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { Compartment, EditorState, Prec, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
@@ -37,8 +38,6 @@ export interface FormulaBarProps {
   error: string;
   /** Where the error is in the text, when the compiler says. */
   errorAt?: number | null;
-  onStart(): void;
-  onNew(): void;
   onChange(value: string): void;
   onApply(): void;
   onCancel(): void;
@@ -145,12 +144,6 @@ export const FormulaBar = forwardRef<FormulaBarHandle, FormulaBarProps>(function
           EditorView.updateListener.of((u) => {
             if (u.docChanged && latest.current.editing) latest.current.onChange(u.state.doc.toString());
           }),
-          EditorView.domEventHandlers({
-            mousedown: () => {
-              if (!latest.current.editing) latest.current.onStart();
-              return false;
-            },
-          }),
         ],
       }),
     });
@@ -205,9 +198,9 @@ export const FormulaBar = forwardRef<FormulaBarHandle, FormulaBarProps>(function
   const t = props.t;
   return (
     <div className={`formula-bar${props.editing ? " editing" : ""}`}>
-      <button className="icon" title={t("formula.new")} aria-label={t("formula.new")} onClick={props.onNew}>
+      <span className="formula-icon" aria-hidden="true">
         <Icon name="formula" />
-      </button>
+      </span>
       {props.editing && props.isNew ? (
         <input
           className="formula-name"

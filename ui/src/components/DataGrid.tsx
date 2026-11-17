@@ -72,6 +72,10 @@ export interface DataGridProps {
   onFormulaCell?(column: string): void;
   /** The fill handle was dragged from `source` to cover `dest` (page coordinates). */
   onFill?(source: Rectangle, dest: Rectangle): void;
+  /** The `+` header after the last column: start a formula column at the end. */
+  onNewColumn?(): void;
+  /** Tooltip and label of the `+` header. */
+  newColumnLabel?: string;
 }
 
 /** Type icons for the column headers (built once). */
@@ -345,6 +349,20 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         theme={theme}
         rowHeight={styling.rowHeight}
         headerHeight={styling.headerHeight}
+        rightElement={
+          props.onNewColumn ? (
+            <button
+              className="grid-new-column"
+              style={{ height: styling.headerHeight }}
+              title={props.newColumnLabel}
+              aria-label={props.newColumnLabel}
+              onClick={() => handlers.current.onNewColumn?.()}
+            >
+              +
+            </button>
+          ) : undefined
+        }
+        rightElementProps={{ sticky: false, fill: false }}
         getRowThemeOverride={getRowThemeOverride}
         onColumnResize={(col, w) => handlers.current.onResize(col.id as string, w)}
         freezeColumns={Math.min(props.frozen, page.columns.length)}

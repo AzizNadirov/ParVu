@@ -834,7 +834,7 @@
   "formula.name": "Yeni sütunun adı",
   "formula.new": "Yeni düstur sütunu",
   "formula.new_after": "Bundan sonra yeni düstur sütunu",
-  "formula.placeholder": "Xana seçin və ya düstur üçün xanada = yazın",
+  "formula.placeholder": "Düsturu yazın, məsələn [qty] * [price]",
   "formula.remove": "Düstur sütununu sil",
   "grid.null": "NULL",
   "job.cancelled": "Dayandırıldı.",
@@ -1412,5 +1412,14 @@
   "window.row_number": "1-dən sətir nömrəsi",
   "window.row_number.hint": "Seçilmiş sırada 1, 2, 3…",
   "window.shift": "Başqa sətirdən dəyər (shift)",
-  "window.shift.hint": "Bir neçə sətir əvvəlki dəyər; mənfi ədəd sonrakı sətirlərdən götürür."
+  "window.shift.hint": "Bir neçə sətir əvvəlki dəyər; mənfi ədəd sonrakı sətirlərdən götürür.",
+  "btn.formula": "Düstur",
+  "context.new_table_from": "Bu sütundan yeni cədvəl",
+  "formula.new_end": "Sonda yeni düstur sütunu",
+  "menu.column": "Sütun",
+  "menu.column.none": "Sütun seçilməyib",
+  "menu.column.selected": "Sütun: {column}",
+  "menu.rows": "Sətirlər",
+  "menu.table": "Cədvəl",
+  "status.formula_hint": "Düsturlar sütunlardır: Sütun → Yeni düstur sütunu istifadə edin."
 }
