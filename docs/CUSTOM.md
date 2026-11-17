@@ -5,7 +5,7 @@ ParVu lets you add your own tools to the **Column**, **Rows** and **Table** menu
 - a **custom function** takes columns (and values) and gives a column, or one value for the whole column;
 - a **custom operation** takes a table (and columns and values) and gives a table: it either changes the table as an undoable step, or opens its result as a new table, like Group By.
 
-You write the body in SQL (DuckDB's dialect), declare typed parameters, and give **examples**: small inputs with the output you expect. ParVu checks everything before saving, and runs the examples as tests. A tool is offered in the menus only once every check passes.
+You write the body in SQL (DuckDB's dialect) or, for a function, in ParVu's expression language, declare typed parameters, and give **examples**: small inputs with the output you expect. ParVu checks everything before saving, and runs the examples as tests. A tool is offered in the menus only once every check passes.
 
 ParVu comes with seven samples you can use, change, copy or delete: `clean_phone`, `title_case`, `percent_of_total`, `weighted_average`, `top_n_per_group`, `outliers_iqr` and `running_total`. A deleted sample stays deleted; **Restore samples** in the manager brings back the ones that are missing.
 
@@ -18,6 +18,20 @@ ParVu comes with seven samples you can use, change, copy or delete: `clean_phone
 The apply dialog is made from the signature: a column picker per column parameter (only columns of a fitting type), a typed box per value, a table picker per extra table. A preview shows the first rows of the result.
 
 Drafts and tools that need attention appear in the menus greyed out.
+
+### In expressions and formulas
+
+A usable custom function can also be called like a built-in one:
+
+- in the expression editor: `contacts[mobile] = clean_phone(contacts[Phone])`;
+- in a formula column: `= clean_phone([Phone], "00")`;
+- a **summary function** in a formula is a column total, like `SUM`: `= [price] - weighted_average([price], [qty])` computes the weighted average once and subtracts it from each row.
+
+Autocomplete lists custom functions beside the built-ins (marked *custom*, and *total* for a summary function), with their typed signature and description. Arguments are checked against the signature: `clean_phone([qty])` is refused with "clean_phone: phone takes text, but this argument is a number" when the type of the argument is known. Optional value parameters may be left out and take their default; a function takes no more arguments than its signature has.
+
+**Formulas follow the current definition.** When a custom function changes, the formulas that call it are compiled again. When it is deleted or needs attention, the formula is **kept**: its column is empty and shows a warning icon in the header, and opening the formula shows why. Fix the formula, or bring the function back (Restore samples for a sample), and the column fills again. The same happens when a file opens with a remembered formula that no longer compiles.
+
+Custom functions are not available in SQL mode, and operations are not callable from expressions.
 
 ## Defining one
 
@@ -37,6 +51,7 @@ Drafts and tools that need attention appear in the menus greyed out.
    The **result** of a function is **a column** (one value per row) or **one value** (an aggregate such as `SUM`), with a type, or "same as" a column parameter. An operation either **changes this table** or **opens a new table**; with more than one table parameter it always opens a new table.
 3. **Body**
    - A function's body is one SQL expression over its parameters, written by name: `upper(name) || '!'`, `x / sum(x) OVER ()`, `sum(x * w) / sum(w)`.
+   - Or, with **Language: Expression language**, one expression in ParVu's expression language (the one formulas use), with `[x]` for parameter `x`: `ROUND([x] * 3)`, `SUM([x] * [w]) / SUM([w])`. Typing `[` offers the parameters. ParVu translates it to SQL, which then takes exactly the same checks; **Compiled SQL** shows the result. An expression body can use the built-in functions but not other custom functions, XLOOKUP or VLOOKUP. Operations are always written in SQL.
    - An operation's body is one `SELECT` that reads its table parameters by name (`FROM t`) and uses column and value parameters by name: `SELECT * FROM t WHERE amount > limit_value`.
    - Ctrl+Enter validates.
 4. **Examples**: at least one is required. A function's example is a small grid with one column per column parameter, the value arguments, and the expected output next to each row (or one expected value for a summary function). An operation's example is an input table, the column chosen for each column parameter, the value arguments, and the expected table. Tables are compared as a set of rows unless **Compare rows in order** is ticked; numbers match to 9 significant digits. An empty cell means "no value"; type `""` for empty text.
@@ -132,7 +147,7 @@ A definition:
 | `result.type`, `result.same_as` | the result's type set, or the name of a column parameter whose type it has |
 | `result.columns` | operations: columns the result must have |
 | `placement` | operations: `step` (changes this table, default) or `new_table` |
-| `body.language` | `sql` (the only language in this version) |
+| `body.language` | `sql`, or `expression` (functions only: ParVu's expression language, `[x]` for parameter `x`) |
 | `flags.uses_current_time` | the body may use today's date |
 | `examples[].input` | a function: one column per column parameter, named after it; an operation: its first table |
 | `examples[].tables` | an operation's other table parameters, by name |
@@ -148,6 +163,11 @@ Cells are text or `null`, cast to the column's `dtype`. Files in the folder also
 
 The headless MCP server (`parvu mcp`) loads the same folder, so `apply_operation` can run a custom operation or function there too; in the window, AI clients use the window's tools.
 
+## AI clients and the assistant
+
+- `list_custom_tools` gives an AI client (and the built-in assistant) each usable tool: name, kind, typed signature, description, one example, and how to call it (`apply_operation` with `custom_function` / `custom_operation`, or `set_formula`).
+- `propose_custom_tool` lets the AI suggest a new tool: a full definition with examples. ParVu runs every check (the same safety guard refuses file functions and other tables) and returns the report, so the AI can correct it. In the window, ParVu then asks whether to open the proposal in the editor, prefilled, with a note saying who proposed it. **Nothing is saved unless you save it there.** The headless `parvu mcp` only validates proposals, even with `--allow-write`. See [MCP.md](MCP.md).
+
 ## The samples
 
 | Name | Kind | What it does |
@@ -162,6 +182,6 @@ The headless MCP server (`parvu mcp`) loads the same folder, so `apply_operation
 
 ## Not in this version
 
-- Bodies in the expression language, and calling custom functions inside expressions, formulas or SQL mode.
+- Calling custom functions in SQL mode, calling one custom function from another's body, and custom aggregates in Group By.
 - Parameters that take several columns at once, and a parameter for the name of a new column (a row function's output column is chosen in the dialog).
-- Defining tools from the AI assistant or MCP; saving the applied steps as an operation.
+- Saving the applied steps as an operation.

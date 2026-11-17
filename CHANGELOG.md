@@ -8,7 +8,13 @@
 
 ### Added
 - **Custom functions and operations.** Add your own tools to the Column, Rows and Table menus. A function takes columns and gives a column (or one value, such as a weighted average); an operation takes a table and changes it as a step you can undo, or opens its result as a new table. You write the body in SQL, give its parameters types, and add examples: small inputs with the output you expect. ParVu checks the body is safe (no files, no other tables, nothing random), that the types fit and that every example passes before it saves; **Save draft** keeps one that isn't finished yet. **Table → Manage custom tools…** edits, copies, deletes, imports and exports them as `.json` files. Seven samples come with ParVu: clean phone numbers, title case, percent of total, weighted average, top N per group, outliers by the IQR rule and a running total. See `docs/CUSTOM.md`.
+- **Custom functions in expressions and formulas.** Call your custom functions like built-in ones: `clean_phone([Phone])` in a formula or the expression editor. A summary function in a formula is a column total, like `SUM`: `= [price] - weighted_average([price], [qty])`. Autocomplete lists them with their signature and description, and an argument of the wrong type is refused with a clear message. Formulas follow the function's current definition; when it's deleted, the formula is kept with a warning icon and an empty column instead of disappearing, and fills again once it's fixed.
+- **Write a custom function in the expression language.** In the custom tool editor, **Language: Expression language** lets you write the body as a formula, with `[x]` for parameter x, e.g. `SUM([x] * [w]) / SUM([w])`. It takes the same checks as SQL.
+- **AI and custom tools.** AI clients and the built-in assistant can list your custom tools and call them. They can also propose a new one: ParVu checks it, and offers to open it in the editor for you to review and save. The AI never saves a tool itself, and the standalone MCP server only checks proposals.
 - **A Jupyter theme**, in the look of JupyterLab: white surfaces, light grey borders, JupyterLab's blue with Jupyter orange, and the notebook's code colours in the SQL editor.
+
+### Fixed
+- **Autocomplete shows function help again.** The signature and description beside a suggested function were clipped and never appeared.
 
 ## [1.0.0-alpha.7]
 
