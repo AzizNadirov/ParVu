@@ -254,3 +254,9 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-func-table td:nth-child(3) { width: 50%; }
 .pv-where { display: flex; flex-direction: column; gap: 8px; }
 .pv-where legend .row { gap: 6px; }
+/* Condition rows fit narrow dialogs: the value box shrinks, and the row
+   wraps rather than pushing Aa and × out of view. */
+.pv-rules .row { flex-wrap: wrap; row-gap: 6px; }
+.pv-rules .row > input.grow, .pv-rules .row > select.grow { min-width: 0; flex: 1 1 140px; }
+.pv-rules .row > select { max-width: 100%; }
+.pv-where { min-width: 0; max-width: 100%; }

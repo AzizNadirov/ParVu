@@ -34,9 +34,8 @@ pub type TabId = u64;
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum StepKind {
     Sql,
-    CellEdit { row: u64, column: String },
-    /// Several cells edited at once (fill down); keeps each cell's previous
-    /// pending edit so undo restores it exactly.
+    /// Cells edited (one cell, or several at once by a fill); keeps each
+    /// cell's previous pending edit so undo restores it exactly.
     CellEdits { previous: Vec<(u64, String, Option<CellEdit>)> },
     /// A column of the CSV file is read another way; keeps the previous
     /// reading for undo. The query is unchanged, so cell edits stay allowed.
@@ -1173,15 +1172,6 @@ impl Workspace {
         let step = tab.steps.last().cloned().ok_or(CoreError::NothingToUndo)?;
         match &step.kind {
             StepKind::Sql => tab.engine.undo(conn)?,
-            StepKind::CellEdit { row, column } => {
-                let removed = tab.edits.remove(*row, column);
-                if let Err(e) = rebuild_overlay(conn, tab) {
-                    if let Some(r) = removed {
-                        tab.edits.add(r);
-                    }
-                    return Err(e);
-                }
-            }
             StepKind::CellEdits { previous } => {
                 let before = tab.edits.clone();
                 for (row, column, prev) in previous {
@@ -1252,6 +1242,7 @@ impl Workspace {
             None => current,
         };
         let previous = tab.edits.get(row, column).cloned();
+        let previous_for_undo = previous.clone();
         tab.edits.add(CellEdit { row, column: column.to_string(), old_value: original, new_value: value });
         if let Err(e) = rebuild_overlay(conn, tab) {
             tab.edits.remove(row, column);
@@ -1263,7 +1254,9 @@ impl Workspace {
         let row_label = (row + 1).to_string();
         tab.steps.push(Step {
             label: StepLabel::new("step.cell_edit", &[("column", column), ("row", &row_label)]),
-            kind: StepKind::CellEdit { row, column: column.to_string() },
+            // The cell's earlier pending edit, so undo goes back to it (not
+            // to the file's value).
+            kind: StepKind::CellEdits { previous: vec![(row, column.to_string(), previous_for_undo)] },
         });
         Ok(true)
     }
@@ -1541,8 +1534,15 @@ impl Workspace {
         Ok(crate::stats::python_tuple(&values))
     }
 
+    /// What a search needs: the tab's query and row count.
+    pub fn search_input(&self, id: TabId) -> Result<(String, u64)> {
+        let t = self.tab(id)?;
+        Ok((t.engine.current_query().to_string(), t.engine.total_rows()))
+    }
+
     pub fn find(&self, id: TabId, options: &SearchOptions) -> Result<Option<SearchHit>> {
-        find_next(&self.conn, self.tab(id)?.engine.current_query(), options)
+        let t = self.tab(id)?;
+        find_next(&self.conn, t.engine.current_query(), t.engine.total_rows(), options)
     }
 }
 

@@ -33,12 +33,12 @@
     "accent_secondary": "#4EC9B0",
     "accent_warning": "#CE9178",
     "accent_error": "#F48771",
-    "tab_active_background": "#FFFFFF",
-    "tab_active_border": "#D4D4D4",
-    "tab_inactive_background": "#F3F3F3",
-    "tab_inactive_border": "#D4D4D4",
-    "tab_text_active": "#333333",
-    "tab_text_inactive": "#666666",
+    "tab_active_background": "#1E1E1E",
+    "tab_active_border": "#3E3E42",
+    "tab_inactive_background": "#2D2D30",
+    "tab_inactive_border": "#3E3E42",
+    "tab_text_active": "#FFFFFF",
+    "tab_text_inactive": "#A0A0A0",
     "tab_close_hover": "#E81123"
   },
   "layout": {

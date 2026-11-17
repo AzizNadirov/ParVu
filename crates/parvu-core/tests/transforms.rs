@@ -140,8 +140,9 @@ fn melt_turns_columns_into_rows() {
     assert_eq!(names(&ws, id), s(&["id", "variable", "value"]));
     let r = rows(&ws, id);
     assert_eq!(r.len(), 12, "NULLs are kept, as in pandas");
-    // Mixed types (INTEGER, DOUBLE) become text.
-    assert!(r.iter().any(|row| row[1].as_deref() == Some("qty") && row[2].as_deref() == Some("3")));
+    // Numbers of different kinds (INTEGER, DECIMAL) stay numbers.
+    assert!(r.iter().any(|row| row[1].as_deref() == Some("qty") && row[2].as_deref() == Some("3.0")));
+    assert_eq!(ws.column_type(id, "value").unwrap(), "DOUBLE");
     assert!(r.iter().any(|row| row[1].as_deref() == Some("price") && row[2].is_none()));
     // A clash with a kept column is refused.
     assert!(
@@ -377,7 +378,7 @@ fn window_functions() {
     check(win(WindowFunc::Shift, "id"), &["∅", "1", "2", "3", "4", "5"]);
     check(WindowSpec { periods: Some(-2), ..win(WindowFunc::Shift, "id") }, &["3", "4", "5", "6", "∅", "∅"]);
     check(win(WindowFunc::Diff, "price"), &["∅", "0.5", "-1.0", "2.0", "-1.5", "∅"]);
-    check(win(WindowFunc::PctChange, "id"), &["∅", "1.0", "0.5", "0.33333333333333326", "0.25", "0.19999999999999996"]);
+    check(win(WindowFunc::PctChange, "id"), &["∅", "1.0", "0.5", "0.333333333333333", "0.25", "0.2"]);
     check(WindowSpec { window: Some(2), ..win(WindowFunc::RollingSum, "id") }, &["∅", "3", "5", "7", "9", "11"]);
     check(WindowSpec { window: Some(2), ..win(WindowFunc::RollingMean, "qty") }, &["∅", "∅", "∅", "3.5", "4.5", "∅"]);
     // price: 1.5, 2.0, 1.0, 3.0, 1.5, NULL; ties at 1.5.

@@ -982,16 +982,31 @@ pub async fn edit_cells(
 /// Save to the tab's own file (`path` = null) or to `path`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_tab(
+    app: AppHandle,
     state: State<'_, AppState>,
     window: WebviewWindow,
     id: TabId,
     path: Option<PathBuf>,
 ) -> ApiResult<TabSummary> {
-    with_ws(state, window, move |ws| {
+    let save_as = path.is_some();
+    let summary = with_ws(state.clone(), window, move |ws| {
         ws.save(id, path.as_deref())?;
         Ok(ws.summary(id)?)
     })
-    .await
+    .await?;
+    // A file written by Save As goes to Recent Files, like an opened one.
+    if save_as {
+        let recents = {
+            let mut cfg = lock(&state.config);
+            let s = cfg.settings.settings().clone();
+            if cfg.recents.add_if_enabled(summary.path.to_string_lossy().to_string(), &s) {
+                cfg.recents.save()?;
+            }
+            cfg.recents.recents().to_vec()
+        };
+        let _ = app.emit("recents-changed", recents);
+    }
+    Ok(summary)
 }
 
 // ---------------------------------------------------------------- inspection
@@ -1092,8 +1107,8 @@ pub async fn find(
     options: SearchOptions,
     job: u64,
 ) -> ApiResult<Option<SearchHit>> {
-    run_job(state, window, job, "find", Some(id), move |ws| ws.current_query(id), move |ctx, source| {
-        parvu_core::search::find_next(ctx.conn, source, &options)
+    run_job(state, window, job, "find", Some(id), move |ws| ws.search_input(id), move |ctx, (source, total)| {
+        parvu_core::search::find_next(ctx.conn, source, *total, &options)
     })
     .await
 }
@@ -1246,7 +1261,7 @@ mod tests {
         assert_eq!(names, ["total", "share"]);
         assert!(ws.summary(id).unwrap().steps.is_empty(), "restoring adds no undo step");
         let page = ws.page(id, 1).unwrap();
-        assert_eq!(page.rows[0][3].as_deref(), Some("0.8695652173913043"));
+        assert_eq!(page.rows[0][3].as_deref(), Some("0.869565217391304"));
     }
 }
 

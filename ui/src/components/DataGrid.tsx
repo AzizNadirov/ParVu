@@ -117,10 +117,13 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
       accentLight: cssVar("--pv-colors-table-selection", "rgba(62,116,253,0.15)"),
       textDark: cssVar("--pv-colors-table-foreground", "#313139"),
       textMedium: cssVar("--pv-colors-table-foreground", "#737383"),
-      textLight: cssVar("--pv-colors-status-foreground", "#999"),
+      // Row numbers: muted table text (the status bar's colour was white
+      // on white in the Excel theme).
+      textLight: resolvedColor("var(--md-on-surface-variant)", "#6b6b74"),
       textHeader: cssVar("--pv-colors-table-header-foreground", "#313139"),
-      // Type icons in the headers: muted glyph, no box behind it.
-      fgIconHeader: resolvedColor("var(--md-on-surface-variant)", "#6b6b74"),
+      // Type icons in the headers: the header's text colour, no box behind
+      // it (a fixed muted grey was invisible on dark headers).
+      fgIconHeader: cssVar("--pv-colors-table-header-foreground", "#6b6b74"),
       bgIconHeader: "rgba(0,0,0,0)",
       textHeaderSelected: cssVar("--pv-derived-on-accent", "#ffffff"),
       bgCell: cssVar("--pv-colors-table-background", "#ffffff"),

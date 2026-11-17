@@ -13,6 +13,8 @@ interface Args {
   tabId: number;
   table: string;
   columns: string[];
+  /** The column the menu was opened on. */
+  selected?: string;
 }
 type Result = { name: string; text: string } | null;
 
@@ -34,7 +36,7 @@ function describeError(e: unknown): string {
 function MathDialog({ ui, close, a }: { ui: Ui; close: Closer<Result>; a: Args }) {
   const t = ui.t;
   const [name, setName] = useState("");
-  const [text, setText] = useState(() => defaultMathExpression(a.table, a.columns));
+  const [text, setText] = useState(() => defaultMathExpression(a.table, a.columns, a.selected));
   const [preview, setPreview] = useState<Preview>({ state: "empty" });
   const [submitting, setSubmitting] = useState(false);
   const nameRef = useAutoFocus<HTMLInputElement>();
@@ -140,8 +142,8 @@ function MathDialog({ ui, close, a }: { ui: Ui; close: Closer<Result>; a: Args }
         >
           <option value="">{t("dialog.math.insert_function")}</option>
           {ui.boot.functions.map((f) => (
-            <option key={f.name} value={f.name} title={f.description}>
-              {formatSignature(f)}
+            <option key={f.name} value={f.name} title={`${formatSignature(f)}: ${f.description}`}>
+              {f.name}
             </option>
           ))}
         </select>

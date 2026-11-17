@@ -202,6 +202,8 @@ export interface PlanSheet {
   source: string;
   hidden: boolean;
   deleted: boolean;
+  /** A duplicate made in ParVu, not saved yet (no data of its own in the file). */
+  copy?: boolean;
 }
 
 export interface SheetsView {

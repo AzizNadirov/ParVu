@@ -42,10 +42,16 @@ pub const EXACT_DISTINCT_ROWS: u64 = 2_000_000;
 pub fn column_stats(conn: &Connection, source: &str, column: &str, dtype: &str, approx: bool) -> Result<ColumnStats> {
     let q = quote_ident(column);
     let distinct = if approx { format!("approx_count_distinct({q})") } else { format!("COUNT(DISTINCT {q})") };
+    // Mean and standard deviation only for numbers: on a text column they
+    // came from the few values that happened to look like numbers.
+    let (mean, std) = if crate::page::ColumnMeta::new("", dtype).is_numeric() {
+        (format!("AVG(TRY_CAST({q} AS DOUBLE))"), format!("STDDEV(TRY_CAST({q} AS DOUBLE))"))
+    } else {
+        ("CAST(NULL AS DOUBLE)".to_string(), "CAST(NULL AS DOUBLE)".to_string())
+    };
     let items = format!(
         "COUNT(*), COUNT({q}), COUNT(*) - COUNT({q}), {distinct}, \
-         CAST(MIN({q}) AS VARCHAR), CAST(MAX({q}) AS VARCHAR), \
-         AVG(TRY_CAST({q} AS DOUBLE)), STDDEV(TRY_CAST({q} AS DOUBLE))"
+         CAST(MIN({q}) AS VARCHAR), CAST(MAX({q}) AS VARCHAR), {mean}, {std}"
     );
     let stats = crate::sql::query_whole_table(conn, &items, source, "__pv_t", |r| {
         Ok(ColumnStats {

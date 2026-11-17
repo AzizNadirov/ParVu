@@ -76,12 +76,41 @@ pub fn format_batches(batches: &[RecordBatch]) -> Result<Vec<Vec<Cell>>> {
             .map(|a| ArrayFormatter::try_new(a.as_ref(), &opts))
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| CoreError::invalid(e.to_string()))?;
+        // Floating-point columns are shown with 15 significant digits, as
+        // Excel does: 5440.889999999999 is 5440.89 (the data keeps every bit).
+        let floats: Vec<Option<Vec<f64>>> = batch
+            .columns()
+            .iter()
+            .map(|a| match a.data_type() {
+                duckdb::arrow::datatypes::DataType::Float64 => {
+                    Some(a.as_any().downcast_ref::<duckdb::arrow::array::Float64Array>()?.values().to_vec())
+                }
+                duckdb::arrow::datatypes::DataType::Float32 => Some(
+                    a.as_any()
+                        .downcast_ref::<duckdb::arrow::array::Float32Array>()?
+                        .values()
+                        .iter()
+                        .map(|v| f64::from(*v))
+                        .collect(),
+                ),
+                _ => None,
+            })
+            .collect();
         for r in 0..batch.num_rows() {
             let row = batch
                 .columns()
                 .iter()
                 .zip(&formatters)
-                .map(|(arr, f)| if arr.is_null(r) { None } else { Some(f.value(r).to_string()) })
+                .zip(&floats)
+                .map(|((arr, f), fl)| {
+                    if arr.is_null(r) {
+                        None
+                    } else if let Some(v) = fl {
+                        Some(display_float(v[r]))
+                    } else {
+                        Some(f.value(r).to_string())
+                    }
+                })
                 .collect();
             rows.push(row);
         }
@@ -89,9 +118,30 @@ pub fn format_batches(batches: &[RecordBatch]) -> Result<Vec<Vec<Cell>>> {
     Ok(rows)
 }
 
+/// A float as shown in the grid: 15 significant digits, so the noise of
+/// binary fractions disappears (0.1 + 0.2 is 0.3), in the shortest form that
+/// reads back as that value (3.0, 5440.89, 2.18e-5).
+pub fn display_float(v: f64) -> String {
+    if !v.is_finite() {
+        return if v.is_nan() { "NaN".into() } else if v > 0.0 { "inf".into() } else { "-inf".into() };
+    }
+    let rounded: f64 = format!("{v:.14e}").parse().unwrap_or(v);
+    format!("{rounded:?}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn floats_drop_binary_noise() {
+        assert_eq!(display_float(5440.889999999999), "5440.89");
+        assert_eq!(display_float(0.1 + 0.2), "0.3");
+        assert_eq!(display_float(3.0), "3.0");
+        assert_eq!(display_float(504.82500000000005), "504.825");
+        assert_eq!(display_float(-1.5e-7), "-1.5e-7");
+        assert_eq!(display_float(123456789012.5), "123456789012.5");
+    }
 
     #[test]
     fn numeric_detection() {

@@ -19,7 +19,12 @@ function DropDuplicatesDialog({ ui, close, a }: { ui: Ui; close: Closer<Operatio
   const t = ui.t;
   const [checked, setChecked] = useState<Set<string>>(() => new Set(a.selected ? [a.selected] : []));
   const [keep, setKeep] = useState<Keep>("first");
-  const [name, setName] = useState("is_duplicate");
+  // A name not taken yet, so a second Mark Duplicates doesn't fail.
+  const [name, setName] = useState(() => {
+    let n = "is_duplicate";
+    for (let i = 2; a.columns.includes(n); i++) n = `is_duplicate_${i}`;
+    return n;
+  });
   const op = a.mark ? buildMarkDuplicatesOp(a.columns, checked, keep, name) : buildDropDuplicatesOp(a.columns, checked, keep);
   const submit = () => op && close(op);
   const toggle = (c: string) =>

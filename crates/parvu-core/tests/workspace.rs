@@ -192,28 +192,31 @@ fn filter_drop_null_change_type_duplicate_add() {
 
 #[test]
 fn change_type_never_breaks_later_pages() {
-    // A text column of numbers with one bad value far down: the type change
-    // must not fail on the page, sort or count that reaches it.
+    // A text column of numbers with one bad value far down, past the rows a
+    // type change checks: the change must not fail on the page, sort or
+    // count that reaches it.
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("codes.csv");
     let mut text = String::from("id,code\n");
-    for i in 0..500 {
+    for i in 0..12_000 {
         text.push_str(&format!("{i},{i}\n"));
     }
-    text.push_str("500,oops\n");
+    text.push_str("12000,oops\n");
     std::fs::write(&path, text).unwrap();
     let mut ws = Workspace::new(100, None).unwrap();
+    // Keep the column as text (ParVu's detection would read it as numbers).
+    ws.set_detect_options(parvu_core::types::DetectOptions { enabled: false, ..Default::default() });
     let id = ws.open(&path).unwrap();
     assert_eq!(ws.columns(id).unwrap()[1].dtype, "VARCHAR");
     ws.apply(id, &Operation::ChangeType { column: "code".into(), new_type: "INTEGER".into() }).unwrap();
     ws.apply(id, &Operation::Sort { column: "code".into(), ascending: false }).unwrap();
-    assert_eq!(ws.summary(id).unwrap().total_rows, 501);
-    // Every page loads, and the value that doesn't convert is empty.
-    let rows: Vec<Vec<Option<String>>> = (1..=6).flat_map(|p| ws.page(id, p).unwrap().rows).collect();
-    assert_eq!(rows.len(), 501);
-    let bad = rows.iter().find(|r| r[0].as_deref() == Some("500")).unwrap();
+    let s = ws.summary(id).unwrap();
+    assert_eq!(s.total_rows, 12_001);
+    // Every page loads; the value that doesn't convert is empty.
+    assert_eq!(ws.page(id, 1).unwrap().rows[0][1].as_deref(), Some("11999"));
+    let last = ws.page(id, s.total_pages).unwrap().rows;
+    let bad = last.iter().find(|r| r[0].as_deref() == Some("12000")).unwrap();
     assert_eq!(bad[1], None);
-    assert!(rows.iter().any(|r| r[1].as_deref() == Some("499")));
 }
 
 #[test]
@@ -244,6 +247,30 @@ fn join_and_append_use_each_tabs_current_state() {
     ws.run_sql(ib, "SELECT * FROM b WHERE id < 3", None).unwrap();
     ws.apply(ia, &Operation::Append { tables: vec!["b".into()], distinct: false }).unwrap();
     assert_eq!(ws.summary(ia).unwrap().total_rows, 33);
+}
+
+/// Append matches columns by name: the same columns in another order line
+/// up, and a column only one table has is empty in the other's rows.
+#[test]
+fn append_matches_columns_by_name() {
+    let d = TempDir::new().unwrap();
+    let a = d.path().join("a.parquet");
+    let b = d.path().join("b.parquet");
+    make_file(&a, 2);
+    make_file(&b, 2);
+    let mut ws = Workspace::new(100, None).unwrap();
+    let ia = ws.open(&a).unwrap();
+    let ib = ws.open(&b).unwrap();
+    ws.run_sql(ib, "SELECT flag, name, id + 100 AS id, 'extra' AS note FROM b", None).unwrap();
+    ws.apply(ia, &Operation::Append { tables: vec!["b".into()], distinct: false }).unwrap();
+    let p = ws.page(ia, 1).unwrap();
+    let names: Vec<&str> = p.columns.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["id", "name", "score", "flag", "day", "note"]);
+    let id_col: Vec<&str> = p.rows.iter().map(|r| r[0].as_deref().unwrap()).collect();
+    assert_eq!(id_col, ["0", "1", "100", "101"]);
+    assert_eq!(p.rows[2][1].as_deref(), Some("name_0"), "names stay under name");
+    assert_eq!((p.rows[0][5].as_deref(), p.rows[2][5].as_deref()), (None, Some("extra")));
+    assert_eq!(ws.column_type(ia, "id").unwrap(), "BIGINT", "types are kept, not turned into text");
 }
 
 #[test]
@@ -508,4 +535,58 @@ fn hugeint_columns_are_saved_as_whole_numbers() {
     ws.save(id, Some(&big)).unwrap();
     assert_eq!(types(&ws, &big), ["DECIMAL(38,0)"]);
     assert_eq!(cell(&ws, id, 1, 0, 0).as_deref(), Some("85070591730234615865843651857942052863"));
+}
+
+/// Undoing a second edit of a cell goes back to the first edit, not to the
+/// file's value (the first edit used to be lost).
+#[test]
+fn undo_of_a_second_edit_keeps_the_first() {
+    let (_d, _p, mut ws, id) = setup(5, "parquet");
+    ws.edit_cell(id, 2, "name", Some("AAA".into())).unwrap();
+    ws.edit_cell(id, 2, "name", Some("BBB".into())).unwrap();
+    assert_eq!(cell(&ws, id, 1, 2, 1).as_deref(), Some("BBB"));
+    ws.undo(id).unwrap();
+    assert_eq!(cell(&ws, id, 1, 2, 1).as_deref(), Some("AAA"));
+    let s = ws.summary(id).unwrap();
+    assert_eq!((s.steps.len(), s.pending_edits), (1, 1));
+    ws.undo(id).unwrap();
+    assert_eq!(cell(&ws, id, 1, 2, 1).as_deref(), Some("name_2"));
+    assert_eq!(ws.summary(id).unwrap().pending_edits, 0);
+}
+
+/// Search reads growing windows from the anchor: matches past a window's
+/// edge, on an edge, and backwards are all found, in order.
+#[test]
+fn search_crosses_windows_both_ways() {
+    use parvu_core::search::Direction;
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("big.parquet");
+    let ws0 = Workspace::new(100, None).unwrap();
+    ws0.connection()
+        .execute_batch(&format!(
+            "COPY (SELECT i AS id, CASE WHEN i IN (5, 65535, 65536, 196608, 299999) THEN 'needle' ELSE 'hay' END AS v \
+             FROM range(300000) t(i)) TO '{}' (FORMAT PARQUET)",
+            path.display()
+        ))
+        .unwrap();
+    let mut ws = Workspace::new(100, None).unwrap();
+    let id = ws.open(&path).unwrap();
+    let mut o = SearchOptions { query: "needle".into(), column: Some("v".into()), ..Default::default() };
+    let mut found = Vec::new();
+    while let Some(h) = ws.find(id, &o).unwrap() {
+        found.push(h.row);
+        o.after_row = Some(h.row);
+        o.after_col = Some(h.column_index);
+    }
+    assert_eq!(found, [5, 65535, 65536, 196608, 299999]);
+    let mut back = Vec::new();
+    o.direction = Direction::Prev;
+    o.after_row = None;
+    o.after_col = None;
+    while let Some(h) = ws.find(id, &o).unwrap() {
+        back.push(h.row);
+        o.after_row = Some(h.row);
+        o.after_col = Some(h.column_index);
+    }
+    assert_eq!(back, [299999, 196608, 65536, 65535, 5]);
 }

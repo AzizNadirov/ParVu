@@ -37,10 +37,14 @@ describe("sheet menu", () => {
   });
 
   it("an unsaved copy can be renamed or deleted but not shown yet", () => {
-    const v = view([sheet("Q1"), sheet("Q1 (2)", { source: "Q1" })]);
+    const v = view([sheet("Q1"), sheet("Q1 (2)", { source: "Q1", copy: true })]);
     const m = sheetMenu(t as never, v, actions());
     expect(entry(sub(m, "Q1 (2)"), "sheets.show_here").disabled).toBe(true);
     expect(entry(sub(m, "Q1 (2)"), "sheets.delete").disabled).toBe(false);
+    // Moved in front of the original, the copy is still the copy.
+    const moved = sheetMenu(t as never, view([sheet("Q1 (2)", { source: "Q1", copy: true }), sheet("Q1")]), actions());
+    expect(entry(sub(moved, "Q1 (2)"), "sheets.show_here").disabled).toBe(true);
+    expect(entry(sub(moved, "Q1"), "sheets.open_in_tab").disabled).toBe(false);
   });
 
   it("deleted sheets can be restored, and actions call back", () => {

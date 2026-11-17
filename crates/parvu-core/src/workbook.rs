@@ -65,6 +65,10 @@ pub struct PlanSheet {
     pub hidden: bool,
     /// Deleted when the workbook is saved; can be restored until then.
     pub deleted: bool,
+    /// A duplicate made in ParVu (not saved yet). It shares `source` with
+    /// the sheet it was copied from, which stays "the" sheet of that source
+    /// wherever the copy is moved.
+    pub copy: bool,
 }
 
 /// The sheets of a workbook with the changes not saved yet.
@@ -116,7 +120,7 @@ impl WorkbookPlan {
         Ok(Self {
             sheets: sheets(path)?
                 .into_iter()
-                .map(|s| PlanSheet { source: s.name.clone(), name: s.name, hidden: s.hidden, deleted: false })
+                .map(|s| PlanSheet { source: s.name.clone(), name: s.name, hidden: s.hidden, deleted: false, copy: false })
                 .collect(),
         })
     }
@@ -182,9 +186,8 @@ impl WorkbookPlan {
             SheetOp::Delete { sheet } => {
                 let i = self.index(sheet)?;
                 let s = &self.sheets[i];
-                // Only the first plan sheet of a source is "the" open one.
-                let is_original = self.sheets.iter().position(|x| x.source == s.source) == Some(i);
-                if is_original && shown.contains(&s.source) {
+                // A copy can go; the original of an open sheet can't.
+                if !s.copy && shown.contains(&s.source) {
                     return Err(CoreError::invalid(format!(
                         "\"{sheet}\" is open in a tab: show another sheet there, or close the tab, first"
                     )));
@@ -217,7 +220,7 @@ impl WorkbookPlan {
                     }
                     n += 1;
                 };
-                self.sheets.insert(i + 1, PlanSheet { name, deleted: false, ..src });
+                self.sheets.insert(i + 1, PlanSheet { name, deleted: false, copy: true, ..src });
             }
         }
         Ok(())
@@ -225,7 +228,7 @@ impl WorkbookPlan {
 
     /// The name a stored sheet will have after saving (`None`: deleted).
     pub fn saved_name(&self, source: &str) -> Option<&str> {
-        self.sheets.iter().find(|s| s.source == source && !s.deleted).map(|s| s.name.as_str())
+        self.sheets.iter().find(|s| s.source == source && !s.copy && !s.deleted).map(|s| s.name.as_str())
     }
 }
 
@@ -267,7 +270,7 @@ fn write_to(conn: &Connection, from: &Path, tmp: &Path, plan: &WorkbookPlan, own
         if s.hidden {
             ws.set_hidden(true);
         }
-        if s.source == own && !own_written {
+        if s.source == own && !s.copy && !own_written {
             rows = crate::export::write_query_sheet(ws, conn, query)?;
             own_written = true;
         } else {
@@ -332,7 +335,7 @@ mod tests {
         WorkbookPlan {
             sheets: names
                 .iter()
-                .map(|n| PlanSheet { name: n.to_string(), source: n.to_string(), hidden: false, deleted: false })
+                .map(|n| PlanSheet { name: n.to_string(), source: n.to_string(), hidden: false, deleted: false, copy: false })
                 .collect(),
         }
     }
@@ -373,6 +376,14 @@ mod tests {
         // A copy of an open sheet can.
         p.apply(&SheetOp::Duplicate { sheet: "A".into() }, &[]).unwrap();
         assert_eq!(p.sheets[1].name, "A (2)");
+        // Moved in front of the original, the copy doesn't take its place:
+        // the tab showing A still shows (and saves into) A.
+        p.apply(&SheetOp::Move { sheet: "A (2)".into(), by: -1 }, &["A".into()]).unwrap();
+        assert_eq!(p.sheets[0].name, "A (2)");
+        assert_eq!(p.saved_name("A"), Some("A"));
+        // The copy can be deleted although A is open; A can't.
+        assert!(p.apply(&SheetOp::Delete { sheet: "A".into() }, &["A".into()]).is_err());
+        p.apply(&SheetOp::Delete { sheet: "A (2)".into() }, &["A".into()]).unwrap();
         p.apply(&SheetOp::Delete { sheet: "A (2)".into() }, &["A".into()]).unwrap();
     }
 

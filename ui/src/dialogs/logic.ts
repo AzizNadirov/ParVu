@@ -333,8 +333,10 @@ export function columnRef(table: string, column: string): string {
   return `${table}[${col}]`;
 }
 
-export function defaultMathExpression(table: string, columns: string[]): string {
-  return columns.length >= 2 ? `${columnRef(table, columns[0])} + ${columnRef(table, columns[1])}` : "";
+/** The expression a Math Operation starts with: the selected column, ready
+ * to be extended (not the first two columns, which may be an id and a date). */
+export function defaultMathExpression(table: string, columns: string[], selected?: string): string {
+  return selected && columns.includes(selected) ? columnRef(table, selected) : "";
 }
 
 export function formatSignature(f: FunctionDef): string {

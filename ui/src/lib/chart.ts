@@ -14,10 +14,12 @@ export const OTHER_LIGHT = "#9b9a94";
 export const OTHER_DARK = "#75746e";
 
 /** Colour of each series: palette slots in order, gray for "Other". */
-export function seriesColors(series: { other: boolean }[], dark: boolean): string[] {
+/** A colour per series. The colour follows the series' name, not its rank,
+ * so a region keeps its colour when the order or the top N changes. */
+export function seriesColors(series: { other: boolean; name?: string }[], dark: boolean): string[] {
   const pal = dark ? PALETTE_DARK : PALETTE_LIGHT;
-  let slot = 0;
-  return series.map((s) => (s.other ? (dark ? OTHER_DARK : OTHER_LIGHT) : pal[slot++ % pal.length]));
+  const names = [...new Set(series.filter((s) => !s.other).map((s) => s.name ?? ""))].sort((a, b) => a.localeCompare(b));
+  return series.map((s) => (s.other ? (dark ? OTHER_DARK : OTHER_LIGHT) : pal[names.indexOf(s.name ?? "") % pal.length]));
 }
 
 /** Relative luminance of "#rrggbb" or "rgb(r, g, b)"; 1 when unreadable. */

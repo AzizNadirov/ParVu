@@ -121,8 +121,23 @@ pub fn validate_value(conn: &Connection, dtype: &str, value: &Cell) -> Result<()
     if !is_safe_type_name(dtype) {
         return Err(CoreError::invalid(format!("Cannot edit column of type {dtype}")));
     }
-    conn.query_row(&format!("SELECT CAST(? AS {dtype}) IS NULL"), [v], |r| r.get::<_, bool>(0))?;
+    conn.query_row(&format!("SELECT CAST(? AS {dtype}) IS NULL"), [v], |r| r.get::<_, bool>(0))
+        .map_err(|_| CoreError::invalid(format!("\"{v}\" is not a valid value for a {} column", type_word(dtype))))?;
     Ok(())
+}
+
+/// A column type as people say it: "whole number", "date"…
+fn type_word(dtype: &str) -> String {
+    use crate::types::TypeFamily as F;
+    match F::of(dtype) {
+        F::Integer => "whole-number".into(),
+        F::Decimal | F::Float => "number".into(),
+        F::Boolean => "yes/no".into(),
+        F::Date => "date".into(),
+        F::Timestamp | F::TimestampTz => "date and time".into(),
+        F::Time => "time".into(),
+        _ => dtype.to_string(),
+    }
 }
 
 #[cfg(test)]

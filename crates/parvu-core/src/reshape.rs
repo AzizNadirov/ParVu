@@ -235,14 +235,27 @@ pub(crate) fn melt(
     if id_columns.iter().any(|c| c == var || c == val) {
         return Err(CoreError::invalid("The name or value column clashes with a kept column"));
     }
-    // UNPIVOT needs one type for the value column; mixed types become text.
+    // UNPIVOT needs one type for the value column; mixed numbers become
+    // DOUBLE, other mixes text.
     let types: Vec<&str> = values
         .iter()
         .filter_map(|v| ctx.columns.iter().find(|c| c.name == *v).map(|c| c.dtype.as_str()))
         .collect();
     let same_type = types.windows(2).all(|w| w[0] == w[1]);
+    // Numbers of different kinds (whole and decimal) stay numbers.
+    let all_numeric = !types.is_empty() && types.iter().all(|t| crate::page::ColumnMeta::new("", *t).is_numeric());
+    let cast = if same_type {
+        None
+    } else if all_numeric {
+        Some("DOUBLE")
+    } else {
+        Some("VARCHAR")
+    };
     let mut select: Vec<String> = id_columns.iter().map(|c| q(c)).collect();
-    select.extend(values.iter().map(|v| if same_type { q(v) } else { format!("CAST({} AS VARCHAR) AS {}", q(v), q(v)) }));
+    select.extend(values.iter().map(|v| match cast {
+        None => q(v),
+        Some(ty) => format!("CAST({} AS {ty}) AS {}", q(v), q(v)),
+    }));
     let on = values.iter().map(|v| q(v)).collect::<Vec<_>>().join(", ");
     let sql = format!(
         "SELECT * FROM (SELECT {} FROM ({})) UNPIVOT INCLUDE NULLS ({} FOR {} IN ({on}))",

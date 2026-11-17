@@ -3,6 +3,33 @@
 ## [Unreleased]
 
 ### Fixed
+- **Data safety:**
+  - **Undo of a second edit of a cell** went back to the file's value, losing the first edit too.
+  - **A sheet duplicated and moved in front of its original** took the original's place: the tab showed the copy and saved its edits into it.
+  - **Append** matched columns by position, so tables with the same columns in another order mixed up values. Columns are now matched by name; a column only one table has is empty in the other's rows.
+  - **A formula like `COUNTIF([region], [region])`** reordered the rows when cell edits were pending, and Save wrote that order to the file.
+  - **Changing a column's type** (Column → Type → INTEGER on text) silently emptied every value that didn't fit. It now says how many and points to **Convert…**.
+  - **The cell menu's Copy** copied the previously selected cells instead of the right-clicked one.
+- **Big files:**
+  - **Ctrl+F** on 160 million rows numbered the whole table before answering. A match on screen took minutes, and no match about 30 minutes. It now searches outwards from the current row.
+  - **The memory guard** now respects a memory cap on the process (systemd, containers, Flatpak). Before, the kernel could stop ParVu first.
+- **Display:**
+  - Numbers no longer show binary noise: 5440.889999999999 is 5440.89, and bin labels are rounded the same way.
+  - Statistics no longer show a mean for text columns.
+  - Unpivot of whole and decimal numbers gives a number column.
+  - Chart series keep their colours when their order changes.
+  - Themes: the Excel theme's row numbers and header icons are readable, and ParVu Black's tabs are dark.
+- **Smaller things:**
+  - Closing a tab with unsaved steps asks first, and so does Reset to Original.
+  - Reset Query no longer puts a `LIMIT` in the editor.
+  - The result chip shows "from …" in full.
+  - Save As adds the file to Recent Files, and saves a result tab next to its source.
+  - "Read dates day/month first" is offered only when the dates allow both orders.
+  - A rejected cell value gets a plain message.
+  - Settings shows the current language, and a new rows-per-page applies at once.
+  - The About text is up to date.
+  - The Join dialog starts on a shared column.
+  - Condition rows fit narrow dialogs.
 - **Whole numbers stayed whole only until saved to Parquet.** A sum of integers (Group By, Pivot, SQL `SUM`) is a 128-bit integer in DuckDB, which Parquet can't store, so it was written as a decimal number: 6 came back as 6.0. These columns are now saved as 64-bit integers, or as 38-digit decimals with no fraction when a value is bigger, so nothing is lost.
 - The Filter dialog's hint still said dates are written as `2024-12-31`; it now explains the value boxes that follow the column's type. **Drop Duplicates…** has the ellipsis of a menu item that opens a dialog.
 

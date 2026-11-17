@@ -21,7 +21,7 @@ export function sheetMenu(t: Translate, view: SheetsView, a: SheetActions): Menu
   const items: MenuEntry[] = live.map((s, i) => {
     const current = s.name === view.current;
     // A sheet not saved yet (a copy) has no data in the file to show.
-    const stored = view.sheets.findIndex((x) => x.source === s.source) === view.sheets.indexOf(s);
+    const stored = !s.copy;
     const openHere = view.open.includes(s.source) && stored;
     const label = s.hidden ? t("sheets.hidden_name", { name: s.name }) : s.name;
     return {

@@ -184,6 +184,9 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const [tabs, setTabs] = useState<TabSummary[]>([]);
   const [active, setActive] = useState<number | null>(null);
+  /** The active tab right now (a prompt may switch tabs while a handler waits). */
+  const activeRef = useRef<number | null>(null);
+  activeRef.current = active;
   const tabUi = useRef(new Map<number, TabUi>());
   // Bumped when view-only tab state (widths, frozen columns, formats) changes.
   const [, setViewTick] = useState(0);
@@ -647,10 +650,17 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const resetTab = useCallback(async () => {
     if (!activeTab) return;
+    // Reset drops every step and can't be undone: ask first.
+    // Cell edits, formulas and "Read as" choices stay; the rest goes.
+    const kept = (k: string) => k.startsWith("step.cell_edit") || k.startsWith("step.formula") || k === "step.source_type";
+    const sqlSteps = activeTab.steps.filter((x) => !kept(x.key)).length;
+    if (sqlSteps && !(await ui.confirm(t("dialog.reset.title", { name: activeTab.name }), t("dialog.reset.message", { count: sqlSteps })))) return;
     const id = activeTab.id;
     const s = await mutate(id, () => api.resetTab(id), t("error.query_error"));
     if (s) {
-      const q = renderVars(settings.default_sql_query, settings, s.name);
+      // The tab's own query (the whole table), not the "default query"
+      // setting, which may carry a LIMIT that would cut the table.
+      const q = s.current_query;
       const st = tabUi.current.get(id);
       if (st) {
         st.query = q;
@@ -659,7 +669,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       setEditorText(q);
       status(t("status.reset"), 3000);
     }
-  }, [activeTab, mutate, t, settings, status]);
+  }, [activeTab, mutate, t, settings, status, ui]);
 
   const sortBy = useCallback(
     async (column: string, ascending?: boolean) => {
@@ -978,9 +988,11 @@ export function App({ boot }: { boot: Bootstrap }) {
     const entries: MenuEntry[] = [];
     const r = src.reading;
     if (r.kind === "date_format" || r.kind === "timestamp_format") {
-      // Dates such as 03/04/2024: flip day and month in one click.
+      // Dates such as 03/04/2024: flip day and month in one click. Only
+      // when the file's dates allow both orders (no day above 12): the
+      // other order would turn the rest into empty cells.
       const other = swapDayMonth(r.format);
-      if (other !== r.format)
+      if (other !== r.format && src.ambiguous)
         entries.push({
           label: t(dayFirst(r.format) ? "types.month_first" : "types.day_first"),
           onSelect: () => read({ ...r, format: other }),
@@ -1164,8 +1176,11 @@ export function App({ boot }: { boot: Bootstrap }) {
   };
 
   const cellMenu = (row: number, col: number): MenuEntry[] => {
-    const sel = grid.current?.selection();
     const copy = (format: "tsv" | "csv" | "markdown", headers = false) => {
+      // Read the selection when the item is chosen: a right-click outside
+      // the selection selects the clicked cell, and that state isn't in
+      // place yet while the menu is being built.
+      const sel = grid.current?.selection();
       if (!sel) return;
       void copyText(
         formatRows(sel.rows, format, headers || format === "markdown" ? sel.columns : undefined),
@@ -1375,7 +1390,8 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const runMath = async () =>
     withTab(async (tab) => {
-      const r = await openMathDialog(ui, { tabId: tab.id, table: tab.name, columns: columnNames });
+      const selected = currentCell ? page?.columns[currentCell.col]?.name : undefined;
+      const r = await openMathDialog(ui, { tabId: tab.id, table: tab.name, columns: columnNames, selected });
       if (r) await mutate(tab.id, () => api.addComputedColumn(tab.id, r.name, r.text), t("error.operation_failed"));
     });
 
@@ -1555,7 +1571,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         if (tab.id === active) await loadPage(tab.id, 1);
         else setBusy(false);
         void refreshSchema();
-        await ui.alert(t("success.save_complete"), t("success.save_complete_msg", { path: s.path }));
+        // Files have no place for formulas: say that they were saved as values.
+        const done = t("success.save_complete_msg", { path: s.path });
+        await ui.alert(t("success.save_complete"), tab.formulas.length ? `${done}\n\n${t("success.formulas_as_values", { count: tab.formulas.length })}` : done);
         return true;
       } catch (e) {
         setBusy(false);
@@ -1566,11 +1584,19 @@ export function App({ boot }: { boot: Bootstrap }) {
     [status, t, upsertTab, active, loadPage, refreshSchema, ui],
   );
 
+  /** Where a result tab is saved by default: next to its source file (the
+   * app's working folder is no place for it). */
+  const resultSavePath = (tab: TabSummary): string => {
+    const source = tabs.find((x) => x.id === tab.origin?.source_id)?.path ?? "";
+    const dir = source.slice(0, Math.max(source.lastIndexOf("/"), source.lastIndexOf("\\")) + 1);
+    return `${dir}${tab.name}.parquet`;
+  };
+
   const saveAs = useCallback(
     async (tab: TabSummary): Promise<boolean> => {
       const path = await saveDialog({
         title: t("dialog.save_as"),
-        defaultPath: tab.path || `${tab.name}.parquet`,
+        defaultPath: tab.path || resultSavePath(tab),
         filters: [
           { name: "Parquet", extensions: ["parquet"] },
           { name: "CSV", extensions: ["csv", "tsv"] },
@@ -1580,7 +1606,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       });
       return path ? saveTab(tab, path) : false;
     },
-    [saveTab, t],
+    [saveTab, t, tabs],
   );
   saveAsRef.current = saveAs;
 
@@ -1597,7 +1623,7 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   /** Ask about unsaved edits of `tab`. True when it may be closed. */
   const resolveUnsaved = useCallback(
-    async (tab: TabSummary): Promise<boolean> => {
+    async (tab: TabSummary, closingTab = false): Promise<boolean> => {
       // Sheet changes belong to the workbook: they go with its last tab.
       const lastOfBook = tab.sheets_changed && !tabs.some((x) => x.id !== tab.id && x.path === tab.path);
       if (lastOfBook) {
@@ -1620,6 +1646,18 @@ export function App({ boot }: { boot: Bootstrap }) {
         if (choice === "save") return saveAsRef.current(tab);
         return choice === "discard";
       }
+      // Closing one tab with steps (filters, operations) but no cell edits:
+      // the window asks about these once for all tabs when it closes.
+      if (closingTab && !tab.pending_edits && tab.steps.length && settings.warn_on_exit_with_transforms) {
+        if (tab.id !== active) switchTo(tab.id);
+        const choice = await ui.ask(t("dialog.close_tab.title", { name: tab.name }), t("dialog.close_tab.steps", { count: tab.steps.length }), [
+          { id: "discard", label: t("dialog.unsaved.discard"), danger: true },
+          { id: "cancel", label: t("btn.cancel") },
+          { id: "save", label: t("btn.save"), primary: true },
+        ]);
+        if (choice === "save") return saveTab(tab, null);
+        return choice === "discard";
+      }
       if (!tab.pending_edits) return true;
       if (tab.id !== active) switchTo(tab.id);
       const choice = await openUnsavedChanges(ui, { count: tab.pending_edits });
@@ -1627,13 +1665,15 @@ export function App({ boot }: { boot: Bootstrap }) {
       if (choice === "save") return saveTab(tab, null);
       return true;
     },
-    [active, switchTo, ui, saveTab, tabs, t],
+    [active, switchTo, ui, saveTab, tabs, t, settings.warn_on_exit_with_transforms],
   );
 
   const closeTab = useCallback(
     async (id: number) => {
       const tab = tabs.find((x) => x.id === id);
-      if (!tab || !(await resolveUnsaved(tab))) return;
+      // The tab in front before an unsaved-changes prompt switched to `id`.
+      const before = activeRef.current;
+      if (!tab || !(await resolveUnsaved(tab, true))) return;
       try {
         await api.closeTab(id);
       } catch {
@@ -1642,8 +1682,11 @@ export function App({ boot }: { boot: Bootstrap }) {
       tabUi.current.delete(id);
       const rest = tabs.filter((x) => x.id !== id);
       setTabs(rest);
-      if (id === active) {
-        if (rest.length) {
+      // The prompt about unsaved changes switches to the tab it asks about.
+      if (id === active || id === activeRef.current) {
+        if (before !== null && before !== id && rest.some((x) => x.id === before)) {
+          switchTo(before);
+        } else if (rest.length) {
           const idx = Math.min(tabs.findIndex((x) => x.id === id), rest.length - 1);
           switchTo(rest[idx].id);
         } else {
@@ -1689,11 +1732,32 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
 
   // ------------------------------------------------------------ settings, theme, language
+  // The settings hold the theme and language too: Settings shows them.
   const onTheme = useCallback((info: { name: string; css: string }) => {
     applyThemeCss(info.css);
     setThemeKey(info.name + Date.now());
+    setSettings((s) => ({ ...s, current_theme: info.name }));
   }, []);
-  const onLanguage = useCallback((_lang: string, tr: Record<string, string>) => setTranslations(tr), []);
+  /** Saved settings: the page size may have changed, so tabs and the page reload. */
+  const onSettingsSaved = useCallback(
+    (s: Settings) => {
+      setSettings(s);
+      void api.tabs().then((list) => list.forEach(upsertTab)).catch(() => undefined);
+      if (active !== null) void loadPage(active, 1);
+    },
+    [active, upsertTab, loadPage],
+  );
+  const onLanguage = useCallback(
+    (lang: string, tr: Record<string, string>) => {
+      setTranslations(tr);
+      setSettings((s) => ({ ...s, current_language: lang }));
+      // The status line ("Showing page 1 of 5") is in the old language
+      // until the page is read again.
+      const id = activeRef.current;
+      if (id !== null) void loadPage(id, tabUi.current.get(id)?.page ?? 1);
+    },
+    [loadPage],
+  );
 
   // ------------------------------------------------------------ menus
   // ------------------------------------------------------------ AI assistant
@@ -1745,7 +1809,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.file.export"), icon: "export", shortcut: "Ctrl+E", disabled: !activeTab, onSelect: () => void exportTab() },
         { type: "separator" },
         { label: t("menu.file.close_tab"), icon: "close", shortcut: "Ctrl+W", disabled: !activeTab, onSelect: () => activeTab && void closeTab(activeTab.id) },
-        { label: t("menu.file.settings"), icon: "settings", onSelect: () => void openSettingsDialog(ui, { onSettings: setSettings, onTheme, onLanguage }) },
+        { label: t("menu.file.settings"), icon: "settings", onSelect: () => void openSettingsDialog(ui, { onSettings: onSettingsSaved, onTheme, onLanguage }) },
         { type: "separator" },
         { label: t("menu.file.exit"), icon: "exit", onSelect: () => void getCurrentWindow().close() },
       ],
@@ -2166,14 +2230,22 @@ export function App({ boot }: { boot: Bootstrap }) {
                         className="text small-btn"
                         disabled={!tabs.some((x) => x.id === activeTab.origin?.source_id)}
                         aria-label={t("table.go_to_source", { source: activeTab.origin.source })}
+                        title={t("table.from", { source: activeTab.origin.source, what: stepText(t, activeTab.origin.label) })}
                         onClick={() => activeTab.origin && switchTo(activeTab.origin.source_id)}
                       >
-                        {t("table.from", { source: activeTab.origin.source, what: stepText(t, activeTab.origin.label) })}
+                        <span className="ellipsis">
+                          {t("table.from", { source: activeTab.origin.source, what: stepText(t, activeTab.origin.label) })}
+                        </span>
                       </button>
                       <button
                         className="icon"
                         disabled={!tabs.some((x) => x.id === activeTab.origin?.source_id)}
                         aria-label={t("table.refresh")}
+                        title={
+                          tabs.some((x) => x.id === activeTab.origin?.source_id)
+                            ? t("table.refresh")
+                            : t("table.source_closed", { source: activeTab.origin.source })
+                        }
                         onClick={() => void refreshResult(activeTab)}
                       >
                         <Icon name="reset" size={16} />
@@ -2297,7 +2369,8 @@ export function App({ boot }: { boot: Bootstrap }) {
                     ? shift
                       ? formulaBar.current?.extendRange(c)
                       : formulaBar.current?.insert(refFor(c))
-                    : void sortBy(c)
+                    : (setCurrentCell((cur) => ({ row: cur?.row ?? 0, col: Math.max(0, page?.columns.findIndex((x) => x.name === c) ?? 0) })),
+                      void sortBy(c))
                 }
                 onHeaderMenu={(c, x, y) => setMenu({ x, y, items: headerMenu(c) })}
                 onCellMenu={(r, c, x, y) => setMenu({ x, y, items: cellMenu(r, c) })}
@@ -2369,7 +2442,7 @@ export function App({ boot }: { boot: Bootstrap }) {
             </button>
           )}
           <StatusJobs t={t} />
-          {activeTab && <span className="nowrap">{t("pagination.rows", { total_rows: activeTab.total_rows })}</span>}
+          {activeTab && <span className="nowrap">{activeTab.total_rows === 1 ? t("pagination.rows_one") : t("pagination.rows", { total_rows: activeTab.total_rows })}</span>}
         </footer>
       </div>
       {search && activeTab && (
