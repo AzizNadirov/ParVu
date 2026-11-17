@@ -656,6 +656,8 @@ offered the definition in the editor, reviews it and saves it; the headless serv
 {\"kind\": \"function\"|\"operation\", \"name\": \"clean_phone\" (lower case, a-z 0-9 _), \"title\", \"description\", \
 \"params\": [{\"name\": \"phone\", \"kind\": \"column\", \"type\": [\"text\"]}, {\"name\": \"prefix\", \"kind\": \"value\", \
 \"dtype\": \"VARCHAR\", \"optional\": true, \"default\": \"+\"}] (operations start with {\"name\": \"t\", \"kind\": \"table\"}; \
+{\"kind\": \"columns\", \"type\": [...], \"min\": 1, \"max\": 3} takes several columns and stands for a comma-separated list, \
+allowed only in a select list, GROUP BY, PARTITION BY, DISTINCT ON, ORDER BY without ASC/DESC and function arguments; \
 column type sets: any, number, integer, decimal, float, text, boolean, date, datetime, date_or_datetime, time, interval, \
 json, list, struct; value dtypes: VARCHAR, BIGINT, INTEGER, DOUBLE, DECIMAL(18,3), BOOLEAN, DATE, TIMESTAMP, TIME, INTERVAL), \
 \"result\": {\"kind\": \"column\"|\"value\"|\"table\", \"type\": [\"text\"]} (column: one value per row; value: one value \
@@ -665,7 +667,8 @@ name, e.g. \"upper(phone)\", or ParVu's expression language with [phone]; an ope
 parameters), \"examples\": [{\"input\": {\"columns\": [{\"name\": \"phone\", \"dtype\": \"VARCHAR\"}], \"rows\": [[\"555.0102\"], [null]]}, \
 \"args\": {\"prefix\": \"+\"}, \"expected\": {\"columns\": [{\"name\": \"result\"}], \"rows\": [[\"+5550102\"], [null]]}}] \
 (a function's input has one column per column parameter; a summary's expected has one row; an operation's input is its \
-first table, args name the column chosen for each column parameter). At least one example must pass; include one \
+first table, args name the column chosen for each column parameter; a columns parameter's arg is a list of column names, \
+in functions too). At least one example must pass; include one \
 with empty values.";
 
 impl ParvuMcp {
@@ -1007,7 +1010,7 @@ impl ParvuMcp {
     ) -> Result<CallToolResult, ErrorData> {
         self.undo_impl(args, client_name(&meta, &client)).await
     }
-    #[tool(description = "The custom functions and operations the user defined in ParVu: name, kind (row function, summary function or operation), typed signature, description, one example, and how to call each one (an apply_operation operation, or a set_formula formula; a summary function in a formula is a column total like SUM).")]
+    #[tool(description = "The custom functions and operations the user defined in ParVu: name, kind (row function, summary function or operation), typed signature, description, one example, and how to call each one (an apply_operation operation, or a set_formula formula; a summary function in a formula is a column total like SUM). A columns parameter takes {\"columns\": [names]}. A summary function of one column can also be a group_by aggregation: {\"column\": \"price\", \"func\": \"custom\", \"custom\": {\"name\": \"...\", \"values\": {...}}}.")]
     async fn list_custom_tools(&self) -> Result<CallToolResult, ErrorData> {
         let ws = try_tool!(self.workspace());
         let lib = ws.lock().unwrap_or_else(|p| p.into_inner()).custom().clone();

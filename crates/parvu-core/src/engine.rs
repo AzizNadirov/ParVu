@@ -116,6 +116,16 @@ impl QueryEngine {
         self.columns.borrow_mut().take();
     }
 
+    /// The view under the query changed its columns (a formula).
+    pub fn columns_changed(&self) {
+        self.invalidate_columns();
+    }
+
+    /// The row count, counted elsewhere (on another connection).
+    pub fn set_total_rows(&mut self, rows: u64) {
+        self.paginator.recalculate(rows);
+    }
+
     /// Replace the current query (user SQL or a transform). On error nothing changes.
     pub fn set_query(&mut self, conn: &Connection, query: &str) -> Result<()> {
         let query = query.trim().trim_end_matches(';').trim();

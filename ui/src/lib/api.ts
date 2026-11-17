@@ -293,10 +293,10 @@ export type Operation =
 // ---------------------------------------------------------------- custom tools
 
 /** An argument of a custom function or operation (backend `CustomArg`). */
-export type CustomArg = { column: string } | { value: string } | { table: string };
+export type CustomArg = { column: string } | { columns: string[] } | { value: string } | { table: string };
 
 export type CustomKind = "function" | "operation";
-export type CustomParamKind = "column" | "value" | "table";
+export type CustomParamKind = "column" | "columns" | "value" | "table";
 export type CustomResultKind = "column" | "value" | "table";
 export type CustomStatus = "ok" | "draft" | "broken";
 
@@ -308,13 +308,14 @@ export interface RequiredColumn {
 export interface CustomParam {
   name: string;
   kind: CustomParamKind;
-  /** Column parameters: type set names (`number`, `text`, `any`…). */
+  /** Column and columns parameters: type set names (`number`, `text`, `any`…). */
   type?: string[];
   /** Value parameters: the DuckDB type. */
   dtype?: string;
   optional?: boolean;
   default?: string;
   choices?: string[];
+  /** Number value parameters: bounds. Columns parameters: how many columns (min defaults to 1). */
   min?: number;
   max?: number;
   /** Column parameters of an operation: their table parameter. */
@@ -333,7 +334,8 @@ export interface CustomExample {
   name: string;
   input: ExampleTable;
   tables?: Record<string, ExampleTable>;
-  args?: Record<string, Cell>;
+  /** Values, column names; a list of column names for a columns parameter. */
+  args?: Record<string, Cell | string[]>;
   expected: ExampleTable;
   ordered?: boolean;
 }
@@ -415,6 +417,33 @@ export interface CustomListing {
 
 export type ImportClash = "replace" | "rename" | "skip";
 
+/** One applied step and whether it can be part of an operation made from the steps. */
+export interface StepNote {
+  label: StepLabel;
+  included: boolean;
+  /** Why it is left out (or a note about it). */
+  note?: StepLabel;
+}
+
+/** A column of the table under the steps that the steps read. */
+export interface StepsColumn {
+  name: string;
+  dtype: string;
+  /** The parameter it became, if chosen. */
+  param?: string;
+  /** Why it must stay a fixed column. */
+  fixed?: StepLabel;
+}
+
+/** "Save steps as custom operation…": the draft operation (unless no step can be part of it). */
+export interface StepsDraft {
+  definition?: CustomDefinition;
+  steps: StepNote[];
+  columns: StepsColumn[];
+  /** Why the example has no expected output. */
+  problem?: string;
+}
+
 export type ChartKind = "bar" | "line" | "area" | "scatter" | "histogram";
 export type TimeUnit = "auto" | "none" | "day" | "week" | "month" | "quarter" | "year";
 export type ChartSort = "auto" | "value_desc" | "value_asc" | "label";
@@ -467,11 +496,14 @@ export const AGG_FUNCS = [
   "mode",
   "list",
 ] as const;
-export type AggFunc = (typeof AGG_FUNCS)[number];
+/** The built-in aggregations, or `custom` (a summary custom function, Group By only). */
+export type AggFunc = (typeof AGG_FUNCS)[number] | "custom";
 export interface Aggregation {
   column: string;
   func: AggFunc;
   alias: string | null;
+  /** With `func: "custom"`: the summary custom function and its values. */
+  custom?: { name: string; values?: Record<string, string> };
 }
 
 export const COND_OPS = [
@@ -1038,6 +1070,7 @@ export const api = {
   customValue: (id: number, name: string, args: Record<string, CustomArg>, options?: JobOptions) =>
     startJob((job) => call<Cell>("custom_value", { id, name, args, job }), options),
   /** The first rows an operation gives, as a job. */
+  customFromSteps: (id: number, params: string[]) => call<StepsDraft>("custom_from_steps", { id, params }),
   customPreview: (id: number, op: Operation, rows: number, options?: JobOptions) =>
     startJob((job) => call<ExampleTable>("custom_preview", { id, op, rows, job }), options),
 };

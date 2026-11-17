@@ -283,9 +283,17 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-custom-params-table td { padding: 2px 4px; vertical-align: middle; }
 .pv-custom-params-table input[type="text"], .pv-custom-params-table select { width: 100%; min-width: 0; }
 .pv-custom-params-table td:first-child { width: 16%; }
-.pv-custom-params-table td:nth-child(2) { width: 13%; }
+.pv-custom-params-table td:nth-child(2) { width: 15%; }
 .pv-custom-params-table td:nth-child(3) { width: 22%; }
 .pv-custom-default { max-width: 110px; }
+/* A columns parameter's count, and a function example's number of list columns. */
+.pv-custom-params-table input.pv-custom-count, input.pv-custom-count { width: 4.5em; flex: none; }
+.pv-custom-list-arg { flex-wrap: wrap; gap: 4px 12px; }
+.pv-custom-columns-param .pv-column-checklist { max-height: 160px; }
+/* Save steps as custom operation: one line per step, its note below. */
+.pv-steps-notes li { display: flex; gap: 6px; align-items: flex-start; padding: 2px 6px; }
+.pv-steps-notes li > .col { gap: 0; }
+.pv-steps-columns { max-height: 220px; overflow: auto; }
 .pv-custom-body { height: 150px; display: flex; flex-direction: column; }
 .pv-custom-body .query-editor { flex: 1 1 auto; min-height: 0; }
 .pv-custom-compiled { margin: 4px 0; padding: 6px 8px; white-space: pre-wrap; background: var(--md-surface-container); border-radius: var(--md-shape-xs); }

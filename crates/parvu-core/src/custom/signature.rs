@@ -94,6 +94,9 @@ pub fn family_name(f: TypeFamily) -> String {
     serde_json::to_value(f).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
+/// Most columns a columns parameter may ask for.
+pub const MAX_COLUMNS_COUNT: usize = 100;
+
 /// DuckDB types a value parameter may declare.
 pub const VALUE_TYPES: &[&str] =
     &["VARCHAR", "BIGINT", "INTEGER", "DOUBLE", "DECIMAL(18,3)", "BOOLEAN", "DATE", "TIMESTAMP", "TIME", "INTERVAL"];
@@ -128,7 +131,7 @@ pub fn check_signature(def: &Definition, reserved: &dyn Fn(&str) -> bool) -> Vec
         DefKind::Operation if tables == 0 => fail("custom.check.operation_needs_table", &[]),
         _ => {}
     }
-    if def.kind == DefKind::Function && def.params.iter().all(|p| p.kind != ParamKind::Column) {
+    if def.kind == DefKind::Function && !def.params.iter().any(super::Param::takes_columns) {
         fail("custom.check.function_needs_column", &[]);
     }
     match (def.kind, def.result.kind) {
@@ -177,6 +180,24 @@ pub fn check_signature(def: &Definition, reserved: &dyn Fn(&str) -> bool) -> Vec
                     && !def.tables().any(|t| t.name.eq_ignore_ascii_case(of))
                 {
                     fail("custom.check.unknown_table_param", &[("param", n), ("table", of)]);
+                }
+            }
+            ParamKind::Columns => {
+                if let Err(bad) = families_of(&p.types) {
+                    fail("custom.check.unknown_type", &[("type", &bad), ("param", n)]);
+                }
+                if p.optional {
+                    fail("custom.check.only_values_optional", &[("param", n)]);
+                }
+                if let Some(of) = &p.of
+                    && !def.tables().any(|t| t.name.eq_ignore_ascii_case(of))
+                {
+                    fail("custom.check.unknown_table_param", &[("param", n), ("table", of)]);
+                }
+                let whole = |v: Option<f64>| v.is_none_or(|v| v.fract() == 0.0 && (0.0..=MAX_COLUMNS_COUNT as f64).contains(&v));
+                let (min, max) = p.column_count();
+                if !whole(p.min) || !whole(p.max) || min < 1 || max.is_some_and(|m| m < min) {
+                    fail("custom.check.columns_count", &[("param", n)]);
                 }
             }
             ParamKind::Value => {

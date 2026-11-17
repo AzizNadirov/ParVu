@@ -7,7 +7,7 @@ ParVu lets you add your own tools to the **Column**, **Rows** and **Table** menu
 
 You write the body in SQL (DuckDB's dialect) or, for a function, in ParVu's expression language, declare typed parameters, and give **examples**: small inputs with the output you expect. ParVu checks everything before saving, and runs the examples as tests. A tool is offered in the menus only once every check passes.
 
-ParVu comes with seven samples you can use, change, copy or delete: `clean_phone`, `title_case`, `percent_of_total`, `weighted_average`, `top_n_per_group`, `outliers_iqr` and `running_total`. A deleted sample stays deleted; **Restore samples** in the manager brings back the ones that are missing.
+ParVu comes with nine samples you can use, change, copy or delete: `clean_phone`, `title_case`, `percent_of_total`, `weighted_average`, `percentile_value`, `top_n_per_group`, `outliers_iqr`, `running_total` and `dedupe_by`. A deleted sample stays deleted; **Restore samples** in the manager brings back the ones that are missing.
 
 ## Using one
 
@@ -15,7 +15,11 @@ ParVu comes with seven samples you can use, change, copy or delete: `clean_phone
 - **Rows menu** lists the operations that change the table. Each run is one step in Applied Steps; Undo removes it.
 - **Table menu** lists the operations that open a new table, then **New custom operation…** and **Manage custom tools…**.
 
-The apply dialog is made from the signature: a column picker per column parameter (only columns of a fitting type), a typed box per value, a table picker per extra table. A preview shows the first rows of the result.
+The apply dialog is made from the signature: a column picker per column parameter (only columns of a fitting type), a checklist per columns parameter (the columns that fit, with how many it needs), a typed box per value, a table picker per extra table. A preview shows the first rows of the result.
+
+### In Group By
+
+A summary function with exactly one column parameter (the others values), such as `percentile_value`, appears in Group By's list of calculations under **Custom functions**. Pick the column it aggregates; boxes for its values appear next to it (empty: the default). It runs once per group. Pivot and charts don't offer them.
 
 Drafts and tools that need attention appear in the menus greyed out.
 
@@ -42,6 +46,7 @@ Custom functions are not available in SQL mode, and operations are not callable 
 
    | Kind | Means | Type |
    |---|---|---|
+   | columns | several columns of the table, each of a type in the set; at least `min` (1 by default), at most `max` | the same type sets as column |
    | column | one column of the table | a set of types: `any`, `number`, `integer`, `decimal`, `float`, `text`, `boolean`, `date`, `datetime`, `date_or_datetime`, `time`, `interval`, `json`, `list`, `struct` |
    | value | one constant typed in the dialog | a DuckDB type: `VARCHAR`, `BIGINT`, `INTEGER`, `DOUBLE`, `DECIMAL(18,3)`, `BOOLEAN`, `DATE`, `TIMESTAMP`, `TIME`, `INTERVAL` |
    | table | operations only: the first is the table the operation runs on; more tables are chosen from the open tabs | optional required columns, e.g. `amount: number, region` |
@@ -53,6 +58,7 @@ Custom functions are not available in SQL mode, and operations are not callable 
    - A function's body is one SQL expression over its parameters, written by name: `upper(name) || '!'`, `x / sum(x) OVER ()`, `sum(x * w) / sum(w)`.
    - Or, with **Language: Expression language**, one expression in ParVu's expression language (the one formulas use), with `[x]` for parameter `x`: `ROUND([x] * 3)`, `SUM([x] * [w]) / SUM([w])`. Typing `[` offers the parameters. ParVu translates it to SQL, which then takes exactly the same checks; **Compiled SQL** shows the result. An expression body can use the built-in functions but not other custom functions, XLOOKUP or VLOOKUP. Operations are always written in SQL.
    - An operation's body is one `SELECT` that reads its table parameters by name (`FROM t`) and uses column and value parameters by name: `SELECT * FROM t WHERE amount > limit_value`.
+   - A **columns** parameter stands for its columns written one after another (`"region", "city"`). It may appear only on its own (no table name, no alias, no arithmetic) where SQL takes such a list: an item of the select list (operations), `GROUP BY`, `PARTITION BY`, `DISTINCT ON`, `ORDER BY` without `ASC`/`DESC`/`NULLS` (a direction would apply to the last column only), and the arguments of a function or `COALESCE`: `SELECT keys, count(*) AS n FROM t GROUP BY keys`, `concat_ws(' ', parts)`. Anywhere else validation refuses it ("… is a list of columns"). It is probed with two columns of each accepted type. Functions with a columns parameter can't be called in expressions or formulas (yet); use them from the Column menu.
    - Ctrl+Enter validates.
 4. **Examples**: at least one is required. A function's example is a small grid with one column per column parameter, the value arguments, and the expected output next to each row (or one expected value for a summary function). An operation's example is an input table, the column chosen for each column parameter, the value arguments, and the expected table. Tables are compared as a set of rows unless **Compare rows in order** is ticked; numbers match to 9 significant digits. An empty cell means "no value"; type `""` for empty text.
 
@@ -74,6 +80,17 @@ Validation runs on a small in-memory DuckDB of its own (256 MB, two threads, exa
 When you apply a tool, ParVu checks again on the real table: the columns exist and have fitting types, values parse and respect their choices and bounds, and the result has the declared type.
 
 Ties in an `ORDER BY` can't be found by the checks: `row_number()` splits equal values arbitrarily, `rank()` keeps them.
+
+## Save steps as a custom operation
+
+**Save as operation…** in the Applied Steps panel (or **Table → Save steps as custom operation…**) turns a tab's steps into a custom operation:
+
+- Each step is listed: ✓ if it is part of the operation, otherwise why not. Cell edits, formulas and "Read as" choices change the table the steps start from, so they are not repeated. A step that reads another tab (a SQL query naming it) is left out, with every step after it.
+- The table under the steps becomes the table parameter `t`. Each step becomes a `WITH step_N AS (…)` block reading the one before; SQL typed in SQL mode reads `t` where it named the tab.
+- **Columns the steps use** become required columns of `t` (same name, a fitting type), or **parameters** where you tick them: then you choose the column when you apply the operation. A column a step writes (a new or replaced column of that name) stays fixed.
+- The operation opens in the editor, prefilled, with one example: the tab's first rows (up to 10, or 50 when the steps keep none of the first 10) and what the steps make of them. Read it, Validate, Save.
+
+Limits: many steps list the table's columns one by one (a new column placed after another, a column function in place), so those columns become required and other columns of the target table are dropped. Values a step worked out from this table when it ran (the number of parts of Split, bin edges) stay as they were. Steps applied before ParVu recorded how they were made can't be saved.
 
 ## Steps, Refresh and changes
 
@@ -135,11 +152,11 @@ A definition:
 | Field | Meaning |
 |---|---|
 | `kind` | `function` or `operation` |
-| `params[].kind` | `column`, `value` or `table` |
+| `params[].kind` | `column`, `columns`, `value` or `table` |
 | `params[].type` | column parameters: type set names (empty: any) |
 | `params[].dtype` | value parameters: the DuckDB type |
 | `params[].optional`, `default` | value parameters that may be left out |
-| `params[].choices`, `min`, `max` | value parameters: allowed values and number bounds |
+| `params[].choices`, `min`, `max` | value parameters: allowed values and number bounds; `min`, `max` of a columns parameter: how many columns |
 | `params[].of` | column parameters of an operation: the table parameter they belong to (default: the first) |
 | `params[].columns` | table parameters: required columns, `[{ "name", "type" }]` |
 | `params[].description` | shown as a tooltip in the apply dialog |
@@ -151,7 +168,7 @@ A definition:
 | `flags.uses_current_time` | the body may use today's date |
 | `examples[].input` | a function: one column per column parameter, named after it; an operation: its first table |
 | `examples[].tables` | an operation's other table parameters, by name |
-| `examples[].args` | value arguments, and for operations the column chosen for each column parameter |
+| `examples[].args` | value arguments, and for operations the column chosen for each column parameter; a columns parameter's columns as a list, `["store", "item"]` (functions too) |
 | `examples[].expected` | the expected output; a function's has one column |
 | `examples[].ordered` | compare table rows in order |
 
@@ -165,6 +182,7 @@ The headless MCP server (`parvu mcp`) loads the same folder, so `apply_operation
 
 ## AI clients and the assistant
 
+- `apply_operation` takes a columns argument as `{"columns": ["store", "item"]}`, and a summary function of one column as a Group By aggregation: `{"column": "x", "func": "custom", "custom": {"name": "percentile_value", "values": {"p": "0.5"}}}`.
 - `list_custom_tools` gives an AI client (and the built-in assistant) each usable tool: name, kind, typed signature, description, one example, and how to call it (`apply_operation` with `custom_function` / `custom_operation`, or `set_formula`).
 - `propose_custom_tool` lets the AI suggest a new tool: a full definition with examples. ParVu runs every check (the same safety guard refuses file functions and other tables) and returns the report, so the AI can correct it. In the window, ParVu then asks whether to open the proposal in the editor, prefilled, with a note saying who proposed it. **Nothing is saved unless you save it there.** The headless `parvu mcp` only validates proposals, even with `--allow-write`. See [MCP.md](MCP.md).
 
@@ -179,9 +197,11 @@ The headless MCP server (`parvu mcp`) loads the same folder, so `apply_operation
 | `top_n_per_group(t, grp, score, n = 3)` | operation, changes the table | keeps the `n` rows with the highest score in each group |
 | `outliers_iqr(t, x, k = 1.5)` | operation, new table | the rows outside Q1 − k·IQR … Q3 + k·IQR (Tukey's fences) |
 | `running_total(t, amount, sorted_by)` | operation, changes the table | adds `running_total`, the sum of `amount` up to each row in `sorted_by` order |
+| `dedupe_by(t, keys: columns, latest)` | operation, changes the table | keeps one row per combination of `keys`: the one with the highest `latest` |
+| `percentile_value(x, p = 0.9)` | function → one value | the `p` quantile of `x`, interpolated (0.5 is the median); also a Group By calculation |
 
 ## Not in this version
 
-- Calling custom functions in SQL mode, calling one custom function from another's body, and custom aggregates in Group By.
-- Parameters that take several columns at once, and a parameter for the name of a new column (a row function's output column is chosen in the dialog).
-- Saving the applied steps as an operation.
+- Calling custom functions in SQL mode, and calling one custom function from another's body.
+- Passing a list of columns to a custom function in an expression or formula.
+- A parameter for the name of a new column (a row function's output column is chosen in the dialog).

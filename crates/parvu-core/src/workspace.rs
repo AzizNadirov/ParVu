@@ -49,6 +49,28 @@ enum StepKind {
 struct Step {
     label: StepLabel,
     kind: StepKind,
+    /// How a query step was made, so the steps can be saved as a custom
+    /// operation (see [`crate::custom::record`]).
+    recipe: Option<Recipe>,
+}
+
+impl Step {
+    fn new(label: StepLabel, kind: StepKind) -> Self {
+        Self { label, kind, recipe: None }
+    }
+}
+
+/// How a query step was made.
+#[derive(Debug, Clone)]
+struct Recipe {
+    /// The query the step read: the previous result (an operation, an
+    /// expression), or `None` for SQL typed in SQL mode, which reads the
+    /// table under the steps by the tab's name.
+    source: Option<String>,
+    /// The step's query.
+    sql: String,
+    /// The operation, for steps made from a menu, a dialog or an AI client.
+    op: Option<Operation>,
 }
 
 #[derive(Debug)]
@@ -107,6 +129,29 @@ fn create_views(conn: &Connection, name: &str, edits: &[CellEdit], formulas: &[F
 
 fn excel_table(name: &str) -> String {
     format!("__pv_xlsx_{name}")
+}
+
+/// See [`Workspace::formula_totals_job`].
+pub struct FormulaTotalsJob {
+    pub conn: Connection,
+    base: String,
+    table: String,
+    previous: Vec<Formula>,
+    edits: Vec<CellEdit>,
+    formulas: Vec<Formula>,
+}
+
+impl FormulaTotalsJob {
+    /// The formulas with their totals computed (a full scan when a formula
+    /// has a total; run it without holding the workspace).
+    pub fn resolve(&self) -> Result<Vec<Formula>> {
+        crate::formula::with_totals(&self.conn, &self.base, &self.table, &self.formulas)
+    }
+
+    /// Rows of `query` (a full scan).
+    pub fn count(&self, query: &str) -> Result<u64> {
+        crate::engine::count_rows(&self.conn, query)
+    }
 }
 
 /// Result of [`Workspace::preview_op`].
@@ -434,7 +479,7 @@ impl Workspace {
         let label = StepLabel::new("step.source_type", &[("column", column), ("type", next.reading.dtype())]);
         self.replace_source_columns(id, std::slice::from_ref(&next))?;
         let tab = self.tab_mut(id)?;
-        tab.steps.push(Step { label: label.clone(), kind: StepKind::SourceReading { previous } });
+        tab.steps.push(Step::new(label.clone(), StepKind::SourceReading { previous }));
         Ok(label)
     }
 
@@ -529,7 +574,7 @@ impl Workspace {
         self.replace_formulas(id, next)?;
         let key = if existing.is_some() { "step.formula_edit" } else { "step.formula_add" };
         let label = StepLabel::new(key, &[("column", &name)]);
-        self.tab_mut(id)?.steps.push(Step { label: label.clone(), kind: StepKind::Formulas { previous } });
+        self.tab_mut(id)?.steps.push(Step::new(label.clone(), StepKind::Formulas { previous }));
         Ok(label)
     }
 
@@ -570,7 +615,7 @@ impl Workspace {
             CoreError::invalid(format!("\"{name}\" is used by another formula or a later step ({e})"))
         })?;
         let label = StepLabel::new("step.formula_remove", &[("column", name)]);
-        self.tab_mut(id)?.steps.push(Step { label: label.clone(), kind: StepKind::Formulas { previous } });
+        self.tab_mut(id)?.steps.push(Step::new(label.clone(), StepKind::Formulas { previous }));
         Ok(label)
     }
 
@@ -840,7 +885,21 @@ impl Workspace {
     }
 
     /// Run user SQL as the tab's new query. Recorded as a step so undo works.
+    /// The tab's name is the table under the steps (SQL mode).
     pub fn run_sql(&mut self, id: TabId, sql: &str, label: Option<StepLabel>) -> Result<StepLabel> {
+        self.push_query(id, sql, label, None, None)
+    }
+
+    /// Make `sql` the tab's query as one step, recording how it was made:
+    /// `source` is the query it was built on (`None`: SQL mode).
+    fn push_query(
+        &mut self,
+        id: TabId,
+        sql: &str,
+        label: Option<StepLabel>,
+        source: Option<String>,
+        op: Option<Operation>,
+    ) -> Result<StepLabel> {
         let label = label.unwrap_or_else(|| {
             let short: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
             let short = if short.chars().count() > 60 {
@@ -853,7 +912,8 @@ impl Workspace {
         let conn = &self.conn;
         let tab = self.tabs.iter_mut().find(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
         tab.engine.set_query(conn, sql)?;
-        tab.steps.push(Step { label: label.clone(), kind: StepKind::Sql });
+        let recipe = Recipe { source, sql: tab.engine.current_query().to_string(), op };
+        tab.steps.push(Step { label: label.clone(), kind: StepKind::Sql, recipe: Some(recipe) });
         Ok(label)
     }
 
@@ -861,13 +921,19 @@ impl Workspace {
     /// rather than the original file (used for expression mode).
     pub fn run_relative_sql(&mut self, id: TabId, sql: &str, label: StepLabel) -> Result<StepLabel> {
         let t = self.tab(id)?;
-        let wrapped = format!("WITH {} AS ({}) {sql}", quote_ident(&t.name), t.engine.current_query());
-        self.run_sql(id, &wrapped, Some(label))
+        let source = t.engine.current_query().to_string();
+        let wrapped = format!("WITH {} AS ({source}) {sql}", quote_ident(&t.name));
+        self.push_query(id, &wrapped, Some(label), Some(source), None)
     }
 
     /// The SQL and step label an operation would produce on the tab, without
     /// applying it.
     pub fn build_op(&self, id: TabId, op: &Operation) -> Result<BuiltOp> {
+        self.build_op_from(id, op).map(|(built, _)| built)
+    }
+
+    /// [`Self::build_op`], and the query the operation was built on.
+    fn build_op_from(&self, id: TabId, op: &Operation) -> Result<(BuiltOp, String)> {
         let t = self.tab(id)?;
         let columns = t.engine.columns(&self.conn)?;
         let other = |name: &str| self.current_query_of(name);
@@ -885,14 +951,15 @@ impl Workspace {
         let conn = &self.conn;
         let query = |sql: &str| crate::page::format_batches(&crate::engine::query_batches(conn, sql)?);
         let custom = |name: &str| self.custom.get(name);
-        op.build(&OpContext {
+        let built = op.build(&OpContext {
             table: &t.name,
             current_query: source,
             columns: &columns,
             other_query: &other,
             query: &query,
             custom: &custom,
-        })
+        })?;
+        Ok((built, source.to_string()))
     }
 
     /// The context operations are built in, for the tab's current result.
@@ -1174,8 +1241,8 @@ impl Workspace {
 
     /// Apply a table operation as a new step.
     pub fn apply(&mut self, id: TabId, op: &Operation) -> Result<StepLabel> {
-        let built = self.build_op(id, op)?;
-        self.run_sql(id, &built.sql, Some(built.label))
+        let (built, source) = self.build_op_from(id, op)?;
+        self.push_query(id, &built.sql, Some(built.label), Some(source), Some(op.clone()))
     }
 
     /// What applying `op` would do: its label and SQL, the row count before
@@ -1193,6 +1260,104 @@ impl Workspace {
             label: built.label,
             sql: built.sql,
         })
+    }
+
+    /// What saving tab `id`'s steps as a custom operation needs: the table
+    /// under the steps (its columns and first rows as text), and each step
+    /// with how it was made. Reads [`crate::custom::record::SAMPLE_ROWS`]
+    /// rows; the rest is done by [`crate::custom::record::draft`] without
+    /// the workspace.
+    pub fn steps_capture(&self, id: TabId) -> Result<crate::custom::StepsCapture> {
+        use crate::custom::record::{CapturedKind, CapturedStep, SAMPLE_ROWS};
+        let t = self.tab(id)?;
+        let base = t.engine.base_query().to_string();
+        let columns = describe(&self.conn, &base)?;
+        let items: Vec<String> =
+            columns.iter().map(|c| format!("CAST({0} AS VARCHAR) AS {0}", quote_ident(&c.name))).collect();
+        let rows = if items.is_empty() {
+            Vec::new()
+        } else {
+            let sql = format!("SELECT {} FROM ({base}) LIMIT {SAMPLE_ROWS}", items.join(", "));
+            crate::page::format_batches(&crate::engine::query_batches(&self.conn, &sql)?)?
+        };
+        let steps = t
+            .steps
+            .iter()
+            .map(|s| CapturedStep {
+                label: s.label.clone(),
+                kind: match (&s.kind, &s.recipe) {
+                    (StepKind::Sql, Some(r)) => {
+                        CapturedKind::Query { source: r.source.clone(), sql: r.sql.clone(), op: r.op.clone() }
+                    }
+                    (StepKind::Sql, None) => CapturedKind::Unrecorded,
+                    (StepKind::CellEdits { .. }, _) => CapturedKind::CellEdits,
+                    (StepKind::Formulas { .. }, _) => CapturedKind::Formulas,
+                    (StepKind::SourceReading { .. }, _) => CapturedKind::SourceReading,
+                },
+            })
+            .collect();
+        Ok(crate::custom::StepsCapture {
+            table: t.name.clone(),
+            base_query: base,
+            columns,
+            rows,
+            steps,
+            formulas: t.formulas.iter().map(|f| f.name.clone()).collect(),
+        })
+    }
+
+    /// Computing the totals of tab `id`'s `formulas` without holding the
+    /// workspace (a formula refresh after a custom function changed): a
+    /// second connection, and what [`Self::set_resolved_formulas`] checks
+    /// before using the result.
+    pub fn formula_totals_job(&self, id: TabId, formulas: Vec<Formula>) -> Result<FormulaTotalsJob> {
+        let t = self.tab(id)?;
+        Ok(FormulaTotalsJob {
+            conn: self.clone_connection()?,
+            base: edits_view(&t.name),
+            table: t.name.clone(),
+            previous: t.formulas.clone(),
+            edits: t.edits.all().to_vec(),
+            formulas,
+        })
+    }
+
+    /// Use `formulas` (with their totals computed off the workspace into
+    /// `resolved`) when tab `id` is still as it was when the job started.
+    /// Creating the views reads no data. Returns `Ok(false)` when the tab
+    /// changed meanwhile (nothing is done), and the query whose rows must be
+    /// counted again, when steps after the formulas may filter on them.
+    pub fn set_resolved_formulas(&mut self, id: TabId, job: &FormulaTotalsJob, resolved: &[Formula]) -> Result<(bool, Option<String>)> {
+        let conn = &self.conn;
+        let tab = self.tabs.iter_mut().find(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
+        if tab.formulas != job.previous || tab.edits.all() != job.edits.as_slice() {
+            return Ok((false, None));
+        }
+        let made = create_views(conn, &tab.name, tab.edits.all(), resolved)
+            .and_then(|()| crate::engine::validate(conn, tab.engine.current_query()));
+        if let Err(e) = made {
+            // Back to the formulas it had (their totals are computed again).
+            if let Err(e2) = rebuild_overlay(conn, tab) {
+                tracing::warn!("could not restore the formulas: {e2}");
+            }
+            return Err(e);
+        }
+        tab.formulas = job.formulas.clone();
+        tab.engine.columns_changed();
+        // Formulas add columns; only steps (a filter on a formula column)
+        // can change the number of rows.
+        let recount = (!tab.engine.is_base_query()).then(|| tab.engine.current_query().to_string());
+        Ok((true, recount))
+    }
+
+    /// Set the row count of tab `id` counted off the workspace, if its query
+    /// is still `query`.
+    pub fn set_counted_rows(&mut self, id: TabId, query: &str, rows: u64) -> Result<()> {
+        let tab = self.tab_mut(id)?;
+        if tab.engine.current_query() == query {
+            tab.engine.set_total_rows(rows);
+        }
+        Ok(())
     }
 
     /// A read-only snapshot of every tab's current result on a separate
@@ -1298,12 +1463,12 @@ impl Workspace {
             return Err(e);
         }
         let row_label = (row + 1).to_string();
-        tab.steps.push(Step {
-            label: StepLabel::new("step.cell_edit", &[("column", column), ("row", &row_label)]),
+        tab.steps.push(Step::new(
+            StepLabel::new("step.cell_edit", &[("column", column), ("row", &row_label)]),
             // The cell's earlier pending edit, so undo goes back to it (not
             // to the file's value).
-            kind: StepKind::CellEdits { previous: vec![(row, column.to_string(), previous_for_undo)] },
-        });
+            StepKind::CellEdits { previous: vec![(row, column.to_string(), previous_for_undo)] },
+        ));
         Ok(true)
     }
 
@@ -1366,10 +1531,7 @@ impl Workspace {
             return Err(e);
         }
         let n = previous.len();
-        tab.steps.push(Step {
-            label: StepLabel::new("step.cell_edits", &[("count", &n.to_string())]),
-            kind: StepKind::CellEdits { previous },
-        });
+        tab.steps.push(Step::new(StepLabel::new("step.cell_edits", &[("count", &n.to_string())]), StepKind::CellEdits { previous }));
         Ok(n)
     }
 

@@ -50,3 +50,4 @@ export type { SearchPanelProps } from "./SearchPanel";
 export { openCustomTools, importCustomFlow, exportCustomFlow } from "./CustomToolsDialog";
 export { openCustomEditor } from "./CustomEditorDialog";
 export { openCustomApply } from "./CustomApplyDialog";
+export { openSaveSteps } from "./SaveStepsDialog";

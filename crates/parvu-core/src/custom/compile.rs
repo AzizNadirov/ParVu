@@ -170,6 +170,7 @@ pub fn compile(conn: &Connection, def: &Definition, stability: &Stability) -> Re
             .map(|(i, p)| (p.name.to_lowercase(), i))
             .collect(),
         tables: table_names.clone(),
+        lists: def.params.iter().enumerate().filter(|(_, p)| p.kind == ParamKind::Columns).map(|(i, _)| i).collect(),
         stability,
         used: BTreeSet::new(),
         out: CompileOutput::default(),
@@ -180,6 +181,7 @@ pub fn compile(conn: &Connection, def: &Definition, stability: &Stability) -> Re
     if def.kind == DefKind::Function {
         check_function_root(node)?;
     }
+    mark_lists(node, def.kind == DefKind::Function);
     walk.visit(node);
     if let Some(f) = walk.failure {
         return Err(f);
@@ -233,6 +235,8 @@ fn check_function_root(node: &Value) -> Result<(), Issue> {
 struct Walk<'a> {
     /// lower-cased parameter name → its index in the signature.
     params: HashMap<String, usize>,
+    /// Indexes of the columns (list) parameters.
+    lists: BTreeSet<usize>,
     tables: Vec<String>,
     stability: &'a Stability,
     used: BTreeSet<usize>,
@@ -330,6 +334,7 @@ impl Walk<'_> {
     }
 
     fn column_ref(&mut self, map: &mut serde_json::Map<String, Value>) {
+        let in_list = map.remove(LIST_MARK).is_some();
         let Some(names) = map.get_mut("column_names").and_then(Value::as_array_mut) else { return };
         let parts: Vec<String> = names.iter().map(|n| n.as_str().unwrap_or("").to_lowercase()).collect();
         // `p` or `p.field`: the parameter itself (or a field of a struct
@@ -342,12 +347,77 @@ impl Walk<'_> {
         match at {
             Some(i) => {
                 let idx = self.params[&parts[i]];
+                if self.lists.contains(&idx) && (i != 0 || parts.len() != 1 || !in_list) {
+                    let name = names[i].as_str().unwrap_or("").to_string();
+                    self.fail("custom.check.columns_position", &[("param", &name)]);
+                }
                 self.used.insert(idx);
                 names[i] = Value::String(arg_slot(idx));
             }
             None if parts.len() == 1 && CLOCK_WORDS.contains(&parts[0].as_str()) => self.out.uses_current_time = true,
             None => {}
         }
+    }
+}
+
+/// Key added to a column reference that stands where SQL takes a
+/// comma-separated list, so a columns parameter may be used there. Removed
+/// again by the walk.
+const LIST_MARK: &str = "__pv_list";
+
+/// Mark the column references a columns parameter may stand in: items of
+/// the select list (operations, without an alias), `GROUP BY`, `PARTITION
+/// BY`, `DISTINCT ON`, `ORDER BY` items without a direction or NULLS
+/// order (a direction would apply to the last column only), the
+/// arguments of a function (not of an operator such as `+`) and of
+/// `COALESCE`.
+fn mark_lists(v: &mut Value, function: bool) {
+    fn mark(v: &mut Value) {
+        if let Value::Object(m) = v
+            && m.get("class").and_then(Value::as_str) == Some("COLUMN_REF")
+            && m.get("alias").and_then(Value::as_str).is_none_or(str::is_empty)
+        {
+            m.insert(LIST_MARK.into(), Value::Bool(true));
+        }
+    }
+    fn each(v: Option<&mut Value>, f: impl Fn(&mut Value)) {
+        if let Some(Value::Array(items)) = v {
+            items.iter_mut().for_each(f);
+        }
+    }
+    match v {
+        Value::Object(map) => {
+            let ty = map.get("type").and_then(Value::as_str).unwrap_or("").to_string();
+            let class = map.get("class").and_then(Value::as_str).unwrap_or("").to_string();
+            if ty == "SELECT_NODE" && !function {
+                each(map.get_mut("select_list"), mark);
+            }
+            each(map.get_mut("group_expressions"), mark);
+            each(map.get_mut("distinct_on_targets"), mark);
+            each(map.get_mut("partitions"), mark);
+            each(map.get_mut("orders"), |o| {
+                let default = |k: &str| o.get(k).and_then(Value::as_str) == Some("ORDER_DEFAULT");
+                if default("type") && default("null_order")
+                    && let Some(e) = o.get_mut("expression")
+                {
+                    mark(e);
+                }
+            });
+            if class == "FUNCTION" && map.get("is_operator").and_then(Value::as_bool) != Some(true) {
+                each(map.get_mut("arguments"), |a| {
+                    let named = a.get("name").and_then(Value::as_str).is_some_and(|n| !n.is_empty());
+                    if !named && let Some(e) = a.get_mut("expression") {
+                        mark(e);
+                    }
+                });
+            }
+            if ty == "OPERATOR_COALESCE" {
+                each(map.get_mut("children"), mark);
+            }
+            map.values_mut().for_each(|c| mark_lists(c, function));
+        }
+        Value::Array(items) => items.iter_mut().for_each(|c| mark_lists(c, function)),
+        _ => {}
     }
 }
 

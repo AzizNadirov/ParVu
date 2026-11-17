@@ -49,7 +49,7 @@ fn s(v: &[&str]) -> Vec<String> {
 }
 
 fn agg(column: &str, func: AggFunc) -> Aggregation {
-    Aggregation { column: column.into(), func, alias: None }
+    Aggregation { column: column.into(), func, alias: None, custom: None }
 }
 
 #[test]
@@ -95,8 +95,8 @@ fn group_by_without_keys_is_one_row_and_aliases_are_unique() {
         &Operation::GroupBy {
             by: vec![],
             aggregations: vec![
-                Aggregation { column: "qty".into(), func: AggFunc::Max, alias: Some("top".into()) },
-                Aggregation { column: "qty".into(), func: AggFunc::Min, alias: Some("top".into()) },
+                Aggregation { column: "qty".into(), func: AggFunc::Max, alias: Some("top".into()), custom: None },
+                Aggregation { column: "qty".into(), func: AggFunc::Min, alias: Some("top".into()), custom: None },
             ],
         },
     )

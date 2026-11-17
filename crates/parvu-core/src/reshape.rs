@@ -39,6 +39,9 @@ pub enum AggFunc {
     Mode,
     /// All values as a list, in table order.
     List,
+    /// A summary custom function (Custom tools) of one column, named in
+    /// [`Aggregation::custom`]. Group By only.
+    Custom,
 }
 
 impl AggFunc {
@@ -58,6 +61,7 @@ impl AggFunc {
             AggFunc::Last => "last",
             AggFunc::Mode => "mode",
             AggFunc::List => "list",
+            AggFunc::Custom => "custom",
         }
     }
 
@@ -85,6 +89,8 @@ impl AggFunc {
             AggFunc::Last => (format!("ARG_MAX({col}, {rn})"), Some(format!("{col} IS NOT NULL"))),
             AggFunc::Mode => (format!("MODE({col})"), None),
             AggFunc::List => (format!("LIST({col} ORDER BY {rn})"), None),
+            // Built by `custom_aggregate`; refused where it has no meaning.
+            AggFunc::Custom => ("NULL".to_string(), None),
         };
         let conds: Vec<String> = own_filter.into_iter().chain(filter.map(str::to_string)).collect();
         if conds.is_empty() { expr } else { format!("{expr} FILTER (WHERE {})", conds.join(" AND ")) }
@@ -101,6 +107,83 @@ pub struct Aggregation {
     /// Output column name; defaults to `<column>_<func>` (or `rows`).
     #[serde(default)]
     pub alias: Option<String>,
+    /// With [`AggFunc::Custom`]: the summary custom function and its value
+    /// arguments.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<CustomAggregate>,
+}
+
+/// A summary custom function used as an aggregation: one column parameter
+/// (the aggregation's column) and value parameters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct CustomAggregate {
+    /// The custom function's name.
+    pub name: String,
+    /// Its value arguments as text, by parameter name; optional ones may be
+    /// left out.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub values: std::collections::BTreeMap<String, String>,
+}
+
+/// Whether a definition can be an aggregation in Group By: a usable summary
+/// function with exactly one column parameter, the others values.
+pub fn is_custom_aggregate(def: &crate::custom::Definition) -> bool {
+    use crate::custom::{DefKind, ParamKind, ResultKind};
+    def.is_usable()
+        && def.kind == DefKind::Function
+        && def.result.kind == ResultKind::Value
+        && def.params.iter().filter(|p| p.kind == ParamKind::Column).count() == 1
+        && def.params.iter().all(|p| matches!(p.kind, ParamKind::Column | ParamKind::Value))
+}
+
+/// The SQL of a custom aggregation over `column` (checked against the
+/// definition, values typed and checked like in the apply dialog).
+fn custom_aggregate(ctx: &OpContext, column: &str, custom: &CustomAggregate) -> Result<String> {
+    use crate::custom::ParamKind;
+    use crate::custom::fill::{fill_slots, value_literal};
+    let def = (ctx.custom)(&custom.name)
+        .ok_or_else(|| CoreError::invalid(format!("Custom function {} no longer exists", custom.name)))?;
+    if !is_custom_aggregate(&def) {
+        return Err(CoreError::invalid(format!(
+            "{} can't be used in Group By: it must be a usable summary function of one column",
+            custom.name
+        )));
+    }
+    let compiled = def.compiled.as_ref().ok_or_else(|| CoreError::invalid("not compiled"))?;
+    for k in custom.values.keys() {
+        if def.param(k).is_none_or(|p| p.kind != ParamKind::Value) {
+            return Err(CoreError::invalid(format!("{} has no value parameter {k}", def.name)));
+        }
+    }
+    let meta = ctx.column(column)?;
+    let mut slots = Vec::new();
+    for p in &def.params {
+        slots.push(match p.kind {
+            ParamKind::Column => {
+                let fams = crate::custom::families_of(&p.types).map_err(|t| CoreError::invalid(format!("Unknown type {t}")))?;
+                if !fams.contains(&meta.family) {
+                    return Err(CoreError::invalid(format!(
+                        "{}: column \"{column}\" is {}, expected {}",
+                        def.name,
+                        meta.dtype,
+                        if p.types.is_empty() { "any".to_string() } else { p.types.join(" or ") }
+                    )));
+                }
+                q(column)
+            }
+            _ => {
+                let raw = custom.values.iter().find(|(k, _)| k.eq_ignore_ascii_case(&p.name)).map(|(_, v)| v.as_str());
+                let raw = match raw {
+                    Some(v) if !(v.trim().is_empty() && p.optional) => Some(v),
+                    _ if p.optional => p.default.as_deref(),
+                    _ => return Err(CoreError::invalid(format!("{}: enter a value for {}", def.name, p.name))),
+                };
+                format!("({})", value_literal(p, raw)?)
+            }
+        });
+    }
+    Ok(format!("({})", fill_slots(&compiled.template, &|i| slots.get(i).cloned().unwrap_or_default())))
 }
 
 fn source_for(ctx: &OpContext, ordered: bool) -> String {
@@ -124,11 +207,24 @@ pub(crate) fn group_by(ctx: &OpContext, by: &[String], aggregations: &[Aggregati
         if a.func != AggFunc::Rows {
             ctx.require(&a.column)?;
         }
-        let default = if a.func == AggFunc::Rows { "rows".to_string() } else { format!("{}_{}", a.column, a.func.name()) };
+        let custom = match (a.func, &a.custom) {
+            (AggFunc::Custom, Some(c)) => Some(c),
+            (AggFunc::Custom, None) => return Err(CoreError::invalid("Choose the custom function of the aggregation")),
+            _ => None,
+        };
+        let default = match custom {
+            _ if a.func == AggFunc::Rows => "rows".to_string(),
+            Some(c) => format!("{}_{}", a.column, c.name),
+            None => format!("{}_{}", a.column, a.func.name()),
+        };
         let wanted = a.alias.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or(&default);
         let name = unique_name(&used, wanted);
         used.push(name.clone());
-        items.push(format!("{} AS {}", a.func.sql(&q(&a.column), None), q(&name)));
+        let expr = match custom {
+            Some(c) => custom_aggregate(ctx, &a.column, c)?,
+            None => a.func.sql(&q(&a.column), None),
+        };
+        items.push(format!("{expr} AS {}", q(&name)));
     }
     let ordered = aggregations.iter().any(|a| a.func.needs_order());
     let src = source_for(ctx, ordered);
@@ -141,7 +237,11 @@ pub(crate) fn group_by(ctx: &OpContext, by: &[String], aggregations: &[Aggregati
     };
     let funcs: Vec<String> = aggregations
         .iter()
-        .map(|a| if a.func == AggFunc::Rows { "rows".to_string() } else { format!("{}({})", a.func.name(), a.column) })
+        .map(|a| match (&a.custom, a.func) {
+            (_, AggFunc::Rows) => "rows".to_string(),
+            (Some(c), AggFunc::Custom) => format!("{}({})", c.name, a.column),
+            _ => format!("{}({})", a.func.name(), a.column),
+        })
         .collect();
     let by_text = if by.is_empty() { "—".to_string() } else { by.join(", ") };
     Ok((sql, StepLabel::new("step.group_by", &[("columns", &by_text), ("aggregations", &funcs.join(", "))])))
@@ -154,6 +254,9 @@ pub(crate) fn pivot(
     values: Option<&str>,
     func: AggFunc,
 ) -> Result<(String, StepLabel)> {
+    if func == AggFunc::Custom {
+        return Err(CoreError::invalid("Custom functions can be used in Group By, not in Pivot"));
+    }
     for c in index {
         ctx.require(c)?;
     }

@@ -21,6 +21,16 @@ import {
   operationsFor,
   signatureText,
   syncFunctionExample,
+  aggChoice,
+  buildGroupByOp,
+  columnCount,
+  customAggregates,
+  customArgs,
+  listColumns,
+  newExample,
+  setListSize,
+  stepsDescription,
+  withAggChoice,
 } from "../logic";
 
 const col = (name: string, dtype: string, family: ColumnMeta["family"]): ColumnMeta => ({ name, dtype, family });
@@ -171,5 +181,76 @@ describe("custom tools", () => {
     const op = definitionToSave({ ...topN, body: { language: "expression", source: "SELECT 1" } });
     expect(op.body.language).toBe("sql");
     expect(definitionToSave({ ...cleanPhone, body: { language: "expression", source: "[phone]" } }).body.language).toBe("expression");
+  });
+
+  it("takes several columns for a columns parameter", () => {
+    const dedupe: CustomDefinition = {
+      ...topN,
+      name: "dedupe_by",
+      params: [
+        { name: "t", kind: "table" },
+        { name: "keys", kind: "columns", type: ["any"], min: 1 },
+        { name: "latest", kind: "column", type: ["number"] },
+      ],
+    };
+    expect(signatureText(dedupe)).toBe("dedupe_by(t: table, keys: columns<any>, latest: column<number>) → table");
+    expect(signatureText({ ...dedupe, params: [dedupe.params[0], { ...dedupe.params[1], min: 2, max: 3 }] })).toContain("keys: columns<any> × 2…3");
+    expect(columnCount({ name: "k", kind: "columns" })).toEqual([1, null]);
+    // The selected column starts the list; the next parameter takes another column.
+    const form = initialCustomForm(dedupe, columns, "Phone");
+    expect(form.lists.keys).toEqual(["Phone"]);
+    expect(form.args.latest).toBe("qty");
+    expect(customArgs(dedupe, { ...form, lists: { keys: ["Phone", "price"] } }).keys).toEqual({ columns: ["Phone", "price"] });
+    const problems = (keys: string[], p = dedupe) => customArgProblems(p, columns, { ...form, lists: { keys } });
+    expect(problems([])).toEqual([["keys", "custom.apply.column_count"]]);
+    expect(problems(["nope"])).toEqual([["keys", "custom.apply.choose_column"]]);
+    const numbers = { ...dedupe, params: [dedupe.params[0], { ...dedupe.params[1], type: ["number"], max: 1 }, dedupe.params[2]] };
+    expect(problems(["Phone"], numbers)).toEqual([["keys", "custom.apply.wrong_type"]]);
+    expect(problems(["qty", "price"], numbers)).toEqual([["keys", "custom.apply.column_count"]]);
+    expect(buildCustomOp(dedupe, form, columns)).toMatchObject({ args: { keys: { columns: ["Phone"] }, latest: { column: "qty" } } });
+    // Operation examples name the columns as a list.
+    expect(newExample(dedupe, 1).args).toEqual({ keys: ["keys"], latest: "latest" });
+    // Function examples: one input column per listed column.
+    const join: CustomDefinition = { ...cleanPhone, params: [{ name: "parts", kind: "columns", type: ["text"], min: 2 }], result: { kind: "column", type: ["text"] } };
+    const ex = syncFunctionExample(join, { name: "e", input: { columns: [], rows: [[]] }, expected: { columns: [{ name: "result" }], rows: [[null]] } });
+    expect(ex.args).toEqual({ parts: ["parts_1", "parts_2"] });
+    expect(ex.input.columns).toEqual([{ name: "parts_1", dtype: "VARCHAR" }, { name: "parts_2", dtype: "VARCHAR" }]);
+    const three = setListSize(join, { ...ex, input: { ...ex.input, rows: [["a", "b"]] } }, join.params[0], 3);
+    expect(listColumns(join.params[0], three)).toEqual(["parts_1", "parts_2", "parts_3"]);
+    expect(three.input.rows).toEqual([["a", "b", null]]);
+    expect(functionsForColumn([join], "text").map((d) => d.name)).toEqual(["clean_phone"]);
+    // Saved with its count; values' fields dropped.
+    const saved = definitionToSave({ ...dedupe, params: [dedupe.params[0], { ...dedupe.params[1], max: 2, dtype: "BIGINT" }] });
+    expect(saved.params[1]).toEqual({ name: "keys", kind: "columns", type: ["any"], min: 1, max: 2 });
+  });
+
+  it("offers summary functions of one column as Group By aggregations", () => {
+    const pct: CustomDefinition = {
+      ...cleanPhone,
+      name: "percentile_value",
+      params: [
+        { name: "x", kind: "column", type: ["number"] },
+        { name: "p", kind: "value", dtype: "DOUBLE", optional: true, default: "0.9" },
+      ],
+      result: { kind: "value", type: ["number"] },
+    };
+    const two = { ...pct, name: "weighted", params: [pct.params[0], { name: "w", kind: "column" as const }] };
+    expect(customAggregates([cleanPhone, pct, two, { ...pct, name: "draft", status: "draft" }]).map((d) => d.name)).toEqual(["percentile_value"]);
+    const a = withAggChoice({ column: "qty", func: "sum", alias: null }, "custom:percentile_value");
+    expect(a).toEqual({ column: "qty", func: "custom", alias: null, custom: { name: "percentile_value", values: {} } });
+    expect(aggChoice(a)).toBe("custom:percentile_value");
+    expect(withAggChoice(a, "mean")).toEqual({ column: "qty", func: "mean", alias: null });
+    const op = buildGroupByOp(["region"], [{ ...a, custom: { name: "percentile_value", values: { p: " " } } }]);
+    expect(op).toEqual({
+      op: "group_by",
+      by: ["region"],
+      aggregations: [{ column: "qty", func: "custom", alias: null, custom: { name: "percentile_value", values: {} } }],
+    });
+    expect(buildGroupByOp([], [{ column: "qty", func: "custom", alias: null }])).toBeNull();
+  });
+
+  it("describes an operation made from steps", () => {
+    expect(stepsDescription(["Filter a", "Sort b"])).toBe("Filter a; Sort b");
+    expect(stepsDescription(["x".repeat(400)]).length).toBe(300);
   });
 });

@@ -220,6 +220,7 @@ fn main() {
             custom::custom_import,
             custom::custom_value,
             custom::custom_preview,
+            custom::custom_from_steps,
         ])
         .build(tauri::generate_context!())
         .expect("error while running ParVu")

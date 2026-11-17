@@ -23,7 +23,7 @@ fn setup() -> (TempDir, Workspace, u64) {
 fn group_by_region() -> Operation {
     Operation::GroupBy {
         by: vec!["region".into()],
-        aggregations: vec![Aggregation { column: "qty".into(), func: AggFunc::Sum, alias: None }],
+        aggregations: vec![Aggregation { column: "qty".into(), func: AggFunc::Sum, alias: None, custom: None }],
     }
 }
 

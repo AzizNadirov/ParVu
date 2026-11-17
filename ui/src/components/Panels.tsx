@@ -23,6 +23,8 @@ export function StepsPanel(props: {
   open: boolean;
   onToggle(): void;
   onUndo(): void;
+  /** "Save steps as custom operation…". */
+  onSaveAsOperation?(): void;
   busy: boolean;
 }) {
   const { t, steps, open } = props;
@@ -33,6 +35,20 @@ export function StepsPanel(props: {
         <span>{t("steps.title")}</span>
         <span className="count">{steps.length}</span>
         <span className="spacer" />
+        {props.onSaveAsOperation && (
+          <button
+            className="small-btn text"
+            title={t("steps.save_as_operation_tooltip")}
+            disabled={!steps.length || props.busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onSaveAsOperation?.();
+            }}
+          >
+            <Icon name="custom" />
+            {t("steps.save_as_operation")}
+          </button>
+        )}
         <button
           className="small-btn text"
           title={t("steps.undo_tooltip")}

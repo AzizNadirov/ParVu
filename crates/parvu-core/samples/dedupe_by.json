@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "kind": "operation",
+  "name": "dedupe_by",
+  "title": "Keep the latest row per key",
+  "description": "Keeps one row for each combination of the key columns: the one with the highest value in the latest column. Rows with an empty latest value come last; equal values are split arbitrarily.",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "t", "kind": "table" },
+    { "name": "keys", "kind": "columns", "type": ["any"], "min": 1, "description": "The columns that identify a row" },
+    { "name": "latest", "kind": "column", "type": ["any"], "description": "The row with the highest value here is kept (a date, a version number…)" }
+  ],
+  "result": { "kind": "table" },
+  "placement": "step",
+  "body": {
+    "language": "sql",
+    "source": "SELECT * FROM t\nQUALIFY row_number() OVER (PARTITION BY keys ORDER BY latest DESC NULLS LAST) = 1"
+  },
+  "examples": [
+    {
+      "name": "one key",
+      "input": {
+        "columns": [{ "name": "customer", "dtype": "VARCHAR" }, { "name": "city", "dtype": "VARCHAR" }, { "name": "updated", "dtype": "DATE" }],
+        "rows": [
+          ["ann", "Baku", "2024-01-05"],
+          ["ann", "Ganja", "2024-03-01"],
+          ["bob", "Baku", null],
+          ["bob", "Shaki", "2023-12-31"],
+          ["cid", "Quba", null]
+        ]
+      },
+      "args": { "keys": ["customer"], "latest": "updated" },
+      "expected": {
+        "columns": [{ "name": "customer" }, { "name": "city" }, { "name": "updated" }],
+        "rows": [["ann", "Ganja", "2024-03-01"], ["bob", "Shaki", "2023-12-31"], ["cid", "Quba", null]]
+      }
+    },
+    {
+      "name": "two keys",
+      "input": {
+        "columns": [{ "name": "store", "dtype": "VARCHAR" }, { "name": "item", "dtype": "VARCHAR" }, { "name": "version", "dtype": "BIGINT" }, { "name": "price", "dtype": "DOUBLE" }],
+        "rows": [
+          ["A", "tea", "1", "2.5"],
+          ["A", "tea", "2", "2.75"],
+          ["A", "milk", "1", "1.2"],
+          ["B", "tea", "3", "2.6"],
+          ["B", "tea", "1", "2.4"]
+        ]
+      },
+      "args": { "keys": ["store", "item"], "latest": "version" },
+      "expected": {
+        "columns": [{ "name": "store" }, { "name": "item" }, { "name": "version" }, { "name": "price" }],
+        "rows": [["A", "tea", "2", "2.75"], ["A", "milk", "1", "1.2"], ["B", "tea", "3", "2.6"]]
+      }
+    }
+  ]
+}

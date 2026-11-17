@@ -220,7 +220,9 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         kind: GridCellKind.Text,
         data: v ?? "",
         displayData: isNull ? nullText : v,
-        allowOverlay: true,
+        // A formula cell opens the formula bar (onCellActivated), not the
+        // grid's own editor, which showed an empty box over the bar.
+        allowOverlay: !formulaCol[col],
         readonly: !page?.editable || formulaCol[col],
         contentAlign: numeric[col] ? "right" : "left",
         themeOverride: override,
