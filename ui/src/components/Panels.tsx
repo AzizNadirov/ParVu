@@ -165,51 +165,181 @@ export function TabBar(props: {
   );
 }
 
+/** How many recent files the start screen lists before "All N files". */
+const HUB_RECENTS = 5;
+
+/** A recent file as one line: format, name, then the folder (which is
+ * what gets cut off). */
+function RecentRow(props: { path: string; onOpen(path: string): void }) {
+  const name = props.path.split(/[\\/]/).pop() ?? props.path;
+  const dir = props.path.slice(0, Math.max(0, props.path.length - name.length - 1));
+  const ext = (name.includes(".") ? name.split(".").pop() ?? "" : "").toUpperCase();
+  return (
+    <button className="hub-row" title={props.path} onClick={() => props.onOpen(props.path)}>
+      <span className="hub-fmt">{ext || "—"}</span>
+      <span className="hub-name ellipsis">{name}</span>
+      <span className="hub-dir muted ellipsis">{dir}</span>
+    </button>
+  );
+}
+
+/** The start screen (no file open): open a file on the left, everything
+ * else ParVu can do on the right. With no recent files, the left column
+ * shows the three steps from a file to an answer. */
 export function Welcome(props: {
   t: Translate;
   recents: string[];
-  extensions: string[];
   onOpen(path: string): void;
   onBrowse(): void;
+  onBrowseWithOptions(): void;
+  /** An AI model is set up (otherwise the assistant says "Add a model"). */
+  aiReady: boolean;
+  onAiAssistant(): void;
+  onConnectAi(): void;
+  onShortcuts(): void;
+  onGuide(): void;
+  onChanges(): void;
+  themeName: string;
+  languageName: string;
+  onTheme(): void;
+  onLanguage(): void;
 }) {
   const { t } = props;
   const [path, setPath] = useState("");
+  const [allRecents, setAllRecents] = useState(false);
+  const recents = allRecents ? props.recents : props.recents.slice(0, HUB_RECENTS);
+  const openPath = () => path.trim() && props.onOpen(path.trim());
   return (
-    <div className="welcome">
-      <div className="welcome-card col">
-        <img src="/logo.png" alt="" className="welcome-logo" />
-        <h2>{t("welcome.title")}</h2>
-        <p className="muted">{t("welcome.hint")}</p>
-        <div className="row">
-          <input
-            type="text"
-            className="grow"
-            placeholder={t("welcome.path_placeholder")}
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && path.trim() && props.onOpen(path.trim())}
-          />
-          <button className="outlined" onClick={() => path.trim() && props.onOpen(path.trim())} disabled={!path.trim()}>
-            {t("btn.reload")}
-          </button>
-          <button className="primary" onClick={props.onBrowse}>
-            <Icon name="open" />
-            {t("welcome.open")}
-          </button>
-        </div>
-        <div className="muted small">{props.extensions.join("  ")}</div>
-        {props.recents.length > 0 && (
-          <div className="col recents">
-            <strong>{t("welcome.recent")}</strong>
-            {props.recents.slice(0, 10).map((r) => (
-              <button key={r} className="link ellipsis" title={r} onClick={() => props.onOpen(r)}>
-                {/* The file name first: long folders are what gets cut off. */}
-                <span className="recent-name">{r.split(/[\\/]/).pop()}</span>
-                <span className="recent-dir muted">{r.slice(0, Math.max(0, r.length - (r.split(/[\\/]/).pop()?.length ?? 0) - 1))}</span>
+    <div className="welcome hub">
+      <div className="hub-grid">
+        <div className="hub-main">
+          <div className="hub-drop">
+            <Icon name="open" size={40} />
+            <div className="hub-big">{t("welcome.drop_title")}</div>
+            <div className="muted">{t("welcome.drop_hint")}</div>
+            <div className="hub-btns">
+              <button className="primary" onClick={props.onBrowse}>
+                <Icon name="open" />
+                {t("welcome.open")}
+                <kbd>Ctrl+O</kbd>
               </button>
-            ))}
+              <button className="outlined" onClick={props.onBrowseWithOptions}>
+                <Icon name="openOptions" />
+                {t("menu.file.open_options")}
+              </button>
+            </div>
           </div>
-        )}
+          <label className="hub-path">
+            <Icon name="paste" size={16} />
+            <input
+              type="text"
+              className="grow"
+              placeholder={t("welcome.path_placeholder")}
+              aria-label={t("welcome.path_placeholder")}
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && openPath()}
+            />
+          </label>
+          {props.recents.length > 0 ? (
+            <div className="hub-list">
+              <div className="hub-sec">
+                <strong>{t("welcome.recent")}</strong>
+                {props.recents.length > HUB_RECENTS && (
+                  <button className="text" onClick={() => setAllRecents((v) => !v)}>
+                    {allRecents ? t("welcome.fewer_files") : t("welcome.all_files", { count: props.recents.length })}
+                    <Icon name={allRecents ? "chevronUp" : "chevronDown"} size={16} />
+                  </button>
+                )}
+              </div>
+              {recents.map((r) => (
+                <RecentRow key={r} path={r} onOpen={props.onOpen} />
+              ))}
+            </div>
+          ) : (
+            <div className="hub-list">
+              <div className="hub-sec">
+                <strong>{t("welcome.steps_title")}</strong>
+              </div>
+              <ol className="hub-steps">
+                {[1, 2, 3].map((n) => (
+                  <li key={n}>
+                    <span className="hub-n">{n}</span>
+                    <div>
+                      <div className="hub-t">{t(`welcome.step${n}`)}</div>
+                      <div className="muted small">{t(`welcome.step${n}_hint`)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+        <aside className="hub-side">
+          <div className="hub-sec">
+            <strong>{t("welcome.ai_title")}</strong>
+          </div>
+          <button className="hub-item" onClick={props.onAiAssistant}>
+            <Icon name="ai" className="hub-lead" />
+            <span className="hub-text">
+              <span className="hub-t">{t("menu.ai.assistant")}</span>
+              <span className="muted small">{t("welcome.ai_hint")}</span>
+            </span>
+            <span className="hub-state">{props.aiReady ? t("welcome.ai_ready") : t("welcome.ai_add_model")}</span>
+          </button>
+          <button className="hub-item" onClick={props.onConnectAi}>
+            <Icon name="connect" className="hub-lead" />
+            <span className="hub-text">
+              <span className="hub-t">{t("menu.ai.connect")}</span>
+              <span className="muted small">{t("welcome.connect_hint")}</span>
+            </span>
+            <Icon name="chevronRight" className="hub-tail" />
+          </button>
+          <div className="hub-sec">
+            <strong>{t("welcome.learn_title")}</strong>
+          </div>
+          <button className="hub-item" onClick={props.onShortcuts}>
+            <Icon name="keyboard" className="hub-lead" />
+            <span className="hub-text">
+              <span className="hub-t">{t("menu.help.shortcuts")}</span>
+              <span className="muted small">{t("welcome.shortcuts_hint")}</span>
+            </span>
+            <kbd>Ctrl+/</kbd>
+          </button>
+          <button className="hub-item" onClick={props.onGuide}>
+            <Icon name="book" className="hub-lead" />
+            <span className="hub-text">
+              <span className="hub-t">{t("menu.help.expression")}</span>
+              <span className="muted small">{t("welcome.guide_hint")}</span>
+            </span>
+            <Icon name="chevronRight" className="hub-tail" />
+          </button>
+          <div className="hub-new">
+            <div className="hub-sec">
+              <strong>{t("welcome.new_title")}</strong>
+              <button className="text" onClick={props.onChanges}>
+                {t("welcome.all_changes")}
+              </button>
+            </div>
+            <ul>
+              <li>{t("welcome.new1")}</li>
+              <li>{t("welcome.new2")}</li>
+              <li>{t("welcome.new3")}</li>
+            </ul>
+          </div>
+          <div className="hub-prefs">
+            <button onClick={props.onTheme}>
+              <Icon name="theme" />
+              {props.themeName}
+              <Icon name="chevronDown" size={16} />
+            </button>
+            <button onClick={props.onLanguage}>
+              <Icon name="language" />
+              {props.languageName}
+              <Icon name="chevronDown" size={16} />
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
   );

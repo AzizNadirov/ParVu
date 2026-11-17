@@ -37,6 +37,7 @@ import {
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
 import { columnHighlights, errorOffset, formulaRefs, newFormulaName, refFor } from "./lib/formula";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { jobResult } from "./lib/jobs";
 import { openSetValue } from "./dialogs/SetValueDialog";
 import { sheetMenu, sheetsToOpen, type SheetActions } from "./lib/sheets";
@@ -1782,6 +1783,10 @@ export function App({ boot }: { boot: Bootstrap }) {
   useEffect(() => {
     if (aiOpen) void loadAiProviders();
   }, [aiOpen, loadAiProviders]);
+  // The start screen says whether an AI model is set up.
+  useEffect(() => {
+    if (!activeTab && aiProviders === null) void loadAiProviders();
+  }, [activeTab, aiProviders, loadAiProviders]);
 
   const menus = [
     {
@@ -2197,7 +2202,23 @@ export function App({ boot }: { boot: Bootstrap }) {
         <MenuBar menus={menus} />
         <div className="app-body">
         {!activeTab ? (
-          <Welcome t={t} recents={recents} extensions={boot.extensions} onOpen={(p) => void openPath(p)} onBrowse={() => void browse()} />
+          <Welcome
+            t={t}
+            recents={recents}
+            onOpen={(p) => void openPath(p)}
+            onBrowse={() => void browse()}
+            onBrowseWithOptions={() => void browseWithOptions()}
+            aiReady={(aiProviders?.providers.length ?? 0) > 0}
+            onAiAssistant={() => (aiProviders?.providers.length ? (aiOpen ? undefined : toggleAi()) : void manageProviders())}
+            onConnectAi={() => void openConnectAi(ui)}
+            onShortcuts={() => void openShortcutsDialog(ui)}
+            onGuide={() => void openExpressionHelp(ui)}
+            onChanges={() => void openUrl(`https://github.com/AzizNadirov/ParVu/releases/tag/v${boot.version}`).catch(() => undefined)}
+            themeName={settings.current_theme || boot.theme.name}
+            languageName={boot.languages.find((l) => l.code === (settings.current_language || boot.language))?.native_name ?? ""}
+            onTheme={() => void openThemeSelector(ui, { onTheme })}
+            onLanguage={() => void openLanguageSelector(ui, { onLanguage })}
+          />
         ) : (
           <main className="workspace">
             {editorOpen && (
