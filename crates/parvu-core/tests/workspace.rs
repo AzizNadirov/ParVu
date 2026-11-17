@@ -553,3 +553,40 @@ fn undo_of_a_second_edit_keeps_the_first() {
     assert_eq!(cell(&ws, id, 1, 2, 1).as_deref(), Some("name_2"));
     assert_eq!(ws.summary(id).unwrap().pending_edits, 0);
 }
+
+/// Search reads growing windows from the anchor: matches past a window's
+/// edge, on an edge, and backwards are all found, in order.
+#[test]
+fn search_crosses_windows_both_ways() {
+    use parvu_core::search::Direction;
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("big.parquet");
+    let ws0 = Workspace::new(100, None).unwrap();
+    ws0.connection()
+        .execute_batch(&format!(
+            "COPY (SELECT i AS id, CASE WHEN i IN (5, 65535, 65536, 196608, 299999) THEN 'needle' ELSE 'hay' END AS v \
+             FROM range(300000) t(i)) TO '{}' (FORMAT PARQUET)",
+            path.display()
+        ))
+        .unwrap();
+    let mut ws = Workspace::new(100, None).unwrap();
+    let id = ws.open(&path).unwrap();
+    let mut o = SearchOptions { query: "needle".into(), column: Some("v".into()), ..Default::default() };
+    let mut found = Vec::new();
+    while let Some(h) = ws.find(id, &o).unwrap() {
+        found.push(h.row);
+        o.after_row = Some(h.row);
+        o.after_col = Some(h.column_index);
+    }
+    assert_eq!(found, [5, 65535, 65536, 196608, 299999]);
+    let mut back = Vec::new();
+    o.direction = Direction::Prev;
+    o.after_row = None;
+    o.after_col = None;
+    while let Some(h) = ws.find(id, &o).unwrap() {
+        back.push(h.row);
+        o.after_row = Some(h.row);
+        o.after_col = Some(h.column_index);
+    }
+    assert_eq!(back, [299999, 196608, 65536, 65535, 5]);
+}

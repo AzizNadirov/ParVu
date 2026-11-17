@@ -1534,8 +1534,15 @@ impl Workspace {
         Ok(crate::stats::python_tuple(&values))
     }
 
+    /// What a search needs: the tab's query and row count.
+    pub fn search_input(&self, id: TabId) -> Result<(String, u64)> {
+        let t = self.tab(id)?;
+        Ok((t.engine.current_query().to_string(), t.engine.total_rows()))
+    }
+
     pub fn find(&self, id: TabId, options: &SearchOptions) -> Result<Option<SearchHit>> {
-        find_next(&self.conn, self.tab(id)?.engine.current_query(), options)
+        let t = self.tab(id)?;
+        find_next(&self.conn, t.engine.current_query(), t.engine.total_rows(), options)
     }
 }
 

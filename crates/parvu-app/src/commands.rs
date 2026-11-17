@@ -1092,8 +1092,8 @@ pub async fn find(
     options: SearchOptions,
     job: u64,
 ) -> ApiResult<Option<SearchHit>> {
-    run_job(state, window, job, "find", Some(id), move |ws| ws.current_query(id), move |ctx, source| {
-        parvu_core::search::find_next(ctx.conn, source, &options)
+    run_job(state, window, job, "find", Some(id), move |ws| ws.search_input(id), move |ctx, (source, total)| {
+        parvu_core::search::find_next(ctx.conn, source, *total, &options)
     })
     .await
 }
