@@ -126,11 +126,36 @@ pub fn resident_bytes() -> Option<u64> {
     kib_field(&status, "VmRSS:")
 }
 
-/// The machine's memory, in bytes.
+/// The memory ParVu may use, in bytes: the machine's, or less when the
+/// process runs under a memory cap (a cgroup: systemd scopes, containers,
+/// Flatpak). Without this the guard's ceiling could sit above the cap, and
+/// the kernel would kill ParVu before the guard stepped in.
 #[cfg(target_os = "linux")]
 pub fn total_memory() -> Option<u64> {
     let info = std::fs::read_to_string("/proc/meminfo").ok()?;
-    kib_field(&info, "MemTotal:")
+    let ram = kib_field(&info, "MemTotal:")?;
+    Some(cgroup_limit().map_or(ram, |cap| cap.min(ram)))
+}
+
+/// The tightest `memory.max` of this process's cgroup and its parents
+/// (cgroup v2); `None` without a limit.
+#[cfg(target_os = "linux")]
+fn cgroup_limit() -> Option<u64> {
+    let own = std::fs::read_to_string("/proc/self/cgroup").ok()?;
+    let path = own.lines().find_map(|l| l.strip_prefix("0::"))?.trim().to_string();
+    let mut dir = std::path::PathBuf::from("/sys/fs/cgroup").join(path.trim_start_matches('/'));
+    let mut best: Option<u64> = None;
+    loop {
+        if let Ok(v) = std::fs::read_to_string(dir.join("memory.max"))
+            && let Ok(n) = v.trim().parse::<u64>()
+        {
+            best = Some(best.map_or(n, |b| b.min(n)));
+        }
+        if !dir.pop() || !dir.starts_with("/sys/fs/cgroup") || dir.as_os_str() == "/sys/fs/cgroup" {
+            break;
+        }
+    }
+    best
 }
 
 #[cfg(target_os = "linux")]
@@ -227,6 +252,12 @@ mod tests {
     }
 
     #[test]
+    fn a_memory_cap_lowers_the_ceiling() {
+        // Under a 3 GB cap the guard steps in at 65 % of it, not at 3 GB.
+        assert_eq!(ceiling(1024, Some(3 * GB)), 3 * GB / 100 * 65);
+    }
+
+        #[test]
     fn reads_this_process_memory() {
         if cfg!(any(target_os = "linux", target_os = "macos", windows)) {
             let rss = resident_bytes().unwrap();
@@ -260,4 +291,13 @@ fn guard_stops_a_runaway_query() {
     assert!(stopped.load(Ordering::Relaxed) >= 400);
     assert!(tripped_recently());
     eprintln!("stopped at {} MB; {} MB in use after", stopped.load(Ordering::Relaxed), resident_bytes().unwrap() / MB);
+}
+
+/// Prints the memory the guard sees; run inside a capped scope to check
+/// the cap is detected: `systemd-run --user --scope -p MemoryMax=1G <test binary> shows_total_memory --ignored --nocapture`
+#[cfg(test)]
+#[test]
+#[ignore]
+fn shows_total_memory() {
+    eprintln!("total_memory = {} MB", total_memory().unwrap() / MB);
 }
