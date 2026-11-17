@@ -591,8 +591,16 @@ export interface ApiError {
   column?: number;
 }
 
+let translate: ((key: string) => string) | null = null;
+
+/** Lets errorMessage translate errors the backend reports by kind only. */
+export function setErrorTranslator(fn: (key: string) => string): void {
+  translate = fn;
+}
+
 /** Human-readable message of anything a command rejected with. */
 export function errorMessage(e: unknown): string {
+  if (e && typeof e === "object" && (e as ApiError).kind === "memory" && translate) return translate("error.memory_guard");
   if (e && typeof e === "object" && "message" in e) return String((e as ApiError).message);
   return String(e);
 }

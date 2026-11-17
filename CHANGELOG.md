@@ -47,6 +47,10 @@
   - Statistics estimate the distinct count (marked ≈) on tables over 2 million rows.
   - Copy as Tuple → random samples without sorting the table, at most 100,000 values.
   - Colour scales read all their columns in one pass.
+- **A query can no longer take all of the computer's memory.** A big file once made the whole system run out of memory.
+  - Whole-table totals (statistics, formula totals such as `MODE`, Group By with no columns, Fill missing with mean, median or most frequent) are now computed in a form that DuckDB can spill to disk.
+  - A memory guard watches ParVu's memory. If it passes twice the query memory limit plus 1 GB (at most 65% of the computer's memory) and keeps growing, the running queries stop with "This operation needed more memory than allowed". The guard also covers `parvu mcp`; `PARVU_MEMORY_GUARD_MB` sets the ceiling, `0` turns the guard off.
+  - On Linux, if memory runs out anyway, the system stops ParVu before other programs.
 - Changing settings or the language no longer waits for a running query.
 - Stop in the Convert dialog's full count works again after changing the reading.
 

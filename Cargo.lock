@@ -3496,6 +3496,7 @@ dependencies = [
  "dirs 7.0.0",
  "getrandom 0.3.4",
  "keyring",
+ "libc",
  "parvu-ai",
  "parvu-config",
  "parvu-core",
@@ -3515,6 +3516,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

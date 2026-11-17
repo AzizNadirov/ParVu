@@ -225,6 +225,11 @@ impl FillMethod {
     }
 }
 
+/// A whole-column aggregate as a scalar subquery (see `sql::whole_table`).
+fn whole_value(item: &str, source: &str) -> String {
+    format!("({})", crate::sql::whole_table_view(item, source, "__pv_t"))
+}
+
 pub(crate) fn fill_null(ctx: &OpContext, columns: &[String], method: FillMethod, value: &str) -> Result<(String, StepLabel)> {
     let columns: Vec<String> = if columns.is_empty() { ctx.columns.iter().map(|c| c.name.clone()).collect() } else { columns.to_vec() };
     let rn = q(ROW_NUMBER);
@@ -253,10 +258,12 @@ pub(crate) fn fill_null(ctx: &OpContext, columns: &[String], method: FillMethod,
                 if !meta.is_numeric() {
                     return Err(CoreError::invalid(format!("\"{name}\" is not numeric; mean needs numbers")));
                 }
-                format!("AVG({c}) OVER ()")
+                whole_value(&format!("AVG({c})"), ctx.current_query)
             }
-            FillMethod::Median => format!("MEDIAN({c}) OVER ()"),
-            FillMethod::Mode => format!("MODE({c}) OVER ()"),
+            // One value for the whole column, computed once per query; a
+            // window over the whole table would hold it all in memory.
+            FillMethod::Median => whole_value(&format!("MEDIAN({c})"), ctx.current_query),
+            FillMethod::Mode => whole_value(&format!("MODE({c})"), ctx.current_query),
         };
         // Keep the column's type where the fill value allows it (mean of integers stays fractional).
         let expr = if method == FillMethod::Mean { format!("COALESCE({c}, {fill})") } else { format!("COALESCE({c}, CAST({fill} AS {}))", safe_type(meta)) };

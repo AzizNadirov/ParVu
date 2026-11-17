@@ -10,12 +10,13 @@ mod excel_tests;
 mod jobs;
 mod mcp;
 mod mcp_attach;
+mod memguard;
 mod state;
 
 use std::path::PathBuf;
 
 use parvu_config::{I18n, RecentsManager, SettingsManager, ThemeManager};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::state::{AppState, Config};
 
@@ -103,6 +104,23 @@ fn main() {
             mcp::mark_app_running();
             let state = app.state::<AppState>();
             state.attach.set_active_window("main");
+            {
+                let limit_app = app.handle().clone();
+                let notify_app = app.handle().clone();
+                memguard::start(
+                    move || {
+                        let state = limit_app.state::<AppState>();
+                        let mb = state.config.lock().map(|c| c.settings.settings().query_memory_limit_mb).unwrap_or(1024);
+                        std::env::var("PARVU_MEMORY_LIMIT_MB")
+                            .ok()
+                            .and_then(|v| v.trim().parse().ok())
+                            .unwrap_or(mb.max(0) as u64)
+                    },
+                    move |mb| {
+                        let _ = notify_app.emit("memory-guard", mb);
+                    },
+                );
+            }
             let allow_clients = state.config.lock().map(|c| c.settings.settings().mcp_allow_clients).unwrap_or(false);
             if allow_clients && let Err(e) = mcp_attach::start(app.handle()) {
                 tracing::error!("AI clients: {e}");

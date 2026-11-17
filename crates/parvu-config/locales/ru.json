@@ -695,6 +695,8 @@
   "error.unique_values_error": "Ошибка",
   "error.unique_values_error_msg": "Не удалось получить уникальные значения: {error}",
   "error.unsupported_drop": "Неподдерживаемый файл: {path}",
+  "error.memory_guard": "Этой операции нужно больше памяти, чем разрешено, и она остановлена. Попробуйте на меньшем числе строк или увеличьте лимит памяти запросов в настройках.",
+  "memory.guard_stopped": "ParVu использовал {mb} МБ памяти, поэтому выполняемые запросы остановлены.",
   "excel.cat.conditional": "Итоги по условию",
   "excel.cat.date": "Дата и время",
   "excel.cat.information": "Проверка значений",
