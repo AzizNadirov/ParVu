@@ -8,6 +8,8 @@ import {
   definitionToSave,
   duplicateDefinition,
   expectedFromActual,
+  formatRequiredColumns,
+  parseRequiredColumns,
   familiesOf,
   familyOfType,
   fittingColumns,
@@ -142,5 +144,11 @@ describe("custom tools", () => {
     expect(saved.name).toBe("f");
     expect(saved.params[0].dtype).toBeUndefined();
     expect(saved.compiled).toBeUndefined();
+  });
+
+  it("reads and writes required columns", () => {
+    const cols = parseRequiredColumns("amount: number, region ,");
+    expect(cols).toEqual([{ name: "amount", type: ["number"] }, { name: "region" }]);
+    expect(formatRequiredColumns(cols)).toBe("amount: number, region");
   });
 });

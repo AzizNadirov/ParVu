@@ -1,6 +1,13 @@
 // Material icons (from @mdi/js, imported one by one so only these end up in
 // the bundle). Drawn in `currentColor`, so they follow the text colour.
 import {
+  mdiToolboxOutline,
+  mdiImport,
+  mdiAlertOutline,
+  mdiCloseCircleOutline,
+  mdiDeleteOutline,
+  mdiCheckCircleOutline,
+  mdiMinusCircleOutline,
   mdiArrowCollapseDown,
   mdiFunctionVariant,
   mdiArrowDown,
@@ -192,6 +199,13 @@ export const icons = {
   markDuplicates: mdiCheckboxMultipleMarkedOutline,
   file: mdiFileDocumentOutline,
   editMenu: mdiPencilBoxOutline,
+  custom: mdiToolboxOutline,
+  importFile: mdiImport,
+  warning: mdiAlertOutline,
+  failCircle: mdiCloseCircleOutline,
+  delete: mdiDeleteOutline,
+  checkCircle: mdiCheckCircleOutline,
+  skipCircle: mdiMinusCircleOutline,
 } as const;
 
 /** Icons drawn as short text where no picture fits, e.g. "dt" for data

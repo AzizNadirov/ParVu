@@ -1286,3 +1286,27 @@ export function definitionToSave(def: CustomDefinition): CustomDefinition {
 
 /** Menu entries collapse past this many. */
 export const CUSTOM_MENU_MAX = 12;
+
+/** "amount: number, region" → required columns. */
+export function parseRequiredColumns(text: string): { name: string; type?: string[] }[] {
+  return text
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const [name, type] = s.split(":").map((x) => x.trim());
+      return type ? { name, type: [type] } : { name };
+    });
+}
+
+export function formatRequiredColumns(cols?: { name: string; type?: string[] }[]): string {
+  return (cols ?? []).map((c) => (c.type?.length ? `${c.name}: ${c.type.join(" | ")}` : c.name)).join(", ");
+}
+
+/** A check message for people: its key translated, with a translated
+ * reason where the argument is itself a key. */
+export function customCheckText(t: Translate, m: { key: string; args: Record<string, string> }): string {
+  const args: Record<string, string> = { ...m.args };
+  if (args.why) args.why = t(args.why);
+  return t(m.key, args);
+}
