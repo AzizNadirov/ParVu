@@ -84,9 +84,12 @@ describe("chart helpers", () => {
     expect(shorten("abcdefgh", 5)).toBe("abcd…");
   });
 
-  it("colours series in fixed palette order, gray for Other", () => {
-    const c = seriesColors([{ other: false }, { other: false }, { other: true }], false);
+  it("colours follow the series name, gray for Other", () => {
+    const c = seriesColors([{ name: "a", other: false }, { name: "b", other: false }, { name: "Other", other: true }], false);
     expect(c).toEqual([PALETTE_LIGHT[0], PALETTE_LIGHT[1], OTHER_LIGHT]);
+    // Reordered (e.g. by a new total), each series keeps its colour.
+    const r = seriesColors([{ name: "b", other: false }, { name: "a", other: false }], false);
+    expect(r).toEqual([PALETTE_LIGHT[1], PALETTE_LIGHT[0]]);
     expect(seriesColors([{ other: false }], true)[0]).toBe(PALETTE_DARK[0]);
     expect(isDark("#1d1b20")).toBe(true);
     expect(isDark("rgb(255, 255, 255)")).toBe(false);

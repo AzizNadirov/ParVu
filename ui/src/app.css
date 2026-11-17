@@ -359,6 +359,8 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
   border: 1px solid var(--md-outline-variant);
   border-radius: var(--md-shape-full);
 }
-.origin-chip > button.small-btn { min-height: 22px; padding: 0 6px; color: var(--md-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.origin-chip { min-width: 0; }
+.origin-chip > button.small-btn { min-height: 22px; padding: 0 6px; color: var(--md-on-surface); min-width: 0; justify-content: flex-start; overflow: hidden; }
+.origin-chip > button.small-btn > .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .origin-chip > button.icon { width: 24px; height: 24px; min-height: 24px; padding: 0; }
 .editor-actions label.check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }

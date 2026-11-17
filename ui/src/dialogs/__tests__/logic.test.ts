@@ -238,8 +238,9 @@ describe("expressions", () => {
     expect(columnRef("t", "price")).toBe("t[price]");
     expect(columnRef("t", "unit price")).toBe('t["unit price"]');
     expect(columnRef("t", 'a"b')).toBe('t["a\\"b"]');
-    expect(defaultMathExpression("t", ["a", "b c"])).toBe('t[a] + t["b c"]');
-    expect(defaultMathExpression("t", ["a"])).toBe("");
+    expect(defaultMathExpression("t", ["a", "b c"], "b c")).toBe('t["b c"]');
+    expect(defaultMathExpression("t", ["a", "b"])).toBe("");
+    expect(defaultMathExpression("t", ["a"], "gone")).toBe("");
   });
 
   const fn = (name: string, desc = ""): FunctionDef => ({

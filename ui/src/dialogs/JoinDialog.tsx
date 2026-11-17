@@ -17,13 +17,19 @@ export function pickRightKey(leftKey: string, rightColumns: string[]): string {
   return rightColumns.includes(leftKey) ? leftKey : rightColumns[0] ?? "";
 }
 
+/** The left key to start with: the first column both tables have (a join
+ * on customer, not on the first column order_id), else the first column. */
+export function pickLeftKey(leftColumns: string[], rightColumns: string[]): string {
+  return leftColumns.find((c) => rightColumns.includes(c)) ?? leftColumns[0] ?? "";
+}
+
 function JoinDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>; a: Args }) {
   const t = ui.t;
   const [right, setRight] = useState(a.others[0]?.name ?? "");
   const [joinType, setJoinType] = useState<JoinType>("inner");
-  const [leftKey, setLeftKey] = useState(a.columns[0] ?? "");
+  const [leftKey, setLeftKey] = useState(() => pickLeftKey(a.columns, a.others[0]?.columns ?? []));
   const rightCols = a.others.find((o) => o.name === right)?.columns ?? [];
-  const [rightKey, setRightKey] = useState(() => pickRightKey(a.columns[0] ?? "", a.others[0]?.columns ?? []));
+  const [rightKey, setRightKey] = useState(() => pickRightKey(pickLeftKey(a.columns, a.others[0]?.columns ?? []), a.others[0]?.columns ?? []));
 
   const op = buildJoinOp(right, joinType, leftKey, rightKey);
   const submit = () => op && close(op);
@@ -58,7 +64,10 @@ function JoinDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>;
               onChange={(e) => {
                 const name = e.target.value;
                 setRight(name);
-                setRightKey(pickRightKey(leftKey, a.others.find((o) => o.name === name)?.columns ?? []));
+                const cols = a.others.find((o) => o.name === name)?.columns ?? [];
+                const lk = cols.includes(leftKey) ? leftKey : pickLeftKey(a.columns, cols);
+                setLeftKey(lk);
+                setRightKey(pickRightKey(lk, cols));
               }}
             >
               {a.others.map((o) => (

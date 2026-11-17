@@ -328,7 +328,11 @@ describe("dialogs render and resolve", () => {
 
   it("math dialog previews and returns name + text", async () => {
     const ui = makeUi();
-    const p = D.openMathDialog(ui, { tabId: 1, table: "t", columns: ["a", "b"] });
+    const p = D.openMathDialog(ui, { tabId: 1, table: "t", columns: ["a", "b"], selected: "a" });
+    await act(async () => new Promise((r) => setTimeout(r, 350)));
+    // It starts from the selected column.
+    expect(invoke).toHaveBeenCalledWith("preview_expression", { id: 1, text: "t[a]" });
+    fireEvent.change(document.querySelector("textarea.pv-expr-input")!, { target: { value: "t[a] + t[b]" } });
     await act(async () => new Promise((r) => setTimeout(r, 350)));
     expect(invoke).toHaveBeenCalledWith("preview_expression", { id: 1, text: "t[a] + t[b]" });
     expect(screen.getByText('SELECT *, a + b AS "c" FROM t')).toBeTruthy();

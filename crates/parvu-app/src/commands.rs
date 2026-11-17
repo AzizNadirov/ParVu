@@ -982,16 +982,31 @@ pub async fn edit_cells(
 /// Save to the tab's own file (`path` = null) or to `path`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn save_tab(
+    app: AppHandle,
     state: State<'_, AppState>,
     window: WebviewWindow,
     id: TabId,
     path: Option<PathBuf>,
 ) -> ApiResult<TabSummary> {
-    with_ws(state, window, move |ws| {
+    let save_as = path.is_some();
+    let summary = with_ws(state.clone(), window, move |ws| {
         ws.save(id, path.as_deref())?;
         Ok(ws.summary(id)?)
     })
-    .await
+    .await?;
+    // A file written by Save As goes to Recent Files, like an opened one.
+    if save_as {
+        let recents = {
+            let mut cfg = lock(&state.config);
+            let s = cfg.settings.settings().clone();
+            if cfg.recents.add_if_enabled(summary.path.to_string_lossy().to_string(), &s) {
+                cfg.recents.save()?;
+            }
+            cfg.recents.recents().to_vec()
+        };
+        let _ = app.emit("recents-changed", recents);
+    }
+    Ok(summary)
 }
 
 // ---------------------------------------------------------------- inspection

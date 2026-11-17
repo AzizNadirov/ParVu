@@ -40,17 +40,17 @@ ${t("about.sql_description")}
 
 \`\`\`sql
 -- View all data
-SELECT * FROM data
+SELECT * FROM sales
 
 -- Filter rows
-SELECT * FROM data WHERE age > 25
+SELECT * FROM sales WHERE qty > 5
 
 -- Aggregate data
 SELECT category, COUNT(*) as count
-FROM data GROUP BY category
+FROM sales GROUP BY category
 
 -- Multiple value filter
-SELECT * FROM data WHERE status IN ('active', 'pending')
+SELECT * FROM sales WHERE status IN ('active', 'pending')
 \`\`\`
 
 ${t("dialog.about.sql_docs")}

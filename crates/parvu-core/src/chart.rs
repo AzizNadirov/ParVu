@@ -411,11 +411,19 @@ fn scatter(conn: &Connection, source: &str, x: &str, y: Option<&str>, split: Opt
     let tops: Vec<Option<String>> = match split {
         Some(s) => {
             let sql = format!(
-                "SELECT CAST({} AS VARCHAR) FROM ({source}) GROUP BY 1 ORDER BY COUNT(*) DESC, 1 LIMIT {MAX_SCATTER_SERIES}",
-                q(s)
+                "SELECT CAST({} AS VARCHAR) FROM ({source}) GROUP BY 1 ORDER BY COUNT(*) DESC, 1 LIMIT {}",
+                q(s),
+                MAX_SCATTER_SERIES + 2
             );
             let mut stmt = conn.prepare(&sql)?;
-            stmt.query_map([], |r| r.get::<_, Option<String>>(0))?.collect::<std::result::Result<_, _>>()?
+            let mut tops: Vec<Option<String>> =
+                stmt.query_map([], |r| r.get::<_, Option<String>>(0))?.collect::<std::result::Result<_, _>>()?;
+            // "Other" only when it holds at least two values: with one more
+            // value than the cap, that value is shown by name.
+            if tops.len() > MAX_SCATTER_SERIES + 1 {
+                tops.truncate(MAX_SCATTER_SERIES);
+            }
+            tops
         }
         None => vec![None],
     };

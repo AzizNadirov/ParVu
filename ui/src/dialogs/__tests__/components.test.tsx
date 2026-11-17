@@ -5,7 +5,7 @@ import { format } from "../../lib/i18n";
 import { RichText, qtLabel } from "../common";
 import { maybeTranslate, shortcutRows } from "../ShortcutsDialog";
 import { formToValues, invalidNumericFields, settingsToForm } from "../SettingsDialog";
-import { pickRightKey } from "../JoinDialog";
+import { pickLeftKey, pickRightKey } from "../JoinDialog";
 import { formatFileSize } from "../TableInfoDialog";
 
 describe("RichText", () => {
@@ -99,6 +99,8 @@ describe("misc", () => {
     expect(pickRightKey("id", ["x", "id"])).toBe("id");
     expect(pickRightKey("id", ["x", "y"])).toBe("x");
     expect(pickRightKey("id", [])).toBe("");
+    expect(pickLeftKey(["order_id", "customer"], ["customer", "city"])).toBe("customer");
+    expect(pickLeftKey(["a", "b"], ["x"])).toBe("a");
   });
   it("formats file sizes", () => {
     expect(formatFileSize(0)).toBe("0 B");

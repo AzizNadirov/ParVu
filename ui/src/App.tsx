@@ -650,10 +650,17 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const resetTab = useCallback(async () => {
     if (!activeTab) return;
+    // Reset drops every step and can't be undone: ask first.
+    // Cell edits, formulas and "Read as" choices stay; the rest goes.
+    const kept = (k: string) => k.startsWith("step.cell_edit") || k.startsWith("step.formula") || k === "step.source_type";
+    const sqlSteps = activeTab.steps.filter((x) => !kept(x.key)).length;
+    if (sqlSteps && !(await ui.confirm(t("dialog.reset.title", { name: activeTab.name }), t("dialog.reset.message", { count: sqlSteps })))) return;
     const id = activeTab.id;
     const s = await mutate(id, () => api.resetTab(id), t("error.query_error"));
     if (s) {
-      const q = renderVars(settings.default_sql_query, settings, s.name);
+      // The tab's own query (the whole table), not the "default query"
+      // setting, which may carry a LIMIT that would cut the table.
+      const q = s.current_query;
       const st = tabUi.current.get(id);
       if (st) {
         st.query = q;
@@ -662,7 +669,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       setEditorText(q);
       status(t("status.reset"), 3000);
     }
-  }, [activeTab, mutate, t, settings, status]);
+  }, [activeTab, mutate, t, settings, status, ui]);
 
   const sortBy = useCallback(
     async (column: string, ascending?: boolean) => {
@@ -1383,7 +1390,8 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const runMath = async () =>
     withTab(async (tab) => {
-      const r = await openMathDialog(ui, { tabId: tab.id, table: tab.name, columns: columnNames });
+      const selected = currentCell ? page?.columns[currentCell.col]?.name : undefined;
+      const r = await openMathDialog(ui, { tabId: tab.id, table: tab.name, columns: columnNames, selected });
       if (r) await mutate(tab.id, () => api.addComputedColumn(tab.id, r.name, r.text), t("error.operation_failed"));
     });
 
@@ -1563,7 +1571,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         if (tab.id === active) await loadPage(tab.id, 1);
         else setBusy(false);
         void refreshSchema();
-        await ui.alert(t("success.save_complete"), t("success.save_complete_msg", { path: s.path }));
+        // Files have no place for formulas: say that they were saved as values.
+        const done = t("success.save_complete_msg", { path: s.path });
+        await ui.alert(t("success.save_complete"), tab.formulas.length ? `${done}\n\n${t("success.formulas_as_values", { count: tab.formulas.length })}` : done);
         return true;
       } catch (e) {
         setBusy(false);
@@ -1574,11 +1584,19 @@ export function App({ boot }: { boot: Bootstrap }) {
     [status, t, upsertTab, active, loadPage, refreshSchema, ui],
   );
 
+  /** Where a result tab is saved by default: next to its source file (the
+   * app's working folder is no place for it). */
+  const resultSavePath = (tab: TabSummary): string => {
+    const source = tabs.find((x) => x.id === tab.origin?.source_id)?.path ?? "";
+    const dir = source.slice(0, Math.max(source.lastIndexOf("/"), source.lastIndexOf("\\")) + 1);
+    return `${dir}${tab.name}.parquet`;
+  };
+
   const saveAs = useCallback(
     async (tab: TabSummary): Promise<boolean> => {
       const path = await saveDialog({
         title: t("dialog.save_as"),
-        defaultPath: tab.path || `${tab.name}.parquet`,
+        defaultPath: tab.path || resultSavePath(tab),
         filters: [
           { name: "Parquet", extensions: ["parquet"] },
           { name: "CSV", extensions: ["csv", "tsv"] },
@@ -1588,7 +1606,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       });
       return path ? saveTab(tab, path) : false;
     },
-    [saveTab, t],
+    [saveTab, t, tabs],
   );
   saveAsRef.current = saveAs;
 
@@ -1710,11 +1728,25 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
 
   // ------------------------------------------------------------ settings, theme, language
+  // The settings hold the theme and language too: Settings shows them.
   const onTheme = useCallback((info: { name: string; css: string }) => {
     applyThemeCss(info.css);
     setThemeKey(info.name + Date.now());
+    setSettings((s) => ({ ...s, current_theme: info.name }));
   }, []);
-  const onLanguage = useCallback((_lang: string, tr: Record<string, string>) => setTranslations(tr), []);
+  /** Saved settings: the page size may have changed, so tabs and the page reload. */
+  const onSettingsSaved = useCallback(
+    (s: Settings) => {
+      setSettings(s);
+      void api.tabs().then((list) => list.forEach(upsertTab)).catch(() => undefined);
+      if (active !== null) void loadPage(active, 1);
+    },
+    [active, upsertTab, loadPage],
+  );
+  const onLanguage = useCallback((lang: string, tr: Record<string, string>) => {
+    setTranslations(tr);
+    setSettings((s) => ({ ...s, current_language: lang }));
+  }, []);
 
   // ------------------------------------------------------------ menus
   // ------------------------------------------------------------ AI assistant
@@ -1766,7 +1798,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.file.export"), icon: "export", shortcut: "Ctrl+E", disabled: !activeTab, onSelect: () => void exportTab() },
         { type: "separator" },
         { label: t("menu.file.close_tab"), icon: "close", shortcut: "Ctrl+W", disabled: !activeTab, onSelect: () => activeTab && void closeTab(activeTab.id) },
-        { label: t("menu.file.settings"), icon: "settings", onSelect: () => void openSettingsDialog(ui, { onSettings: setSettings, onTheme, onLanguage }) },
+        { label: t("menu.file.settings"), icon: "settings", onSelect: () => void openSettingsDialog(ui, { onSettings: onSettingsSaved, onTheme, onLanguage }) },
         { type: "separator" },
         { label: t("menu.file.exit"), icon: "exit", onSelect: () => void getCurrentWindow().close() },
       ],
@@ -2187,14 +2219,22 @@ export function App({ boot }: { boot: Bootstrap }) {
                         className="text small-btn"
                         disabled={!tabs.some((x) => x.id === activeTab.origin?.source_id)}
                         aria-label={t("table.go_to_source", { source: activeTab.origin.source })}
+                        title={t("table.from", { source: activeTab.origin.source, what: stepText(t, activeTab.origin.label) })}
                         onClick={() => activeTab.origin && switchTo(activeTab.origin.source_id)}
                       >
-                        {t("table.from", { source: activeTab.origin.source, what: stepText(t, activeTab.origin.label) })}
+                        <span className="ellipsis">
+                          {t("table.from", { source: activeTab.origin.source, what: stepText(t, activeTab.origin.label) })}
+                        </span>
                       </button>
                       <button
                         className="icon"
                         disabled={!tabs.some((x) => x.id === activeTab.origin?.source_id)}
                         aria-label={t("table.refresh")}
+                        title={
+                          tabs.some((x) => x.id === activeTab.origin?.source_id)
+                            ? t("table.refresh")
+                            : t("table.source_closed", { source: activeTab.origin.source })
+                        }
                         onClick={() => void refreshResult(activeTab)}
                       >
                         <Icon name="reset" size={16} />
