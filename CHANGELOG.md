@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **New license: free for noncommercial use.** From this version ParVu is licensed under the PolyForm Noncommercial License 1.0.0. Personal use, study, research, charities, schools and government institutions use it for free; use at work, in paid projects or in commercial products needs a commercial license (see `COMMERCIAL.md`). Earlier versions keep the terms they were published with.
+
 ## [1.0.0-alpha.8]
 
 Custom tools: define your own functions and operations once, with typed parameters and examples that must pass, and use them from the menus, in formulas, in SQL and from AI clients. Nine samples are included. Also a new app icon, the Excel Material and Jupyter themes, and fixes. 1.0.0 follows after this release is tested.

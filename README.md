@@ -270,6 +270,10 @@ A: Yes, in two ways. The **AI assistant** panel (`Ctrl+Shift+A`) works with your
 **Q: Can I create my own themes?**
 A: Yes. Export a theme as a template, edit the JSON, and import it back. See [docs/THEMES.md](docs/THEMES.md).
 
+## License
+
+ParVu is free for personal and other noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Use at work, in paid projects or in commercial products needs a commercial license: see [COMMERCIAL.md](COMMERCIAL.md).
+
 ## Contact
 - [Telegram](https://t.me/aziz_nadirov)
 - [GitHub](https://github.com/AzizNadirov/ParVu)

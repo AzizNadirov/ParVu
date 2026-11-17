@@ -12,7 +12,7 @@ members = [
 version = "1.0.0-alpha.8"
 edition = "2024"
 rust-version = "1.88"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 repository = "https://github.com/AzizNadirov/ParVu"
 
 [workspace.dependencies]
