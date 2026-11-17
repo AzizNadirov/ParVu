@@ -7,7 +7,7 @@ import { Dialog } from "../components/Dialog";
 import { LanguagePicker } from "./LanguageSelector";
 import { ThemePreview } from "./ThemePreview";
 import { exportThemeFlow, importThemeFlow } from "./themeActions";
-import { clampInt, isTruthySetting, toInt, validTableVar } from "./logic";
+import { clampInt, isTruthySetting, toInt } from "./logic";
 import "./dialogs.css";
 
 interface Callbacks {
@@ -148,16 +148,10 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
 
   const set = <K extends keyof SettingsForm>(k: K, v: SettingsForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   const invalid = invalidNumericFields(form);
-  const tableVarOk = validTableVar(form.tableVar, ui.settings.sql_keywords ?? []);
-  const canSave = invalid.length === 0 && tableVarOk && !busy;
+  const canSave = invalid.length === 0 && !busy;
 
   const save = async () => {
     if (busy) return;
-    if (!tableVarOk) {
-      setTab("general");
-      await ui.alert(t("settings.error.invalid"), t("settings.error.invalid_msg"), "error");
-      return;
-    }
     if (invalid.length) return;
     setBusy(true);
     try {
@@ -250,20 +244,9 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
       <fieldset>
         <legend>{t("settings.group.data")}</legend>
         <div className="form-grid">
-          {field(
-            t("settings.label.table_var"),
-            <input
-              type="text"
-              value={form.tableVar}
-              title={t("settings.tooltip.table_var")}
-              aria-invalid={!tableVarOk}
-              onChange={(e) => set("tableVar", e.target.value)}
-            />,
-          )}
           {field(t("settings.label.rows_per_page"), num("rowsPerPage", undefined, t("settings.tooltip.rows_per_page")))}
           {field(t("settings.label.max_rows"), num("maxRows", undefined, t("settings.tooltip.max_rows")))}
         </div>
-        {!tableVarOk && <div className="error-text small">{t("settings.error.invalid_msg")}</div>}
       </fieldset>
       <fieldset>
         <legend>{t("settings.group.file_history")}</legend>

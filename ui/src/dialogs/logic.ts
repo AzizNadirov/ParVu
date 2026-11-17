@@ -396,11 +396,6 @@ export function toInt(v: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export function validTableVar(name: string, keywords: string[]): boolean {
-  const n = name.trim();
-  return !!n && !keywords.map((k) => k.toUpperCase()).includes(n.toUpperCase());
-}
-
 /** Parse `--name: value;` declarations from a theme's CSS. */
 export function parseCssVariables(css: string): Record<string, string> {
   const out: Record<string, string> = {};
