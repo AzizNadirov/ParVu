@@ -1,8 +1,30 @@
 # Custom functions and custom operations — design
 
-Status: proposal. Nothing here is implemented. File paths are relative to the repo root.
+Status: phases 1–4 implemented (SQL bodies; see "Implementation notes" below). Phases 5–7 are open. File paths are relative to the repo root. User guide: `docs/CUSTOM.md`.
 
-**What was not verified.** No DuckDB was available on this machine (no `duckdb` Python package, no CLI), so every statement about DuckDB behaviour is from memory. Those statements are marked **[verify]** and listed in §11.4. The repo facts were read from the code.
+**What was not verified when this was written.** No DuckDB was available on this machine (no `duckdb` Python package, no CLI), so every statement about DuckDB behaviour is from memory. Those statements are marked **[verify]** and listed in §11.4. The repo facts were read from the code.
+
+### Implementation notes (phases 1–4)
+
+Decisions taken for this round: bodies are SQL only (a SQL expression for functions, one SELECT for operations; `BodyLanguage` is the seam for expression bodies); at least one passing example is required to Save, Save draft keeps the rest; applied steps keep their SQL and Refresh uses the current definition; no AI or MCP defining; no SQL-mode macros; no "name" parameter kind.
+
+§11.4 checked against the shipped DuckDB (v2.0.0, prebuilt library):
+
+1. `json_serialize_sql` / `json_deserialize_sql` round-trip `QUALIFY`, windows with frames, `* REPLACE`, `* EXCLUDE`, CTEs, lambdas, `PIVOT`, `ASOF JOIN`, `UNION ALL BY NAME`. Non-SELECT statements are refused ("Only SELECT statements can be serialized"). `GROUP BY ALL ORDER BY ALL` comes back as `ORDER BY COLUMNS(*)` (same meaning). `SELECT 1; SELECT 2` serializes as two statements, which the guard refuses. True, with these notes.
+2. `duckdb_functions()` has `stability` (`CONSISTENT`, `CONSISTENT_WITHIN_QUERY`, `VOLATILE`) and `has_side_effects`. True; the fixed fallback list is not needed. **Deviation:** `current_date`, `current_timestamp` and friends written without parentheses parse as column references, not functions, so the compiler also treats those names as reading the clock.
+3. A fresh `Connection::open_in_memory()` has the JSON functions. True; validation uses its own database as designed (256 MB, 2 threads, external access off).
+4. `DESCRIBE` over a `WHERE false` relation gives the same types as over data. True (checked for sums and divisions of DECIMAL and BIGINT).
+5. A non-grouped column beside an aggregate fails with `Binder Error: column "b" must appear in the GROUP BY clause …`. The shape probe matches "Binder Error" and "GROUP BY".
+
+Other deviations:
+
+- `columns` (several columns) parameters are not implemented (they are phase 7 "everywhere"); signatures have column, value and table parameters.
+- The cache hash is FNV-1a 64 of the source parts, not SHA-256: it is only a cache key, and `app`/`duckdb` versions are checked too. No new dependency.
+- A row function written to a new column puts it right after its first column argument (as Column → Text functions do), not at the end.
+- Examples store `input` (a function's columns, or an operation's first table), `tables` (other tables), `args` and `expected` as small tables (see `docs/CUSTOM.md`) rather than §4.5's per-kind shapes. Mismatches are `[row, column]`, `[row, -1]` (an expected row not found), `[-1, -1]` (column names), `[-2, -1]` (extra rows).
+- Dependencies between custom tools (§6.6) don't arise yet: a SQL body can't call a custom function. Deleting is therefore never refused.
+- The name check also refuses DuckDB function names (`weighted_avg` is one, so the sample is `weighted_average`).
+- A headless `parvu mcp` loads the user's usable definitions, so `apply_operation` can run custom calls; `list_custom_tools` and defining from AI are not done (phase 6).
 
 ---
 

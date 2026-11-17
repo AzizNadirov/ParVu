@@ -6,6 +6,7 @@
 |---|---|
 | [QUICK_START.md](QUICK_START.md) | Opening files, querying, editing and exporting |
 | [DSL.md](DSL.md) | The expression language |
+| [CUSTOM.md](CUSTOM.md) | Custom functions and operations, and their file format |
 | [THEMES.md](THEMES.md) | Built-in and custom themes |
 | [I18N.md](I18N.md) | Languages and adding a translation |
 | [AI.md](AI.md) | The AI assistant panel and connecting AI clients |
@@ -29,5 +30,6 @@
 ├── settings/settings.json     settings (File → Settings)
 ├── history/recents.json       recent files
 ├── themes/*.json              built-in and custom themes
+├── custom/*.json              custom functions and operations
 └── logs/                      daily logs and crash reports
 ```

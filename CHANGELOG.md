@@ -7,6 +7,7 @@
 - **Excel is now Excel Material.** Excel's green in Material Design 3: green-tinted surfaces, tonal buttons, light green column headers instead of solid green ones, and dense rows in Calibri. If you chose Excel before, ParVu opens Excel Material.
 
 ### Added
+- **Custom functions and operations.** Add your own tools to the Column, Rows and Table menus. A function takes columns and gives a column (or one value, such as a weighted average); an operation takes a table and changes it as a step you can undo, or opens its result as a new table. You write the body in SQL, give its parameters types, and add examples: small inputs with the output you expect. ParVu checks the body is safe (no files, no other tables, nothing random), that the types fit and that every example passes before it saves; **Save draft** keeps one that isn't finished yet. **Table → Manage custom tools…** edits, copies, deletes, imports and exports them as `.json` files. Seven samples come with ParVu: clean phone numbers, title case, percent of total, weighted average, top N per group, outliers by the IQR rule and a running total. See `docs/CUSTOM.md`.
 - **A Jupyter theme**, in the look of JupyterLab: white surfaces, light grey borders, JupyterLab's blue with Jupyter orange, and the notebook's code colours in the SQL editor.
 
 ## [1.0.0-alpha.7]
