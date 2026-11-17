@@ -1281,7 +1281,35 @@ export function definitionToSave(def: CustomDefinition): CustomDefinition {
     if (p.kind === "value" && !p.optional) delete p.default;
   }
   if (d.kind === "function") delete d.placement;
+  // Only functions may be written in the expression language.
+  if (d.kind === "operation") d.body.language = "sql";
   return d;
+}
+
+/** What the body editor completes. An expression body: the built-in
+ * functions (a body can't call custom ones) and the parameters as `[name]`.
+ * A SQL body: the parameters as a table's columns (operations: each table
+ * parameter with its columns). */
+export function customBodySchema(
+  def: CustomDefinition,
+  builtins: FunctionDef[],
+): { tables: { name: string; columns: string[] }[]; functions: FunctionDef[]; methods: string[]; bare?: string[] } {
+  if (def.kind === "function" && def.body.language === "expression") {
+    return { tables: [], functions: builtins.filter((f) => !f.custom), methods: [], bare: def.params.filter((p) => p.kind !== "table").map((p) => p.name) };
+  }
+  const tables =
+    def.kind === "function"
+      ? [{ name: "params", columns: def.params.map((p) => p.name) }]
+      : def.params
+          .filter((p) => p.kind === "table")
+          .map((tp, k) => ({
+            name: tp.name,
+            columns: [
+              ...(tp.columns ?? []).map((c) => c.name),
+              ...def.params.filter((p) => p.kind === "column" && (p.of ? p.of === tp.name : k === 0)).map((p) => p.name),
+            ],
+          }));
+  return { tables, functions: [], methods: [] };
 }
 
 /** Menu entries collapse past this many. */

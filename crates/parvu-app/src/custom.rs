@@ -188,7 +188,7 @@ pub fn registry(ws: &Workspace) -> Arc<FunctionRegistry> {
 pub fn expression_body_sql(def: &Definition) -> Result<String, Issue> {
     use parvu_core::custom::ParamKind;
     use parvu_core::custom::signature::{probe_families, probe_type};
-    let fail = |e: &dyn std::fmt::Display| Issue::new("custom.check.parse", &[("error", &e.to_string())]);
+    let fail = |e: &dyn std::fmt::Display| Issue::new("custom.check.expression_error", &[("error", &e.to_string())]);
     let mut catalog = Catalog::new();
     catalog.register_table(
         ARGS_TABLE,
@@ -669,7 +669,7 @@ mod tests {
         d.body.source = "[nope] + 1".into();
         let r = validate_in(&store, &d, None);
         let f = r.first_failure().unwrap();
-        assert_eq!((f.id.as_str(), f.message.key.as_str()), ("body", "custom.check.parse"));
+        assert_eq!((f.id.as_str(), f.message.key.as_str()), ("body", "custom.check.expression_error"));
         d.body.source = "drop_null(__pv_args[x])".into();
         assert_eq!(validate_in(&store, &d, None).first_failure().unwrap().message.key, "custom.check.body_reserved");
         // A row function in the expression language.

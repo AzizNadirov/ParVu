@@ -228,6 +228,9 @@ export interface Formula {
   after: string | null;
   /** Column totals it uses (aggregate SQL), computed once per rebuild. */
   totals?: string[];
+  /** Why it doesn't compile any more (a custom function it calls was
+   * deleted or broke); its column is empty until it is fixed. */
+  error?: string;
 }
 
 /** Which of a group of duplicates is kept ("none": every one goes, pandas keep=False). */
@@ -367,6 +370,9 @@ export interface CustomCompiled {
   duckdb: string;
 }
 
+/** A body in SQL, or (functions) in the expression language with `[x]` for parameter x. */
+export type CustomBodyLanguage = "sql" | "expression";
+
 export interface CustomDefinition {
   schema: number;
   kind: CustomKind;
@@ -379,7 +385,7 @@ export interface CustomDefinition {
   params: CustomParam[];
   result: { kind: CustomResultKind; type?: string[]; same_as?: string; columns?: RequiredColumn[] };
   placement?: "step" | "new_table";
-  body: { language: "sql"; source: string };
+  body: { language: CustomBodyLanguage; source: string };
   flags: { uses_current_time: boolean };
   examples: CustomExample[];
   compiled?: CustomCompiled;
@@ -403,6 +409,8 @@ export interface CustomListing {
   type_sets: string[];
   value_types: string[];
   folder: string;
+  /** The usable custom functions, as the expression language calls them. */
+  functions: FunctionDef[];
 }
 
 export type ImportClash = "replace" | "rename" | "skip";
@@ -683,6 +691,8 @@ export interface ParamDef {
   logical_type: string;
   required: boolean;
   description: string;
+  /** Typed parameters (custom functions): the argument types accepted. */
+  accepts?: string[];
 }
 
 /** One of Excel's functions in the reference. */
@@ -704,6 +714,12 @@ export interface FunctionDef {
   example: string;
   sql_name: string;
   sql_template?: string | null;
+  /** A summary: a column total in formulas. */
+  aggregate?: boolean;
+  /** Reads other rows (a window). */
+  window?: boolean;
+  /** A custom function the user defined. */
+  custom?: boolean;
 }
 
 export interface ThemeInfo {

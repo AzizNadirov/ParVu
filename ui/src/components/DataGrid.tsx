@@ -64,6 +64,8 @@ export interface DataGridProps {
   sourceColumns?: SourceColumn[];
   /** Formula columns: read-only, with an fx icon. */
   formulaColumns?: string[];
+  /** Formula columns kept with an error (empty until fixed): a warning icon. */
+  brokenFormulas?: string[];
   /** Columns a formula being written refers to, with their colours. */
   highlights?: Map<string, string>;
   /** The selected cell changed (page row, column index). */
@@ -180,12 +182,12 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
       return {
         id: c.name,
         title: c.name + arrow,
-        icon: isFormula ? "pv-formula" : headerIconName(c, source),
+        icon: props.brokenFormulas?.includes(c.name) ? "pv-formula-error" : isFormula ? "pv-formula" : headerIconName(c, source),
         width: widths[c.name] ?? estimateWidth(c, page.rows, i, charPx),
         themeOverride: ref ? { bgHeader: withAlpha(ref, 0.3), bgCell: withAlpha(ref, 0.1), accentColor: ref } : undefined,
       };
     });
-  }, [page, sort, widths, props.sourceColumns, props.formulaColumns, props.highlights]);
+  }, [page, sort, widths, props.sourceColumns, props.formulaColumns, props.brokenFormulas, props.highlights]);
 
   const formulaCol = useMemo(
     () => (page?.columns ?? []).map((c) => !!props.formulaColumns?.includes(c.name)),
@@ -412,6 +414,7 @@ export const DataGrid = memo(
     a.sourceColumns === b.sourceColumns &&
     !!a.pickingColumns === !!b.pickingColumns &&
     (a.formulaColumns ?? []).join("\u0001") === (b.formulaColumns ?? []).join("\u0001") &&
+    (a.brokenFormulas ?? []).join("\u0001") === (b.brokenFormulas ?? []).join("\u0001") &&
     // By content: starting or ending a formula, or a change of its
     // references, re-renders (and refreshes the callbacks the grid holds).
     highlightKey(a.highlights) === highlightKey(b.highlights),

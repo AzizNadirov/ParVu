@@ -34,6 +34,7 @@ import {
   type SheetsView,
   type TabSummary,
   type CustomDefinition,
+  type FunctionDef,
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
@@ -170,6 +171,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [recents, setRecents] = useState(boot.recents);
   // Custom functions and operations (the manager, the menus).
   const [customDefs, setCustomDefs] = useState<CustomDefinition[]>([]);
+  /** The usable custom functions, for the expression editor and formula bar. */
+  const [customFns, setCustomFns] = useState<FunctionDef[]>([]);
   const brokenNoticed = useRef(false);
   const reloadCustom = useCallback(() => {
     api
@@ -177,6 +180,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       .then((l) => {
         const defs = customDefinitions(l.entries);
         setCustomDefs(defs);
+        setCustomFns(l.functions ?? []);
         // After an update some may need attention: say so once.
         const broken = defs.filter((d) => d.status === "broken").length;
         if (broken && !brokenNoticed.current) {
@@ -397,15 +401,17 @@ export function App({ boot }: { boot: Bootstrap }) {
   const refreshSchema = useCallback(async () => {
     try {
       const cat = await api.catalog();
-      setSchema({
+      setSchema((old) => ({
+        ...old,
         tables: cat.map(([name, cols]) => ({ name, columns: cols.map((c) => c.name) })),
-        functions: boot.functions,
         methods: allMethods,
-      });
+      }));
     } catch {
       /* autocomplete is best-effort */
     }
-  }, [boot.functions, allMethods]);
+  }, [allMethods]);
+  // Custom functions complete beside the built-ins.
+  useEffect(() => setSchema((old) => ({ ...old, functions: [...boot.functions, ...customFns] })), [boot.functions, customFns]);
 
   const loadPage = useCallback(
     async (id: number, p: number) => {
@@ -498,7 +504,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         void refreshSchema();
         const loaded = t("status.loaded", { filename: path.split(/[\\/]/).pop() ?? path, rows: s.total_rows });
         // Formulas made for this file before come back with it.
-        status(s.formulas.length ? `${loaded} ${t("status.formulas_restored", { count: s.formulas.length })}` : loaded, 6000);
+        const broken = s.formulas.filter((f) => f.error).length;
+        const restored = s.formulas.length ? `${loaded} ${t("status.formulas_restored", { count: s.formulas.length })}` : loaded;
+        status(broken ? `${restored} ${t("status.formulas_broken", { count: broken })}` : restored, broken ? 10000 : 6000);
       } catch (e) {
         setBusy(false);
         const err = e as ApiError;
@@ -1278,6 +1286,9 @@ export function App({ boot }: { boot: Bootstrap }) {
   // ------------------------------------------------------------ formulas
   const formulas = activeTab?.formulas ?? [];
   const formulaNames = formulas.map((f) => f.name);
+  const brokenFormulas = useMemo(() => formulas.filter((f) => f.error).map((f) => f.name), [formulas]);
+  /** The formula bar completes a bare `[` with this table's columns. */
+  const formulaSchema = useMemo<ExprSchema>(() => ({ ...schema, bare: page?.columns.map((c) => c.name) ?? [] }), [schema, page]);
   /** Start a new formula column after `after` (default: the selected column). */
   /** Start a new formula column after `after`; left out: after the
    * selected cell's column; `null`: at the end. */
@@ -1288,7 +1299,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   };
   const editFormula = (name: string) => {
     const f = formulas.find((x) => x.name === name);
-    if (f) setFormulaEdit({ name: f.name, isNew: false, after: f.after, source: f.source, error: "" });
+    // A formula kept with an error opens with it, to be fixed.
+    if (f) setFormulaEdit({ name: f.name, isNew: false, after: f.after, source: f.source, error: f.error ? t("formula.broken", { error: f.error }) : "" });
   };
   const applyFormula = async () => {
     const fe = formulaEdit;
@@ -2052,8 +2064,26 @@ export function App({ boot }: { boot: Bootstrap }) {
       /* the tab may have been closed meanwhile */
     }
   };
-  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi });
-  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi };
+  /** A custom tool changed: formulas follow the current definitions, and
+   * one whose function was deleted or broke now shows its error. */
+  const refreshFormulasAfterCustom = async () => {
+    try {
+      const list = await api.tabs();
+      const before = new Map(tabs.map((x) => [x.id, JSON.stringify(x.formulas)]));
+      let broken = 0;
+      for (const s of list) {
+        if (before.get(s.id) === JSON.stringify(s.formulas)) continue;
+        upsertTab(s);
+        broken += s.formulas.filter((f) => f.error).length;
+        if (s.id === active) await loadPage(s.id, page?.page ?? 1);
+      }
+      if (broken) status(t("status.formulas_broken", { count: broken }), 10000);
+    } catch {
+      /* the tabs reload on their next change */
+    }
+  };
+  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi, refreshFormulasAfterCustom });
+  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi, refreshFormulasAfterCustom };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -2110,7 +2140,10 @@ export function App({ boot }: { boot: Bootstrap }) {
       ),
       listen<number>("mcp-clients", (e) => setAiClients(e.payload)),
       // Custom tools changed (any window), or some need attention after an update.
-      listen("custom-changed", () => reloadCustom()),
+      listen("custom-changed", () => {
+        reloadCustom();
+        void handlers.current.refreshFormulasAfterCustom();
+      }),
 
       // The memory guard stopped running queries (memguard.rs).
       listen<number>("memory-guard", (e) => status(t("memory.guard_stopped", { mb: e.payload }), 10000)),
@@ -2454,7 +2487,7 @@ export function App({ boot }: { boot: Bootstrap }) {
               <FormulaBar
                 ref={formulaBar}
                 t={t}
-                schema={schema}
+                schema={formulaSchema}
                 dark={darkTheme}
                 editing
                 target={formulaEdit.name}
@@ -2498,6 +2531,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                 ranges={st?.ranges ?? NO_RANGES}
                 sourceColumns={sourceCols}
                 formulaColumns={formulaNames}
+                brokenFormulas={brokenFormulas}
                 highlights={formulaHighlights}
                 onCurrentCell={(row, col) => setCurrentCell({ row, col })}
                 onFormulaCell={editFormula}

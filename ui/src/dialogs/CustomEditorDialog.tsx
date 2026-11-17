@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Ui, Closer } from "../lib/ui";
 import { api, errorMessage } from "../lib/api";
-import type { CustomDefinition, CustomExample, CustomParam, CustomReport, ExampleOutcome, ExampleTable } from "../lib/api";
+import type { CustomBodyLanguage, CustomDefinition, CustomExample, CustomParam, CustomReport, ExampleOutcome, ExampleTable } from "../lib/api";
 import { Dialog } from "../components/Dialog";
 import { Icon } from "../components/Icon";
 import { QueryEditor } from "../components/QueryEditor";
@@ -9,6 +9,7 @@ import {
   EXAMPLE_TYPES,
   cellFromInput,
   cellToInput,
+  customBodySchema,
   customCheckText,
   definitionToSave,
   expectedFromActual,
@@ -508,21 +509,13 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | n
     }
   };
 
-  const schema = useMemo(() => {
-    const tables =
-      def.kind === "function"
-        ? [{ name: "params", columns: def.params.map((p) => p.name) }]
-        : def.params
-            .filter((p) => p.kind === "table")
-            .map((tp, k) => ({
-              name: tp.name,
-              columns: [
-                ...(tp.columns ?? []).map((c) => c.name),
-                ...def.params.filter((p) => p.kind === "column" && (p.of ? p.of === tp.name : k === 0)).map((p) => p.name),
-              ],
-            }));
-    return { tables, functions: [], methods: [] };
-  }, [def.kind, def.params]);
+  const exprBody = fn && def.body.language === "expression";
+  // Not on every keystroke: a new schema reconfigures the editor (and closes its completions).
+  const schema = useMemo(
+    () => customBodySchema(def, ui.boot.functions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [def.kind, def.params, def.body.language, ui.boot.functions],
+  );
 
   const sameAsChoices = def.params.filter((p) => p.kind === "column").map((p) => p.name);
   const resultTypeValue = def.result.same_as ? `same:${def.result.same_as}` : (def.result.type?.[0] ?? "any");
@@ -664,6 +657,18 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | n
         <div className="col">
           <div className="row">
             <span className="pv-section-title grow">{t(fn ? "custom.editor.body_function" : "custom.editor.body_operation")}</span>
+            {fn && (
+              <label className="row" title={t("custom.editor.language_hint")}>
+                <span>{t("custom.editor.language")}</span>
+                <select
+                  value={def.body.language}
+                  onChange={(e) => update({ body: { ...def.body, language: e.target.value as CustomBodyLanguage } })}
+                >
+                  <option value="sql">{t("custom.editor.language_sql")}</option>
+                  <option value="expression">{t("custom.editor.language_expression")}</option>
+                </select>
+              </label>
+            )}
             <label className="row" title={t("custom.editor.uses_today_hint")}>
               <input
                 type="checkbox"
@@ -675,9 +680,9 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | n
           </div>
           <div className="pv-custom-body">
             <QueryEditor
-              mode="sql"
+              mode={exprBody ? "expression" : "sql"}
               value={def.body.source}
-              onChange={(v) => update({ body: { language: "sql", source: v } })}
+              onChange={(v) => update({ body: { language: fn ? def.body.language : "sql", source: v } })}
               onRun={() => void validate()}
               schema={schema}
               keywords={[]}
@@ -685,7 +690,9 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | n
               fontSize={10}
             />
           </div>
-          <div className="pv-hint">{t(fn ? "custom.editor.body_function_hint" : "custom.editor.body_operation_hint")}</div>
+          <div className="pv-hint">
+            {t(exprBody ? "custom.editor.body_expression_hint" : fn ? "custom.editor.body_function_hint" : "custom.editor.body_operation_hint")}
+          </div>
           {report?.compiled && (
             <details>
               <summary>{t("custom.editor.compiled")}</summary>
