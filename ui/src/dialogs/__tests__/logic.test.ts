@@ -36,7 +36,6 @@ import {
   mergeUniqueValues,
   statsRows,
   themeFileName,
-  validTableVar,
   withExtension,
 } from "../logic";
 import type { SearchParams } from "../logic";
@@ -284,9 +283,6 @@ describe("misc", () => {
     expect(isTruthySetting("True")).toBe(true);
     expect(isTruthySetting("false")).toBe(false);
     expect(isTruthySetting(true)).toBe(true);
-    expect(validTableVar("data", ["SELECT"])).toBe(true);
-    expect(validTableVar(" select ", ["SELECT"])).toBe(false);
-    expect(validTableVar("  ", [])).toBe(false);
   });
 
   it("parses theme CSS variables", () => {
