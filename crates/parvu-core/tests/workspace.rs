@@ -509,3 +509,20 @@ fn hugeint_columns_are_saved_as_whole_numbers() {
     assert_eq!(types(&ws, &big), ["DECIMAL(38,0)"]);
     assert_eq!(cell(&ws, id, 1, 0, 0).as_deref(), Some("85070591730234615865843651857942052863"));
 }
+
+/// Undoing a second edit of a cell goes back to the first edit, not to the
+/// file's value (the first edit used to be lost).
+#[test]
+fn undo_of_a_second_edit_keeps_the_first() {
+    let (_d, _p, mut ws, id) = setup(5, "parquet");
+    ws.edit_cell(id, 2, "name", Some("AAA".into())).unwrap();
+    ws.edit_cell(id, 2, "name", Some("BBB".into())).unwrap();
+    assert_eq!(cell(&ws, id, 1, 2, 1).as_deref(), Some("BBB"));
+    ws.undo(id).unwrap();
+    assert_eq!(cell(&ws, id, 1, 2, 1).as_deref(), Some("AAA"));
+    let s = ws.summary(id).unwrap();
+    assert_eq!((s.steps.len(), s.pending_edits), (1, 1));
+    ws.undo(id).unwrap();
+    assert_eq!(cell(&ws, id, 1, 2, 1).as_deref(), Some("name_2"));
+    assert_eq!(ws.summary(id).unwrap().pending_edits, 0);
+}
