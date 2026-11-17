@@ -2,6 +2,7 @@
 // the bundle). Drawn in `currentColor`, so they follow the text colour.
 import {
   mdiArrowCollapseDown,
+  mdiFunctionVariant,
   mdiArrowDown,
   mdiArrowUp,
   mdiCalculatorVariantOutline,
@@ -43,6 +44,7 @@ export const icons = {
   download: mdiDownload,
   filter: mdiFilterVariant,
   first: mdiPageFirst,
+  formula: mdiFunctionVariant,
   groupBy: mdiSigma,
   info: mdiInformationOutline,
   join: mdiTableMergeCells,

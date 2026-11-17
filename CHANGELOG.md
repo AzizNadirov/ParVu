@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- **Column formulas and the formula bar.** A formula column computes every row from an expression such as `= [qty] * [price]`.
+  - **Starting a formula:** type `=` in a cell, use the *fx* button of the new formula bar above the grid, or choose **New Formula Column After This** in the column menu.
+  - **Writing it:** the bar has the expression language's highlighting and autocomplete. Each column the formula refers to gets its own colour, both in the bar and as a tinted column in the grid, and clicking a column header inserts it.
+  - **Live, like Excel:** change a cell and the formulas using it update at once. Cell editing stays available, and undo covers adding, changing and removing a formula.
+  - Formula columns show an *fx* icon. Their cells open the formula instead of being edited directly.
+  - Saving writes the computed values.
+
 ## [1.0.0-alpha.5]
 
 Column types are now detected in Parquet, JSON and Excel files too, not just CSV: text columns that hold dates, numbers or yes/no values get those types when the file opens.

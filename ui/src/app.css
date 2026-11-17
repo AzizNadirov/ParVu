@@ -289,3 +289,27 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
 .ai-provider-list { min-height: 240px; }
 .ai-provider-list .item { cursor: default; }
 .ai-provider-form { align-content: start; }
+
+/* Formula bar (above the grid) */
+.formula-bar {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr auto auto;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0 8px 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-s);
+  background: var(--md-surface-container-low);
+}
+.formula-bar.editing { border-color: var(--md-primary); background: var(--md-surface); }
+.formula-bar .formula-target { font-weight: 600; color: var(--md-on-surface-variant); white-space: nowrap; }
+.formula-bar .formula-name { width: 140px; font-weight: 600; }
+.formula-bar .formula-eq { color: var(--md-on-surface-variant); font-family: var(--pv-layout-code-font-family), monospace; }
+.formula-bar .formula-editor { grid-column: 4; min-width: 0; }
+.formula-bar .formula-editor .cm-editor { background: transparent; max-height: 96px; }
+.formula-bar .formula-editor .cm-editor.cm-focused { outline: none; }
+.formula-bar .formula-editor .cm-content { font-family: var(--pv-layout-code-font-family), monospace; padding: 4px 0; }
+.formula-bar .formula-editor .cm-scroller { overflow: auto; }
+.formula-bar .formula-hint { grid-column: 1 / -1; font-size: 12px; color: var(--md-on-surface-variant); padding: 0 4px 2px; }
+.formula-bar .formula-hint.error-text { color: var(--md-error); }
