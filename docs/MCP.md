@@ -26,7 +26,7 @@ The client can list, describe, sample and query the open tables freely. When it 
 - the row count before and after;
 - a preview of the result and the SQL (for a formula, the formula itself).
 
-**Apply** adds a normal step to Applied Steps, which `Ctrl+Z` undoes. **Reject** tells the client no. Opening and saving files stays with you: in this mode the client has no `open_file` or `export` tool.
+**Apply** adds a normal step to Applied Steps, which `Ctrl+Z` undoes. **Reject** tells the client no. When the client proposes a custom function or operation (`propose_custom_tool`), ParVu asks whether to open it in the custom tool editor, prefilled with the client's definition and examples; you read it, validate it and save it, or cancel. The client can't save it. Opening and saving files stays with you: in this mode the client has no `open_file` or `export` tool.
 
 If ParVu isn't running, `parvu mcp --attach` waits: it answers the client's startup itself, and opens ParVu only when the AI first uses a tool. Starting Claude Code (or a new VS Code window) therefore doesn't open ParVu, and the order you start things in doesn't matter. If ParVu is open with AI clients switched off, the client is told how to switch them on; no second window opens.
 
@@ -97,6 +97,8 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 | `apply_operation` | Any ParVu table operation (filter, sort, add column, fill missing values, window functions…) as a step. Group by, pivot, melt, transpose, value counts, describe, join and append leave the table as it is and open their result as a new table (`new_table` in the answer) |
 | `set_formula` | Add or change a formula column: a live column computed from each row, e.g. `[qty] * [price]`, `[price] / SUM([price])` (share of the column's total) or `SUM([q1:q4])` (across a row). Cells stay editable and the column updates when they change. Formulas approved in your window are remembered for the file, like your own. |
 | `undo` | Revert the last step on a table |
+| `list_custom_tools` | The custom functions and operations the user defined ([CUSTOM.md](CUSTOM.md)): name, kind (row function, summary function, operation), typed signature, description, one example and how to call each one with `apply_operation` (`custom_function` / `custom_operation`) or `set_formula` (a summary function there is a column total, like `SUM`) |
+| `propose_custom_tool` | Suggest a new custom function or operation: a full definition with examples. ParVu validates it with every check (including the safety guard that refuses file functions) and returns the report in English. It never saves anything: connected to the window, the user is asked whether to open the proposal in the editor and saves it there; the standalone server only validates, even with `--allow-write`. `offer: false` validates without asking the user (for corrections) |
 | `export` | Write a table to a file (needs `--allow-write`) |
 
 ### Safety

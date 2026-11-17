@@ -2375,7 +2375,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.revenue + 100 AS \"new_col\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.revenue + 100 AS \"new_col\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "new_col"
@@ -2390,7 +2390,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", 1 AS \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", 1 AS \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "new col"
@@ -2405,7 +2405,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT sales.id * 2 AS \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "sql": "SELECT sales.id * 2 AS \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "id"
@@ -2420,7 +2420,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", UPPER(sales.name) AS \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", UPPER(sales.name) AS \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "name"
@@ -2435,7 +2435,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.qty * sales.price AS \"total\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.qty * sales.price AS \"total\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "total"
@@ -2450,7 +2450,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", 1 AS \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", 1 AS \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "select"
@@ -2465,7 +2465,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.id > 5 AS \"flag2\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", sales.id > 5 AS \"flag2\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "flag2"
@@ -2480,7 +2480,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"'q'\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"'q'\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "'q'"
@@ -2495,7 +2495,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": ""
@@ -2510,7 +2510,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", NULL AS \"x\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", NULL AS \"x\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "x"
@@ -2525,7 +2525,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"x\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", 1 AS \"x\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "x"
@@ -2540,7 +2540,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", -5 AS \"x\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", -5 AS \"x\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "x"
@@ -2555,7 +2555,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", REPLACE(sales.name, 'a', 'b') AS \"x\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", REPLACE(sales.name, 'a', 'b') AS \"x\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "x"
@@ -4182,7 +4182,7 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1 AS \"n\" FROM sales",
+    "sql": "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", SELECT * FROM sales QUALIFY ROW_NUMBER() OVER (PARTITION BY id, revenue, qty, price, name, note, flag, active, d, ts, \"new col\", \"select\", Mixed, \"x\"\"y\", tags, café, TRUE, \"NOT\") = 1 AS \"n\" FROM sales",
     "kind": {
      "type": "assignment",
      "column": "n"

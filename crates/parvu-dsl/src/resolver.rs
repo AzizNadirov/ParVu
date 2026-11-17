@@ -228,6 +228,7 @@ impl Resolver<'_> {
         };
         args.iter().try_for_each(ensure_scalar)?;
         check_args(func_def, args.len())?;
+        check_types(func_def, &args)?;
         Ok(Expr::Call {
             func_name: name.to_string(),
             args,
@@ -666,7 +667,47 @@ fn check_args(func_def: &FunctionDef, n_args: usize) -> Result<(), DslError> {
             func_def.name
         ));
     }
-    // Type checking is permissive (as in the Python DSL): mismatches are allowed.
+    // Custom functions have a fixed signature: no extra arguments.
+    if func_def.custom && n_args > func_def.params.len() {
+        let n = func_def.params.len();
+        return err(format!("'{}' takes at most {n} argument{}, got {n_args}", func_def.name, if n == 1 { "" } else { "s" }));
+    }
+    Ok(())
+}
+
+/// A word for a logical type in messages.
+fn type_word(t: LogicalType) -> &'static str {
+    match t {
+        LogicalType::Numeric => "a number",
+        LogicalType::Text => "text",
+        LogicalType::Boolean => "yes/no",
+        LogicalType::Date => "a date",
+        LogicalType::Timestamp => "a date and time",
+        LogicalType::List => "a list",
+        LogicalType::Struct => "a struct",
+        LogicalType::Unknown | LogicalType::Query => "a value",
+    }
+}
+
+/// Type checking is permissive for the built-ins (as in the Python DSL).
+/// A parameter that lists the types it `accepts` (custom functions) refuses
+/// an argument whose type is known and not among them.
+fn check_types(func_def: &FunctionDef, args: &[Expr]) -> Result<(), DslError> {
+    for (p, a) in func_def.params.iter().zip(args) {
+        let Some(accepts) = &p.accepts else { continue };
+        let got = a.logical_type();
+        if matches!(got, LogicalType::Unknown | LogicalType::Query) || accepts.is_empty() || accepts.contains(&got) {
+            continue;
+        }
+        let wanted: Vec<&str> = accepts.iter().map(|t| type_word(*t)).collect();
+        return err(format!(
+            "{}: {} takes {}, but this argument is {}",
+            func_def.name,
+            p.name,
+            wanted.join(" or "),
+            type_word(got)
+        ));
+    }
     Ok(())
 }
 

@@ -3,6 +3,7 @@ import type { ColumnMeta, CustomDefinition } from "../../lib/api";
 import {
   buildCustomOp,
   cellFromInput,
+  customBodySchema,
   cellToInput,
   customArgProblems,
   definitionToSave,
@@ -150,5 +151,25 @@ describe("custom tools", () => {
     const cols = parseRequiredColumns("amount: number, region ,");
     expect(cols).toEqual([{ name: "amount", type: ["number"] }, { name: "region" }]);
     expect(formatRequiredColumns(cols)).toBe("amount: number, region");
+  });
+
+  it("completes an expression body with the parameters and the built-ins", () => {
+    const builtins = [
+      { name: "UPPER", params: [], return_type: "TEXT", description: "", example: "", sql_name: "" },
+      { name: "weighted_average", params: [], return_type: "NUMERIC", description: "", example: "", sql_name: "", custom: true },
+    ];
+    const expr = customBodySchema({ ...cleanPhone, body: { language: "expression", source: "" } }, builtins);
+    expect(expr.bare).toEqual(["phone", "prefix"]);
+    expect(expr.functions.map((f) => f.name)).toEqual(["UPPER"]);
+    const sql = customBodySchema(cleanPhone, builtins);
+    expect(sql.tables).toEqual([{ name: "params", columns: ["phone", "prefix"] }]);
+    expect(sql.bare).toBeUndefined();
+    expect(customBodySchema(topN, builtins).tables).toEqual([{ name: "t", columns: ["grp", "score"] }]);
+  });
+
+  it("saves operations as SQL bodies", () => {
+    const op = definitionToSave({ ...topN, body: { language: "expression", source: "SELECT 1" } });
+    expect(op.body.language).toBe("sql");
+    expect(definitionToSave({ ...cleanPhone, body: { language: "expression", source: "[phone]" } }).body.language).toBe("expression");
   });
 });

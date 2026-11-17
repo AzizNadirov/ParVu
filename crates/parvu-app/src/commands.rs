@@ -128,6 +128,7 @@ pub fn bootstrap(state: State<'_, AppState>, window: WebviewWindow) -> ApiResult
         extensions: parvu_core::format::supported_extensions(),
         cast_types: CAST_TYPES.to_vec(),
         parquet_compressions: PARQUET_COMPRESSIONS.to_vec(),
+        // Built-ins only: the custom functions come with `custom_list` (they load after start).
         functions: FunctionRegistry::default().all_functions().into_iter().cloned().collect(),
         excel_functions: parvu_dsl::excel::catalog(),
         methods: methods_by_type(),
@@ -391,7 +392,7 @@ pub async fn run_sql(state: State<'_, AppState>, window: WebviewWindow, id: TabI
     .await
 }
 
-fn catalog_of(ws: &Workspace) -> Catalog {
+pub(crate) fn catalog_of(ws: &Workspace) -> Catalog {
     let mut cat = Catalog::new();
     for (name, cols) in ws.catalog() {
         cat.register_table(&name, cols.into_iter().map(|c| (c.name, c.dtype)));
@@ -421,8 +422,9 @@ pub async fn run_expression(
     with_ws(state, window, move |ws| {
         let name = ws.tab_name(id)?.to_string();
         let catalog = catalog_of(ws);
-        check_target_table(&text, &catalog, &name, &i18n)?;
-        let t = parvu_dsl::translate(&text, &catalog, &FunctionRegistry::default(), &name)?;
+        let registry = crate::custom::registry(ws);
+        check_target_table(&text, &catalog, &registry, &name, &i18n)?;
+        let t = parvu_dsl::translate(&text, &catalog, &registry, &name)?;
         let label = match &t.kind {
             TranslationKind::Assignment { column } => StepLabel::new("step.add_column", &[("column", column)]),
             _ => StepLabel::new("step.expression", &[("expression", &short(&text, 60))]),
@@ -436,10 +438,10 @@ pub async fn run_expression(
 /// Table-level expressions (assignments, drop_duplicates, drop_null) name
 /// their table. Running one that names another tab would replace this tab's
 /// data with the other table, so refuse it.
-fn check_target_table(text: &str, catalog: &Catalog, active: &str, i18n: &I18n) -> ApiResult<()> {
+fn check_target_table(text: &str, catalog: &Catalog, registry: &FunctionRegistry, active: &str, i18n: &I18n) -> ApiResult<()> {
     use parvu_dsl::Expr;
     let ast = parvu_dsl::parse(text.trim())?;
-    let expr = parvu_dsl::resolve(&ast, catalog, &FunctionRegistry::default())?;
+    let expr = parvu_dsl::resolve(&ast, catalog, registry)?;
     let target = match &expr {
         Expr::Assignment { table, .. } | Expr::DropDuplicates { table, .. } | Expr::DropNull { table, .. } => table,
         _ => return Ok(()),
@@ -488,7 +490,7 @@ pub(crate) fn compile_tab_formula(ws: &Workspace, id: TabId, name: String, sourc
     // Formulas see the file's columns and the formulas', not the steps'.
     let mut catalog = catalog_of(ws);
     catalog.register_table(&table, ws.formula_columns(id)?.into_iter().map(|c| (c.name, c.dtype)));
-    let compiled = parvu_dsl::compile_formula(source, &catalog, &FunctionRegistry::default(), &table)?;
+    let compiled = parvu_dsl::compile_formula(source, &catalog, &crate::custom::registry(ws), &table)?;
     // PREV / NEXT read the whole table in order for every page: on a big
     // table that is slow and needs the table in memory.
     if compiled.reads_neighbours && ws.table_rows(id)? > NEIGHBOUR_MAX_ROWS {
@@ -498,7 +500,7 @@ pub(crate) fn compile_tab_formula(ws: &Workspace, id: TabId, name: String, sourc
         ));
     }
     let source = source.trim().trim_start_matches('=').trim().to_string();
-    Ok(Formula { name, source, sql: compiled.sql, after, totals: compiled.totals })
+    Ok(Formula { name, source, sql: compiled.sql, after, totals: compiled.totals, error: None })
 }
 
 /// Remember a tab's formulas for its file, to restore them when it opens again.
@@ -566,24 +568,31 @@ pub async fn set_sheet(state: State<'_, AppState>, window: WebviewWindow, id: Ta
     .await
 }
 
-/// Put back the formulas remembered for the file of tab `id`, one by one;
-/// one that no longer compiles or runs is skipped.
+/// Put back the formulas remembered for the file of tab `id`, one by one.
+/// One that no longer compiles or runs (a custom function it calls was
+/// deleted, a column is gone) is kept with its error, as an empty column,
+/// so the user sees it and can fix it.
 fn restore_formulas(ws: &mut Workspace, id: TabId, saved: Vec<SavedFormula>) {
     let mut restored: Vec<Formula> = Vec::new();
     for f in saved {
-        let compiled = compile_tab_formula(ws, id, f.name.clone(), &f.source, f.after.clone());
+        let source = f.source.trim().trim_start_matches('=').trim().to_string();
+        let broken = |error: String| Formula::broken(f.name.clone(), source.clone(), f.after.clone(), error);
+        let formula = compile_tab_formula(ws, id, f.name.clone(), &f.source, f.after.clone()).unwrap_or_else(|e| {
+            tracing::warn!("formula {} kept with an error: {}", f.name, e.message);
+            broken(e.message)
+        });
         let mut next = restored.clone();
-        match compiled {
-            Ok(formula) => next.push(formula),
-            Err(e) => {
+        next.push(formula);
+        if let Err(e) = ws.restore_formulas(id, next.clone()) {
+            tracing::warn!("formula {} kept with an error: {e}", f.name);
+            next.pop();
+            next.push(broken(e.to_string()));
+            if let Err(e) = ws.restore_formulas(id, next.clone()) {
                 tracing::warn!("formula {} not restored: {e}", f.name);
                 continue;
             }
         }
-        match ws.restore_formulas(id, next.clone()) {
-            Ok(()) => restored = next,
-            Err(e) => tracing::warn!("formula {} not restored: {e}", f.name),
-        }
+        restored = next;
     }
 }
 
@@ -617,7 +626,7 @@ pub async fn preview_expression(
 ) -> ApiResult<ExpressionPreview> {
     with_ws(state, window, move |ws| {
         let name = ws.tab_name(id)?.to_string();
-        let t = parvu_dsl::translate(&text, &catalog_of(ws), &FunctionRegistry::default(), &name)?;
+        let t = parvu_dsl::translate(&text, &catalog_of(ws), &crate::custom::registry(ws), &name)?;
         Ok(ExpressionPreview { sql: t.sql, kind: Some(t.kind) })
     })
     .await
@@ -807,7 +816,7 @@ pub async fn add_computed_column(
     text: String,
 ) -> ApiResult<TabSummary> {
     with_ws(state, window, move |ws| {
-        let sql = parvu_dsl::preview(&text, &catalog_of(ws), &FunctionRegistry::default())?;
+        let sql = parvu_dsl::preview(&text, &catalog_of(ws), &crate::custom::registry(ws))?;
         ws.apply(id, &Operation::AddColumn { name, expression: sql })?;
         Ok(ws.summary(id)?)
     })
@@ -1234,7 +1243,7 @@ mod tests {
         let mut catalog = parvu_dsl::Catalog::new();
         catalog.register_table("t", ws.formula_columns(id).unwrap().into_iter().map(|c| (c.name, c.dtype)));
         let c = parvu_dsl::compile_formula("= [qty] / SUM([qty])", &catalog, &parvu_dsl::FunctionRegistry::default(), "t").unwrap();
-        let f = parvu_core::formula::Formula { name: "share".into(), source: String::new(), sql: c.sql, after: None, totals: c.totals };
+        let f = parvu_core::formula::Formula { name: "share".into(), source: String::new(), sql: c.sql, after: None, totals: c.totals, error: None };
         ws.set_formula(id, f).unwrap();
         let page = ws.page(id, 1).unwrap();
         let shares: Vec<_> = page.rows.iter().map(|r| r[1].clone().unwrap()).collect();
@@ -1242,7 +1251,7 @@ mod tests {
     }
 
     /// Formulas come back in order (a later one may use an earlier one);
-    /// one that no longer compiles is skipped.
+    /// one that no longer compiles is kept with its error.
     #[test]
     fn restores_remembered_formulas() {
         use crate::column_types::SavedFormula;
@@ -1257,11 +1266,14 @@ mod tests {
             id,
             vec![f("total", "[qty] * [price]"), f("gone", "[nope] + 1"), f("share", "[total] / SUM([total])")],
         );
-        let names: Vec<_> = ws.summary(id).unwrap().formulas.iter().map(|f| f.name.clone()).collect();
-        assert_eq!(names, ["total", "share"]);
+        let formulas = ws.summary(id).unwrap().formulas;
+        let names: Vec<_> = formulas.iter().map(|f| f.name.clone()).collect();
+        assert_eq!(names, ["total", "gone", "share"], "a formula that fails is kept");
+        assert!(formulas[1].error.as_deref().is_some_and(|e| e.contains("nope")), "{:?}", formulas[1].error);
         assert!(ws.summary(id).unwrap().steps.is_empty(), "restoring adds no undo step");
         let page = ws.page(id, 1).unwrap();
-        assert_eq!(page.rows[0][3].as_deref(), Some("0.869565217391304"));
+        assert_eq!(page.rows[0][3], None, "a broken formula's column is empty");
+        assert_eq!(page.rows[0][4].as_deref(), Some("0.869565217391304"));
     }
 }
 

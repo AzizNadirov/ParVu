@@ -20,7 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
 use crate::error::{ApiError, ApiResult};
-use crate::mcp::{self, AttachHost, Decision, ParvuMcp, Proposal, RunInfo};
+use crate::mcp::{self, AttachHost, CustomOffer, Decision, ParvuMcp, Proposal, RunInfo};
 use crate::state::{AppState, lock};
 
 /// Attached-mode state, one per app (in [`AppState`]).
@@ -223,6 +223,14 @@ impl AttachHost for TauriHost {
 
     fn formulas_changed(&self, summary: &parvu_core::TabSummary) {
         crate::commands::remember_formulas(summary);
+    }
+
+    fn custom_dir(&self) -> Option<std::path::PathBuf> {
+        Some(lock(&self.app.state::<AppState>().custom).dir().to_path_buf())
+    }
+
+    fn offer_custom(&self, window: &str, offer: CustomOffer) {
+        let _ = self.app.emit_to(window, "custom-proposal", &offer);
     }
 }
 

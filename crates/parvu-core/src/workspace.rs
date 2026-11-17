@@ -347,6 +347,16 @@ impl Workspace {
         self.custom = library;
     }
 
+    /// The custom library operations and expressions use now.
+    pub fn custom(&self) -> &std::sync::Arc<crate::custom::Library> {
+        &self.custom
+    }
+
+    /// The column formulas of tab `id`, in order.
+    pub fn formulas(&self, id: TabId) -> Result<&[Formula]> {
+        Ok(&self.tab(id)?.formulas)
+    }
+
     /// How files opened from now on are typed (detection on or off, the
     /// order of day and month in ambiguous dates).
     pub fn set_detect_options(&mut self, options: DetectOptions) {

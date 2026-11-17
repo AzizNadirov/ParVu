@@ -119,8 +119,8 @@ pub fn translate(
     }
 }
 
-/// Aggregate functions: a formula is computed per row, so these (column
-/// totals) are not allowed in formulas yet.
+/// Aggregate functions: in a formula each is a column total, computed once.
+/// Registry functions flagged `aggregate` (custom summary functions) are too.
 const AGGREGATES: &[&str] = &["SUM", "AVG", "COUNT", "COUNTD", "MIN", "MAX"];
 
 /// A compiled column formula.
@@ -166,13 +166,15 @@ pub fn compile_formula(src: &str, catalog: &Catalog, registry: &FunctionRegistry
     }
     let mut totals = Vec::new();
     let expr = extract_totals(expr, registry, &mut totals)?;
-    let reads_neighbours = reads_neighbours(&expr);
+    let reads_neighbours = reads_neighbours(&expr, registry);
     Ok(FormulaSql { sql: compile(&expr, registry)?, totals, reads_neighbours })
 }
 
-fn is_aggregate(name: &str) -> bool {
+fn is_aggregate(name: &str, registry: &FunctionRegistry) -> bool {
     let n = name.to_uppercase();
-    AGGREGATES.contains(&n.as_str()) || excel::AGGREGATES.contains(&n.as_str())
+    AGGREGATES.contains(&n.as_str())
+        || excel::AGGREGATES.contains(&n.as_str())
+        || registry.lookup(name).is_some_and(|f| f.aggregate)
 }
 
 /// Replace each aggregate (a column total) by a marker, collecting its SQL.
@@ -186,8 +188,8 @@ fn extract_totals(e: Expr, registry: &FunctionRegistry, out: &mut Vec<String>) -
         v.into_iter().map(|a| extract_totals(a, registry, out)).collect()
     };
     Ok(match e {
-        Expr::Call { ref func_name, .. } if is_aggregate(func_name) => total(&e, out)?,
-        Expr::MethodCall { ref method_name, .. } if is_aggregate(method_name) => total(&e, out)?,
+        Expr::Call { ref func_name, .. } if is_aggregate(func_name, registry) => total(&e, out)?,
+        Expr::MethodCall { ref method_name, .. } if is_aggregate(method_name, registry) => total(&e, out)?,
         Expr::Template { aggregate: true, .. } => total(&e, out)?,
         Expr::Call { func_name, args, logical_type } => Expr::Call { func_name, args: each(args, out)?, logical_type },
         Expr::MethodCall { receiver, method_name, args, logical_type } => Expr::MethodCall {
@@ -220,15 +222,16 @@ fn extract_totals(e: Expr, registry: &FunctionRegistry, out: &mut Vec<String>) -
     })
 }
 
-fn reads_neighbours(e: &Expr) -> bool {
+fn reads_neighbours(e: &Expr, registry: &FunctionRegistry) -> bool {
+    let any = |v: &[Expr]| v.iter().any(|a| reads_neighbours(a, registry));
     match e {
-        Expr::Template { template, args, .. } => template.contains(" OVER (") || args.iter().any(reads_neighbours),
-        Expr::Call { args, .. } => args.iter().any(reads_neighbours),
-        Expr::MethodCall { receiver, args, .. } => reads_neighbours(receiver) || args.iter().any(reads_neighbours),
-        Expr::BinaryOp { left, right, .. } => reads_neighbours(left) || reads_neighbours(right),
-        Expr::UnaryOp { operand, .. } => reads_neighbours(operand),
+        Expr::Template { template, args, .. } => template.contains(" OVER (") || any(args),
+        Expr::Call { func_name, args, .. } => registry.lookup(func_name).is_some_and(|f| f.window) || any(args),
+        Expr::MethodCall { receiver, args, .. } => reads_neighbours(receiver, registry) || any(args),
+        Expr::BinaryOp { left, right, .. } => reads_neighbours(left, registry) || reads_neighbours(right, registry),
+        Expr::UnaryOp { operand, .. } => reads_neighbours(operand, registry),
         Expr::Replace { text, pattern, with_value, .. } => {
-            reads_neighbours(text) || reads_neighbours(pattern) || reads_neighbours(with_value)
+            reads_neighbours(text, registry) || reads_neighbours(pattern, registry) || reads_neighbours(with_value, registry)
         }
         _ => false,
     }
@@ -243,23 +246,29 @@ pub fn build_assignment_query(
     value_sql: &str,
     all_cols: &[String],
 ) -> String {
+    let col = quote_ident(column);
     if all_cols.is_empty() {
-        return format!("SELECT *, {value_sql} AS \"{column}\" FROM {table}");
+        return format!("SELECT *, {value_sql} AS {col} FROM {table}");
     }
     let mut parts: Vec<String> = all_cols
         .iter()
         .map(|c| {
             if c == column {
-                format!("{value_sql} AS \"{c}\"")
+                format!("{value_sql} AS {col}")
             } else {
-                format!("\"{c}\"")
+                quote_ident(c)
             }
         })
         .collect();
     if !all_cols.iter().any(|c| c == column) {
-        parts.push(format!("{value_sql} AS \"{column}\""));
+        parts.push(format!("{value_sql} AS {col}"));
     }
     format!("SELECT {} FROM {table}", parts.join(", "))
+}
+
+/// `"name"` with inner quotes doubled (DuckDB identifier quoting).
+fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
 }
 
 /// SQL preview of an expression (assignments shown as
@@ -482,6 +491,73 @@ mod formula_tests {
         let e = compile_formula("[qty] 2", &catalog(), &reg, "sales").unwrap_err().to_string();
         assert!(e.contains("an operator such as + or *"), "{e}");
         assert!(e.contains("the end of the expression"), "{e}");
+    }
+
+    /// The registry with two custom functions, as the app builds them.
+    fn with_custom() -> FunctionRegistry {
+        let mut reg = FunctionRegistry::default();
+        let mut phone = ParamDef::new("phone", LogicalType::Text);
+        phone.accepts = Some(vec![LogicalType::Text]);
+        reg.register(FunctionDef::custom(
+            "clean_phone",
+            vec![phone, ParamDef::with_default("prefix", LogicalType::Text, "CAST('+' AS VARCHAR)")],
+            LogicalType::Text,
+            "Digits only",
+            "regexp_replace(__pv_arg_0, '[0-9]{2}', '', 'g') || CAST(__pv_arg_1 AS VARCHAR)",
+        ));
+        let num = || {
+            let mut p = ParamDef::new("x", LogicalType::Numeric);
+            p.accepts = Some(vec![LogicalType::Numeric]);
+            p
+        };
+        let mut w = num();
+        w.name = "w".into();
+        let mut avg = FunctionDef::custom("weighted_average", vec![num(), w], LogicalType::Numeric, "", "(sum((__pv_arg_0 * __pv_arg_1)) / sum(__pv_arg_1))");
+        avg.aggregate = true;
+        reg.register(avg);
+        let mut run = FunctionDef::custom("running", vec![num()], LogicalType::Numeric, "", "sum(__pv_arg_0) OVER (ROWS UNBOUNDED PRECEDING)");
+        run.window = true;
+        reg.register(run);
+        reg
+    }
+
+    #[test]
+    fn custom_functions_in_formulas() {
+        let reg = with_custom();
+        let mut cat = catalog();
+        cat.register_table("sales", [("qty", "BIGINT"), ("phone", "VARCHAR")].map(|(a, b)| (a.to_string(), b.to_string())));
+        let f = |s: &str| compile_formula(s, &cat, &reg, "sales");
+        // Slots are filled, `{2}` in the body is left alone, the default fills the optional one.
+        assert_eq!(
+            f("= clean_phone([phone])").unwrap().sql,
+            "(regexp_replace((sales.phone), '[0-9]{2}', '', 'g') || CAST(CAST('+' AS VARCHAR) AS VARCHAR))"
+        );
+        assert!(f("= clean_phone([phone], \"00\")").unwrap().sql.contains("CAST(('00') AS VARCHAR)"));
+        // A summary function is a column total, like SUM.
+        let t = f("= [qty] - weighted_average([qty], [qty])").unwrap();
+        assert_eq!(t.totals, ["((sum(((sales.qty) * (sales.qty))) / sum((sales.qty))))"]);
+        assert_eq!(t.sql, format!("sales.qty - ({})", total_marker(0)));
+        // A window reads other rows.
+        assert!(f("= running([qty])").unwrap().reads_neighbours);
+        assert!(!f("= clean_phone([phone])").unwrap().reads_neighbours);
+        // Typed parameters and a fixed number of arguments.
+        let e = f("= clean_phone([qty])").unwrap_err().to_string();
+        assert_eq!(e, "clean_phone: phone takes text, but this argument is a number");
+        assert!(f("= weighted_average([phone], [qty])").unwrap_err().to_string().contains("takes a number"));
+        assert!(f("= clean_phone([phone], 'a', 'b')").unwrap_err().to_string().contains("at most 2"));
+        assert!(f("= clean_phone()").is_err());
+        // An expression of unknown type is let through (DuckDB checks it).
+        assert!(f("= clean_phone([qty] + 1)").is_ok());
+    }
+
+    #[test]
+    fn slots_fill_exactly() {
+        use crate::compiler::fill_slots;
+        let args = vec!["a".to_string(), "b".to_string()];
+        assert_eq!(fill_slots("__pv_arg_0 + __pv_arg_1 + {0}", &args), "a + b + {0}");
+        assert_eq!(fill_slots("__pv_arg_12 __pv_arg_", &args), "__pv_arg_12 __pv_arg_");
+        // An argument containing a slot is not filled again.
+        assert_eq!(fill_slots("__pv_arg_0 __pv_arg_1", &["__pv_arg_1".to_string(), "x".to_string()]), "__pv_arg_1 x");
     }
 
     #[test]

@@ -17,7 +17,7 @@ fn open() -> (TempDir, Workspace, u64) {
 
 /// SQL as the expression language compiles it (`sales.qty`).
 fn f(name: &str, sql: &str, after: Option<&str>) -> Formula {
-    Formula { name: name.into(), source: sql.into(), sql: sql.into(), after: after.map(str::to_string), totals: Vec::new() }
+    Formula { name: name.into(), source: sql.into(), sql: sql.into(), after: after.map(str::to_string), totals: Vec::new(), error: None }
 }
 
 fn col(ws: &Workspace, id: u64, name: &str) -> Vec<Option<String>> {
@@ -216,4 +216,21 @@ fn windowed_formulas_keep_the_row_order() {
         .query_row("SELECT sum(same) FROM (SELECT DISTINCT region, same FROM sales)", [], |r| r.get(0))
         .unwrap();
     assert_eq!(total, 200000);
+}
+
+/// A formula that no longer compiles is kept with its error: its column is
+/// empty, the formulas after it still work, and fixing it brings it back.
+#[test]
+fn broken_formulas_are_kept_empty() {
+    let (_d, mut ws, id) = open();
+    let broken = Formula::broken("clean".into(), "gone([qty])".into(), None, "Unknown function: 'gone'".into());
+    ws.restore_formulas(id, vec![broken, f("twice", "sales.qty * 2", None)]).unwrap();
+    assert_eq!(col(&ws, id, "clean"), vec![None, None, None]);
+    assert_eq!(col(&ws, id, "twice"), s(&["4", "10", "2"]));
+    let summary = ws.summary(id).unwrap();
+    assert_eq!(summary.formulas[0].error.as_deref(), Some("Unknown function: 'gone'"));
+    assert_eq!(summary.formulas[0].source, "gone([qty])");
+    ws.set_formula(id, f("clean", "sales.qty + 1", None)).unwrap();
+    assert_eq!(col(&ws, id, "clean"), s(&["3", "6", "2"]));
+    assert!(ws.summary(id).unwrap().formulas[0].error.is_none());
 }

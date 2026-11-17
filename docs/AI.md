@@ -19,6 +19,8 @@ Both use the same tools and the same safety rules. The AI can read the tables op
 2. **Open the panel:** **AI → AI assistant** (`Ctrl+Shift+A`).
 3. **Ask:** for example "Which region sold the most last quarter?", "Are there duplicate customer ids?", "Group by month and sum revenue." or "Add a column with each order's share of total revenue." (a live formula column, see [DSL.md](DSL.md#column-formulas)) `Enter` sends, `Shift+Enter` starts a new line, **Stop** cancels.
 
+The assistant also sees your custom functions and operations (`list_custom_tools`) and can use them. Ask it to "make a custom function that …" and it proposes one with examples: ParVu checks it, and asks whether to open it in the custom tool editor for you to read, validate and save. The assistant never saves a tool itself. See [CUSTOM.md](CUSTOM.md#ai-clients-and-the-assistant).
+
 Each tab has its own conversation. The ↺ button starts a new one. The panel shows the tokens used and, for Claude models, the estimated cost.
 
 **What is sent to the provider:**

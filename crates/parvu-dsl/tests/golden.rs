@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 
 use parvu_dsl::{
-    Catalog, FunctionRegistry, LogicalType, compile_replace, preview, strip_table_qualifier,
-    translate,
+    Catalog, FunctionDef, FunctionRegistry, LogicalType, ParamDef, compile_replace, preview,
+    strip_table_qualifier, translate,
 };
 use serde_json::{Value, json};
 
@@ -143,9 +143,104 @@ fn normalized(v: &Value) -> Value {
 
 #[test]
 fn golden_expressions() {
+    run_golden(&FunctionRegistry::default());
+}
+
+/// The built-in registry plus custom functions, as the app builds it for a
+/// window with a custom library.
+fn custom_registry() -> FunctionRegistry {
+    let mut reg = FunctionRegistry::default();
+    let typed = |name: &str, t: LogicalType| {
+        let mut p = ParamDef::new(name, t);
+        p.accepts = Some(vec![t]);
+        p
+    };
+    reg.register(FunctionDef::custom(
+        "clean_phone",
+        vec![typed("phone", LogicalType::Text), ParamDef::with_default("prefix", LogicalType::Text, "CAST('+' AS VARCHAR)")],
+        LogicalType::Text,
+        "Keep the digits of a phone number, with a prefix.",
+        "CASE WHEN (length(regexp_replace(__pv_arg_0, '[^0-9]', '', 'g')) < 7) THEN NULL \
+         ELSE (CAST(__pv_arg_1 AS VARCHAR) || regexp_replace(__pv_arg_0, '[^0-9]', '', 'g')) END",
+    ));
+    let mut avg = FunctionDef::custom(
+        "weighted_average",
+        vec![typed("x", LogicalType::Numeric), typed("w", LogicalType::Numeric)],
+        LogicalType::Numeric,
+        "Average of x weighted by w.",
+        "(sum((__pv_arg_0 * __pv_arg_1)) / sum(__pv_arg_1))",
+    );
+    avg.aggregate = true;
+    reg.register(avg);
+    reg.register(FunctionDef::custom(
+        "digits2",
+        vec![typed("s", LogicalType::Text)],
+        LogicalType::Text,
+        "A regex quantifier is not a slot.",
+        "regexp_extract(__pv_arg_0, '[0-9]{2}')",
+    ));
+    reg
+}
+
+/// Custom functions change nothing the 306 pinned expressions compile to.
+#[test]
+fn golden_expressions_with_custom_functions() {
+    run_golden(&custom_registry());
+}
+
+/// New cases: custom functions in expressions and formulas.
+#[test]
+fn golden_custom_functions() {
     let doc = load();
     let cats = catalogs(&doc);
-    let registry = FunctionRegistry::default();
+    let main = &cats["main"];
+    let reg = custom_registry();
+    let tr = |src: &str| match translate(src, main, &reg, "sales") {
+        Ok(t) => t.sql,
+        Err(e) => format!("error: {e}"),
+    };
+    let cases: &[(&str, &str)] = &[
+        (
+            "clean_phone(sales[name])",
+            "SELECT (CASE WHEN (length(regexp_replace((sales.name), '[^0-9]', '', 'g')) < 7) THEN NULL \
+             ELSE (CAST(CAST('+' AS VARCHAR) AS VARCHAR) || regexp_replace((sales.name), '[^0-9]', '', 'g')) END) FROM sales",
+        ),
+        (
+            "sales[mobile] = clean_phone(sales[name], '00')",
+            "SELECT \"id\", \"revenue\", \"qty\", \"price\", \"name\", \"note\", \"flag\", \"active\", \"d\", \"ts\", \"new col\", \
+             \"select\", \"Mixed\", \"x\"\"y\", \"tags\", \"café\", \"TRUE\", \"NOT\", (CASE WHEN (length(regexp_replace((sales.name), \
+             '[^0-9]', '', 'g')) < 7) THEN NULL ELSE (CAST(('00') AS VARCHAR) || regexp_replace((sales.name), '[^0-9]', '', 'g')) END) \
+             AS \"mobile\" FROM sales",
+        ),
+        ("CLEAN_PHONE(sales[note])", "SELECT (CASE WHEN (length(regexp_replace((sales.note), '[^0-9]', '', 'g')) < 7) THEN NULL \
+             ELSE (CAST(CAST('+' AS VARCHAR) AS VARCHAR) || regexp_replace((sales.note), '[^0-9]', '', 'g')) END) FROM sales"),
+        (
+            "weighted_average(sales[price], sales[qty])",
+            "SELECT ((sum(((sales.price) * (sales.qty))) / sum((sales.qty)))) FROM sales",
+        ),
+        ("digits2(UPPER(sales[name]))", "SELECT (regexp_extract((UPPER(sales.name)), '[0-9]{2}')) FROM sales"),
+        ("clean_phone(sales[qty])", "error: clean_phone: phone takes text, but this argument is a number"),
+        ("weighted_average(sales[name], sales[qty])", "error: weighted_average: x takes a number, but this argument is text"),
+        ("digits2(sales[name], 1)", "error: 'digits2' takes at most 1 argument, got 2"),
+        ("clean_phone()", "error: 'clean_phone' requires at least 1 arguments, got 0"),
+    ];
+    let mut failures = Vec::new();
+    for (src, want) in cases {
+        let got = tr(src);
+        if normalize(&got) != normalize(want) {
+            failures.push(format!("{src:?}\n   want {want}\n   got  {got}"));
+        }
+    }
+    // In a formula a summary function is a column total.
+    let f = parvu_dsl::compile_formula("= [price] - weighted_average([price], [qty])", main, &reg, "sales").unwrap();
+    assert_eq!(f.totals, ["((sum(((sales.price) * (sales.qty))) / sum((sales.qty))))"]);
+    assert_eq!(f.sql, format!("sales.price - ({})", parvu_dsl::total_marker(0)));
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+fn run_golden(registry: &FunctionRegistry) {
+    let doc = load();
+    let cats = catalogs(&doc);
     let allow: HashMap<&str, (&str, &str)> =
         ALLOWLIST.iter().map(|(s, e, r)| (*s, (*e, *r))).collect();
 
@@ -159,7 +254,7 @@ fn golden_expressions() {
         let catalog = &cats[case["catalog"].as_str().unwrap()];
 
         let got = as_value(
-            translate(source, catalog, &registry, table),
+            translate(source, catalog, registry, table),
             |t| json!({ "sql": t.sql, "kind": t.kind }),
         );
 
@@ -179,7 +274,7 @@ fn golden_expressions() {
             continue;
         }
 
-        let got_preview = as_value(preview(source, catalog, &registry), |s| json!({ "sql": s }));
+        let got_preview = as_value(preview(source, catalog, registry), |s| json!({ "sql": s }));
         let mut ok = true;
         if normalized(&got) != normalized(&case["expected"]) {
             ok = false;

@@ -166,6 +166,27 @@ pub trait AttachHost: Send + Sync + 'static {
     fn changed(&self, window: &str, tab_id: u64);
     /// A formula was set on a tab: remember the formulas for its file.
     fn formulas_changed(&self, _summary: &parvu_core::TabSummary) {}
+    /// The folder of the user's custom tools, whose names a proposal may
+    /// not take.
+    fn custom_dir(&self) -> Option<PathBuf> {
+        None
+    }
+    /// Show a custom tool an AI client proposed in `window`: the user may
+    /// open it in the editor, review it and save it. Nothing is saved here.
+    fn offer_custom(&self, _window: &str, _offer: CustomOffer) {}
+}
+
+/// A custom tool an AI client proposed, offered to the user in the editor.
+#[derive(Debug, Clone, Serialize)]
+pub struct CustomOffer {
+    /// The client's name ("claude-code", "ParVu assistant"…).
+    pub client: String,
+    /// The definition with its validation report.
+    pub definition: parvu_core::custom::Definition,
+    /// The definition it would replace, if any.
+    pub replaces: Option<String>,
+    pub rationale: Option<String>,
+    pub passed: bool,
 }
 
 /// A change an attached client asks for, shown as an approval card.
@@ -199,7 +220,7 @@ pub enum Decision {
 #[derive(Clone)]
 enum Source {
     /// `parvu mcp`: its own workspace and folder rules.
-    Headless { ws: Arc<Mutex<Workspace>>, allow_dirs: Arc<Vec<PathBuf>>, allow_write: bool },
+    Headless { ws: Arc<Mutex<Workspace>>, allow_dirs: Arc<Vec<PathBuf>>, allow_write: bool, custom_dir: Option<PathBuf> },
     /// Inside the app: the user's window.
     Attached(Arc<dyn AttachHost>),
 }
@@ -279,6 +300,22 @@ pub struct ApplyArgs {
     /// One short sentence for the user saying why (shown when they are asked to approve).
     #[serde(default)]
     pub rationale: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ProposeCustomArgs {
+    /// The definition, as JSON (see the tool description for the format).
+    pub definition: serde_json::Value,
+    /// The name of an existing custom tool this one would replace (an improved version).
+    #[serde(default)]
+    pub replaces: Option<String>,
+    /// One short sentence for the user saying what it is for.
+    #[serde(default)]
+    pub rationale: Option<String>,
+    /// Offer it to the user in ParVu's editor (window only). Default true; pass false
+    /// while still correcting a failing proposal, so the user sees only the final one.
+    #[serde(default)]
+    pub offer: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -390,6 +427,7 @@ impl ParvuMcp {
                 ws: Arc::new(Mutex::new(ws)),
                 allow_dirs: Arc::new(allow_dirs),
                 allow_write: options.allow_write,
+                custom_dir: (!cfg!(test)).then(crate::custom_store::CustomStore::default_dir),
             },
             tool_router: Self::tool_router(),
         })
@@ -431,6 +469,15 @@ impl ParvuMcp {
 
     fn allow_write(&self) -> bool {
         matches!(self.source, Source::Headless { allow_write: true, .. })
+    }
+
+    /// The folder of the user's custom tools (read only, for the names a
+    /// proposal may not take).
+    fn custom_dir(&self) -> Option<PathBuf> {
+        match &self.source {
+            Source::Headless { custom_dir, .. } => custom_dir.clone(),
+            Source::Attached(host) => host.custom_dir(),
+        }
     }
 
     /// Run blocking DuckDB work off the async runtime.
@@ -504,6 +551,9 @@ impl ParvuMcp {
                     in ParVu, so give a short rationale. Group by, pivot, unpivot, transpose, value counts, describe, \
                     join and append open their result as a new tab. set_formula adds a live formula column, e.g. \
                     [price] / SUM([price]). If they reject it, don't retry the same change; ask them instead.\n\
+                    list_custom_tools shows the custom functions and operations the user defined, and how to call \
+                    them (apply_operation or set_formula). propose_custom_tool checks a new definition and offers \
+                    it to the user in ParVu's editor; only the user can save it.\n\
                     Files are opened and saved by the user in ParVu."
                 .into();
         }
@@ -516,7 +566,9 @@ impl ParvuMcp {
              read_csv are refused. Quote identifiers with spaces in double quotes.\n\
              apply_operation changes a table for this session only (filters, new columns…); undo \
              reverts it. Group by, pivot, unpivot, transpose, value counts, describe, join and \
-             append open their result as a new table instead (named in the answer). Files on disk are never changed{}.",
+             append open their result as a new table instead (named in the answer). Files on disk are never changed{}.\n\
+             list_custom_tools shows the user's custom functions and operations and how to call them; \
+             propose_custom_tool only checks a new definition (it is never saved from here).",
             if self.allow_write() { ", except by export" } else { "" }
         )
     }
@@ -596,7 +648,67 @@ impl ParvuMcp {
     }
 }
 
+/// What `propose_custom_tool` takes, for the client.
+const PROPOSE_DESCRIPTION: &str = "Propose a new custom function or operation for the user. ParVu validates it \
+(a safety guard that refuses file functions and other tables, type checks, a shape check, and the examples as tests) \
+and returns the report, so you can correct it and propose again. Nothing is saved: in the ParVu window the user is \
+offered the definition in the editor, reviews it and saves it; the headless server only validates. Definition JSON: \
+{\"kind\": \"function\"|\"operation\", \"name\": \"clean_phone\" (lower case, a-z 0-9 _), \"title\", \"description\", \
+\"params\": [{\"name\": \"phone\", \"kind\": \"column\", \"type\": [\"text\"]}, {\"name\": \"prefix\", \"kind\": \"value\", \
+\"dtype\": \"VARCHAR\", \"optional\": true, \"default\": \"+\"}] (operations start with {\"name\": \"t\", \"kind\": \"table\"}; \
+column type sets: any, number, integer, decimal, float, text, boolean, date, datetime, date_or_datetime, time, interval, \
+json, list, struct; value dtypes: VARCHAR, BIGINT, INTEGER, DOUBLE, DECIMAL(18,3), BOOLEAN, DATE, TIMESTAMP, TIME, INTERVAL), \
+\"result\": {\"kind\": \"column\"|\"value\"|\"table\", \"type\": [\"text\"]} (column: one value per row; value: one value \
+for the whole column, an aggregate; table: operations), \"placement\": \"step\"|\"new_table\" (operations), \
+\"body\": {\"language\": \"sql\"|\"expression\", \"source\": ...} (a function: one SQL expression of the parameters by \
+name, e.g. \"upper(phone)\", or ParVu's expression language with [phone]; an operation: one SQL SELECT over the table \
+parameters), \"examples\": [{\"input\": {\"columns\": [{\"name\": \"phone\", \"dtype\": \"VARCHAR\"}], \"rows\": [[\"555.0102\"], [null]]}, \
+\"args\": {\"prefix\": \"+\"}, \"expected\": {\"columns\": [{\"name\": \"result\"}], \"rows\": [[\"+5550102\"], [null]]}}] \
+(a function's input has one column per column parameter; a summary's expected has one row; an operation's input is its \
+first table, args name the column chosen for each column parameter). At least one example must pass; include one \
+with empty values.";
+
 impl ParvuMcp {
+    async fn propose_impl(&self, args: ProposeCustomArgs, client: String) -> Result<CallToolResult, ErrorData> {
+        let def = try_tool!(crate::custom::proposed_definition(args.definition));
+        let dir = self.custom_dir();
+        let replaces = args.replaces.clone();
+        let (def, report) = try_tool!(
+            Self::blocking(move || {
+                let report = crate::custom::validate_proposal(dir.as_deref(), &def, replaces.as_deref());
+                Ok((def, report))
+            })
+            .await
+        );
+        let passed = report.passed();
+        let mut out = crate::custom::report_json(&report);
+        match &self.source {
+            Source::Attached(host) if args.offer.unwrap_or(true) => {
+                let (window, _) = try_tool!(host.workspace());
+                let mut definition = def;
+                definition.report = Some(report);
+                host.offer_custom(&window, CustomOffer { client, definition, replaces: args.replaces, rationale: args.rationale, passed });
+                out["next"] = json!(if passed {
+                    "All checks pass. The definition was offered to the user in ParVu's editor; they review it and \
+                     save it themselves. It is not saved yet, so don't call it until they say so."
+                } else {
+                    "Some checks fail (see checks). It was offered to the user in ParVu's editor as it is; correct \
+                     it and propose again (offer: false while correcting)."
+                });
+            }
+            Source::Attached(_) => {
+                out["next"] = json!("Not offered to the user (offer: false). Propose again with offer: true when it passes.");
+            }
+            Source::Headless { .. } => {
+                out["next"] = json!(
+                    "This server only validates custom tools; it never saves them. The user can create it in the \
+                     ParVu app (Custom tools), or connect you to the ParVu window to offer it there."
+                );
+            }
+        }
+        ok(out)
+    }
+
     async fn apply_impl(&self, args: ApplyArgs, client: String) -> Result<CallToolResult, ErrorData> {
         let ro = try_tool!(self.session());
         let table = args.table.clone();
@@ -895,6 +1007,23 @@ impl ParvuMcp {
     ) -> Result<CallToolResult, ErrorData> {
         self.undo_impl(args, client_name(&meta, &client)).await
     }
+    #[tool(description = "The custom functions and operations the user defined in ParVu: name, kind (row function, summary function or operation), typed signature, description, one example, and how to call each one (an apply_operation operation, or a set_formula formula; a summary function in a formula is a column total like SUM).")]
+    async fn list_custom_tools(&self) -> Result<CallToolResult, ErrorData> {
+        let ws = try_tool!(self.workspace());
+        let lib = ws.lock().unwrap_or_else(|p| p.into_inner()).custom().clone();
+        ok(crate::custom::tool_listing(&lib))
+    }
+
+    #[tool(description = PROPOSE_DESCRIPTION)]
+    async fn propose_custom_tool(
+        &self,
+        Parameters(args): Parameters<ProposeCustomArgs>,
+        meta: RequestMetaObject,
+        client: Peer<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.propose_impl(args, client_name(&meta, &client)).await
+    }
+
     #[tool(description = "Write a table (with its applied steps) to a file in an allowed folder. Only available when the server runs with --allow-write.")]
     async fn export(&self, Parameters(args): Parameters<ExportArgs>) -> Result<CallToolResult, ErrorData> {
         if !self.allow_write() {
@@ -1347,6 +1476,106 @@ mod tool_tests {
         assert!(text(&r).contains("[\"1\",\"6\",\"north\",\"3\"]"), "{}", text(&r));
     }
 
+    /// Custom functions and operations through MCP: listed with how to call
+    /// them, and applied with apply_operation and set_formula.
+    #[tokio::test]
+    async fn custom_tools_are_listed_and_applied() {
+        let (dir, s) = server(false);
+        s.workspace().unwrap().lock().unwrap().set_custom(crate::custom::test_support::sample_library());
+        std::fs::write(dir.path().join("people.csv"), "name,phone,score\nann,+1 (555) 010-2030,3\nbob,n/a,9\ncid,555.0102,5\n").unwrap();
+        let p = dir.path().join("people.csv").display().to_string();
+        s.open_file(Parameters(OpenFileArgs { path: p, sheet: None })).await.unwrap();
+
+        let r = s.list_custom_tools().await.unwrap();
+        let list: serde_json::Value = serde_json::from_str(&text(&r)).unwrap();
+        let tools = list["custom_tools"].as_array().unwrap();
+        let find = |n: &str| tools.iter().find(|t| t["name"] == n).unwrap_or_else(|| panic!("{n} not listed")).clone();
+        let phone = find("clean_phone");
+        assert_eq!(phone["kind"], "row function");
+        assert!(phone["signature"].as_str().unwrap().starts_with("clean_phone(phone: column<text>"));
+        assert_eq!(phone["use"]["apply_operation"]["op"], "custom_function");
+        assert_eq!(find("weighted_average")["kind"], "summary function");
+        assert_eq!(find("top_n_per_group")["use"]["apply_operation"]["op"], "custom_operation");
+
+        // A custom function, as the listing says to call it.
+        let op: Operation = serde_json::from_value(json!({
+            "op": "custom_function", "name": "clean_phone",
+            "args": {"phone": {"column": "phone"}}, "output": {"to": "new", "name": "phone_clean"}
+        }))
+        .unwrap();
+        let r = s.apply_impl(ApplyArgs { table: "people".into(), operation: op, rationale: None }, "test".into()).await.unwrap();
+        assert_ne!(r.is_error, Some(true), "{}", text(&r));
+        assert!(text(&r).contains("\"+15550102030\""), "{}", text(&r));
+        // A custom operation.
+        let op: Operation = serde_json::from_value(json!({
+            "op": "custom_operation", "name": "top_n_per_group",
+            "args": {"grp": {"column": "name"}, "score": {"column": "score"}, "n": {"value": "1"}}
+        }))
+        .unwrap();
+        let r = s.apply_impl(ApplyArgs { table: "people".into(), operation: op, rationale: None }, "test".into()).await.unwrap();
+        assert_ne!(r.is_error, Some(true), "{}", text(&r));
+        assert!(text(&r).contains("\"rows\":3"), "{}", text(&r));
+        // A summary function in a formula is a total.
+        let args = SetFormulaArgs {
+            table: "people".into(),
+            name: "vs_mean".into(),
+            formula: "= [score] - weighted_average([score], [score])".into(),
+            after: None,
+            rationale: None,
+        };
+        let r = s.formula_impl(args, "test".into()).await.unwrap();
+        assert_ne!(r.is_error, Some(true), "{}", text(&r));
+        // A name that isn't defined is an error the model can read.
+        let op: Operation = serde_json::from_value(json!({"op": "custom_function", "name": "nope", "args": {}})).unwrap();
+        let r = s.apply_impl(ApplyArgs { table: "people".into(), operation: op, rationale: None }, "test".into()).await.unwrap();
+        assert_eq!(r.is_error, Some(true));
+    }
+
+    pub(super) fn shout(body: &str) -> serde_json::Value {
+        json!({
+            "kind": "function", "name": "shout",
+            "params": [{"name": "s", "kind": "column", "type": ["text"]}],
+            "result": {"kind": "column", "type": ["text"]},
+            "body": {"language": "sql", "source": body},
+            "examples": [{
+                "input": {"columns": [{"name": "s", "dtype": "VARCHAR"}], "rows": [["a"], [null]]},
+                "expected": {"columns": [{"name": "result"}], "rows": [["A!"], [null]]}
+            }]
+        })
+    }
+
+    /// Headless, a proposal is only validated: the report comes back and
+    /// nothing is written. File functions are refused by the guard.
+    #[tokio::test]
+    async fn headless_proposals_are_only_validated() {
+        let (dir, s) = server(true);
+        let propose = |definition: serde_json::Value| ProposeCustomArgs { definition, replaces: None, rationale: None, offer: None };
+        let r = s.propose_impl(propose(shout("upper(s) || '!'")), "test".into()).await.unwrap();
+        assert_ne!(r.is_error, Some(true), "{}", text(&r));
+        let v: serde_json::Value = serde_json::from_str(&text(&r)).unwrap();
+        assert_eq!(v["passed"], true, "{v}");
+        assert!(v["next"].as_str().unwrap().contains("never saves"));
+        assert!(v["compiled_template"].as_str().unwrap().contains("__pv_arg_0"));
+        // A failing example is reported with what the body gave.
+        let r = s.propose_impl(propose(shout("upper(s)")), "test".into()).await.unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text(&r)).unwrap();
+        assert_eq!(v["passed"], false);
+        assert_eq!(v["examples"][0]["passed"], false);
+        assert!(v["examples"][0]["actual"].is_object(), "{v}");
+        // The read-only guard refuses a body that reads files.
+        let r = s.propose_impl(propose(shout("(SELECT content FROM read_text('/etc/passwd')) || s")), "test".into()).await.unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text(&r)).unwrap();
+        assert_eq!(v["passed"], false);
+        let safety = v["checks"].as_array().unwrap().iter().find(|c| c["check"] == "safety").unwrap_or_else(|| panic!("{v}")).clone();
+        assert_eq!(safety["status"], "fail", "{v}");
+        // Not a definition at all.
+        let r = s.propose_impl(propose(json!({"name": 3})), "test".into()).await.unwrap();
+        assert_eq!(r.is_error, Some(true));
+        // Nothing was written, even with --allow-write.
+        let files: Vec<_> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(files.len(), 1, "{files:?}");
+    }
+
     #[tokio::test]
     async fn files_stay_inside_allowed_folders() {
         let (dir, s) = server(false);
@@ -1398,6 +1627,7 @@ mod attach_tests {
         answer: Decision,
         seen: Mutex<Vec<Proposal>>,
         changed: Mutex<Vec<u64>>,
+        offers: Mutex<Vec<CustomOffer>>,
     }
 
     impl AttachHost for FakeHost {
@@ -1412,6 +1642,9 @@ mod attach_tests {
         fn changed(&self, _window: &str, tab_id: u64) {
             self.changed.lock().unwrap().push(tab_id);
         }
+        fn offer_custom(&self, _window: &str, offer: CustomOffer) {
+            self.offers.lock().unwrap().push(offer);
+        }
     }
 
     fn host(answer: Decision) -> (tempfile::TempDir, Arc<FakeHost>) {
@@ -1420,7 +1653,13 @@ mod attach_tests {
         std::fs::write(&f, "id,region,qty\n1,north,3\n2,south,5\n3,north,7\n").unwrap();
         let mut ws = Workspace::new(100, None).unwrap();
         ws.open(&f).unwrap();
-        let h = FakeHost { ws: Arc::new(Mutex::new(ws)), answer, seen: Mutex::default(), changed: Mutex::default() };
+        let h = FakeHost {
+            ws: Arc::new(Mutex::new(ws)),
+            answer,
+            seen: Mutex::default(),
+            changed: Mutex::default(),
+            offers: Mutex::default(),
+        };
         (dir, Arc::new(h))
     }
 
@@ -1575,6 +1814,28 @@ mod attach_tests {
         let (err, text) = c.tool("set_formula", json!({"table": "sales", "name": "d", "formula": "[qty] * 2"})).await;
         assert!(err && text.contains("rejected"), "{text}");
         assert!(h2.ws.lock().unwrap().summary(1).unwrap().formulas.is_empty());
+    }
+
+    /// In the window, a proposal is validated and offered to the user in the
+    /// editor (passing or not); it is never saved by the server.
+    #[tokio::test]
+    async fn attached_proposals_are_offered_not_saved() {
+        let (_d, h) = host(Decision::Approved);
+        h.ws.lock().unwrap().set_custom(crate::custom::test_support::sample_library());
+        let (port, token) = listen(h.clone()).await;
+        let mut c = Client::connect(port, &token).await;
+        let (err, text) = c.tool("list_custom_tools", json!({})).await;
+        assert!(!err && text.contains("\"name\":\"clean_phone\""), "{text}");
+        let (err, text) = c.tool("propose_custom_tool", json!({"definition": super::tool_tests::shout("upper(s) || '!'"), "rationale": "Shouting"})).await;
+        assert!(!err && text.contains("\"passed\":true") && text.contains("offered to the user"), "{text}");
+        let (err, text) = c.tool("propose_custom_tool", json!({"definition": super::tool_tests::shout("upper(s)"), "offer": false})).await;
+        assert!(!err && text.contains("\"passed\":false") && text.contains("Not offered"), "{text}");
+        let offers = h.offers.lock().unwrap();
+        assert_eq!(offers.len(), 1, "offer: false offers nothing");
+        assert_eq!((offers[0].definition.name.as_str(), offers[0].passed), ("shout", true));
+        assert_eq!(offers[0].rationale.as_deref(), Some("Shouting"));
+        assert!(offers[0].definition.report.is_some(), "the editor opens with the report");
+        assert!(h.seen.lock().unwrap().is_empty(), "a proposal is not an approval card");
     }
 
     #[tokio::test]

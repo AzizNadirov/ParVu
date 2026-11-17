@@ -1,6 +1,6 @@
 # Custom functions and custom operations — design
 
-Status: phases 1–4 implemented (SQL bodies; see "Implementation notes" below). Phases 5–7 are open. File paths are relative to the repo root. User guide: `docs/CUSTOM.md`.
+Status: phases 1–6 implemented (see "Implementation notes" below). Phase 7 is open. File paths are relative to the repo root. User guide: `docs/CUSTOM.md`.
 
 **What was not verified when this was written.** No DuckDB was available on this machine (no `duckdb` Python package, no CLI), so every statement about DuckDB behaviour is from memory. Those statements are marked **[verify]** and listed in §11.4. The repo facts were read from the code.
 
@@ -24,7 +24,25 @@ Other deviations:
 - Examples store `input` (a function's columns, or an operation's first table), `tables` (other tables), `args` and `expected` as small tables (see `docs/CUSTOM.md`) rather than §4.5's per-kind shapes. Mismatches are `[row, column]`, `[row, -1]` (an expected row not found), `[-1, -1]` (column names), `[-2, -1]` (extra rows).
 - Dependencies between custom tools (§6.6) don't arise yet: a SQL body can't call a custom function. Deleting is therefore never refused.
 - The name check also refuses DuckDB function names (`weighted_avg` is one, so the sample is `weighted_average`).
-- A headless `parvu mcp` loads the user's usable definitions, so `apply_operation` can run custom calls; `list_custom_tools` and defining from AI are not done (phase 6).
+- A headless `parvu mcp` loads the user's usable definitions, so `apply_operation` can run custom calls; `list_custom_tools` and proposing from AI came in phase 6.
+
+### Implementation notes (phases 5–6)
+
+Phase 5, expression language and formulas:
+
+- `parvu-dsl` stays free of DuckDB. `FunctionDef` gained `arg_slots` (the template marks argument `i` as `__pv_arg_i`; `compiler::fill_slots` fills them in one pass, so `{2}` in a regex is not a slot), `aggregate`, `window` and `custom`; `ParamDef` gained `accepts: Option<Vec<LogicalType>>`. `FunctionDef::custom` builds one.
+- The resolver refuses an argument whose logical type is known and not accepted ("clean_phone: phone takes text, but this argument is a number"), and extra arguments to a custom function. `Unknown` (an arithmetic result, NULL, JSON, HUGEINT…) is let through: DuckDB binds it. A column type set with a family the expression language can't name (`any`, `json`, `time`…) has no `accepts`.
+- `compile_formula` treats `aggregate` functions as totals and `window` functions as reading neighbours (`reads_neighbours` now looks at the registry).
+- App side (`custom.rs`): `function_def` turns a usable definition into a `FunctionDef`. **Deviation:** value arguments are cast to the declared type in the template the DSL fills (`CAST(__pv_arg_i AS dtype)`), and an optional value's default is `value_literal` of it (`CAST(NULL AS dtype)` when there is none). Choices and min/max of value parameters are checked only in the apply dialog, not in expressions. `registry_for(lib)` caches one registry per library `Arc` (a `Weak` key); `registry(ws)` replaces every `FunctionRegistry::default()` call site in `commands.rs` (MCP compiles through the same functions). `Bootstrap.functions` stays built-in only; the UI adds `custom_list().functions`, refreshed on `custom-changed`.
+- **Formulas kept with an error:** `Formula.error` and `Formula::broken` (SQL `CAST(NULL AS VARCHAR)`, no totals). `restore_formulas` keeps a formula that doesn't compile or run, instead of dropping it. **Addition:** when the library changes, `publish` calls `refresh_formulas` on every workspace: each tab's formulas are compiled again with the new registry and the tab is rebuilt only if something differs, so formulas follow the current definition while the tab is open, and a deleted function's formula shows its error at once (header warning icon, the error in the formula bar, a status line). It holds the workspace lock while a changed tab's totals are recomputed, like `set_formula`.
+- Expression bodies: `BodyLanguage::Expression`; `ValidateEnv::expression_sql` (a hook, since the core can't use the DSL) translates the body after the name and signature checks; the SQL then takes every check; `Compiled.hash` is the source's. The app resolves `[x]` against a catalog table `__pv_args` (typed by each parameter's first probe type) with the **built-in** registry only (one custom tool can't call another, so §6.6 still doesn't arise), strips the qualifier, and refuses an output still containing `__pv_` (XLOOKUP/VLOOKUP). `check_text` runs on the source first, so `__pv_` typed by the user is refused as before. Operations stay SQL.
+- UI: the completion detail shows `custom · total · NUMERIC`; a bare `[` completes the formula's columns (and an expression body's parameters). **Found and fixed:** `.cm-tooltip { overflow: hidden }` clipped CodeMirror's completion info, so no function's doc popup had ever shown.
+
+Phase 6, MCP and the assistant:
+
+- `list_custom_tools` in both modes (and so the assistant, which uses the attached server in memory): name, kind, `Definition::signature()`, title, description, first example, and a ready-to-fill `apply_operation` / `set_formula` call.
+- `propose_custom_tool { definition, replaces?, rationale?, offer? }`: the definition is read as JSON (`for_export`, so compiled/report/status are dropped), validated with `validate_in` against the user's folder (read only; tests use none), and the report returned in English (`custom::english`). Attached: `AttachHost::offer_custom` emits `custom-proposal`; the window asks, then opens the editor prefilled with the report and a note. **Deviation:** the proposal is offered whether it passes or not (the user may fix it), and `offer: false` lets the AI iterate without dialogs. It is not an approval card and never blocks the tool call. Headless only validates (`next` says so), with `--allow-write` too.
+- Tests (`mcp.rs`): custom function, operation and summary formula through MCP; a proposal with `read_text` in a subquery refused by the guard (a bare scalar `read_text(...)` already fails to bind as a table function); nothing written headless; attached proposals offered, `offer: false` not.
 
 ---
 

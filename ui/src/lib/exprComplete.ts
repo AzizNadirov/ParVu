@@ -2,17 +2,43 @@
 // ExpressionEditor completer): table names, `table[column]`, functions with
 // their signatures and docs, and type methods after a dot.
 import type { CompletionContext, CompletionResult, Completion } from "@codemirror/autocomplete";
+import type { EditorView } from "@codemirror/view";
 import type { FunctionDef } from "./api";
 
 export interface ExprSchema {
   tables: { name: string; columns: string[] }[];
   functions: FunctionDef[];
   methods: string[];
+  /** Columns a bare `[` offers: the formula's table, or a custom
+   * function's parameters in an expression body. */
+  bare?: string[];
 }
 
 export function signature(f: FunctionDef): string {
-  const params = f.params.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ");
+  const params = f.params
+    .map((p) => {
+      const name = p.required ? p.name : `${p.name}?`;
+      return p.accepts?.length ? `${name}: ${p.accepts.join(" | ")}` : name;
+    })
+    .join(", ");
   return `${f.name}(${params}) → ${f.return_type}`;
+}
+
+/** What a function's completion shows beside its name. */
+export function functionDetail(f: FunctionDef): string {
+  if (!f.custom) return f.return_type;
+  return f.aggregate ? `custom · total · ${f.return_type}` : `custom · ${f.return_type}`;
+}
+
+/** The text a bare `[` completes to: `[col]`, or `["a b"]` with an unusual name. */
+export function bareRef(column: string): string {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(column) ? `${column}]` : `"${column.replace(/"/g, "")}"]`;
+}
+
+/** The partial column name after a bare `[` (not `table[`) at the end of `before`. */
+export function bareRefPrefix(before: string): string | null {
+  const m = /(^|[^A-Za-z0-9_\]\[])\[\s*"?([^\]":]*)$/.exec(before);
+  return m ? m[2] : null;
 }
 
 function quoteColumn(c: string): string {
@@ -37,6 +63,26 @@ export function exprCompletions(getSchema: () => ExprSchema) {
       };
     }
 
+    // [ col  -> the bare columns (formula's table, function parameters)
+    const bare = schema.bare ? bareRefPrefix(before) : null;
+    if (bare !== null && schema.bare) {
+      const quoted = /"[^\]"]*$/.test(before);
+      return {
+        from: ctx.pos - bare.length - (quoted ? 1 : 0),
+        options: schema.bare.map((c) => ({
+          label: c,
+          type: "property",
+          // Over the `]` the editor closed the bracket with, if any.
+          apply: (view: EditorView, _c: Completion, from: number, to: number) => {
+            const insert = bareRef(c);
+            const end = view.state.sliceDoc(to, to + 1) === "]" ? to + 1 : to;
+            view.dispatch({ changes: { from, to: end, insert }, selection: { anchor: from + insert.length } });
+          },
+        })),
+        validFor: /^"?[^\]":]*$/,
+      };
+    }
+
     // expr.meth -> methods
     const methMatch = /\.\s*([A-Za-z_]*)$/.exec(before);
     if (methMatch && /[\])A-Za-z0-9_'"]\s*\.\s*[A-Za-z_]*$/.test(before)) {
@@ -54,7 +100,7 @@ export function exprCompletions(getSchema: () => ExprSchema) {
       ...schema.functions.map((f) => ({
         label: f.name,
         type: "function",
-        detail: f.return_type,
+        detail: functionDetail(f),
         info: () => {
           const el = document.createElement("div");
           el.className = "fn-doc";

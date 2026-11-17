@@ -11,7 +11,7 @@ use parvu_core::workspace::{Derivation, materialize};
 use parvu_core::{TabId, Workspace};
 
 fn env() -> ValidateEnv<'static> {
-    ValidateEnv { name_taken: &|_| None, app_version: "test" }
+    ValidateEnv { name_taken: &|_| None, app_version: "test", expression_sql: None }
 }
 
 fn checked(mut d: Definition) -> Definition {

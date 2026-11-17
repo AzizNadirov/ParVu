@@ -1,6 +1,7 @@
 // Column types: the icon of each type family in the grid header, and the
 // "Read as" choices for a column of a CSV file.
 import {
+  mdiAlertCircleOutline,
   mdiAlphabetical,
   mdiCalendar,
   mdiCalendarClock,
@@ -52,6 +53,7 @@ export function headerIcons(): Record<string, (p: { fgColor: string; bgColor: st
   for (const [family, path] of Object.entries(FAMILY_ICON)) map[`pv-${family}`] = sprite(path);
   map["pv-ambiguous"] = sprite(mdiCalendarQuestion);
   map["pv-formula"] = sprite(mdiFunctionVariant);
+  map["pv-formula-error"] = sprite(mdiAlertCircleOutline);
   return map;
 }
 
