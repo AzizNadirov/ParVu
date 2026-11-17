@@ -94,6 +94,9 @@ impl Report {
     }
 }
 
+/// Translates an expression-language body to a SQL expression.
+pub type ExpressionSql = dyn Fn(&Definition) -> Result<String, Issue>;
+
 /// What validation needs from outside the core.
 pub struct ValidateEnv<'a> {
     /// Why a name is taken (a built-in expression function, another custom
@@ -104,7 +107,7 @@ pub struct ValidateEnv<'a> {
     /// Translate an expression-language body to a SQL expression (the
     /// expression language lives in `parvu-dsl`, which this crate doesn't
     /// use). `None`: expression bodies can't be validated here.
-    pub expression_sql: Option<&'a dyn Fn(&Definition) -> Result<String, Issue>>,
+    pub expression_sql: Option<&'a ExpressionSql>,
 }
 
 /// A connection for validation: in memory, small, two threads.

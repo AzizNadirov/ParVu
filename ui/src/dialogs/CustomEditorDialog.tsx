@@ -27,6 +27,8 @@ interface Args {
   editing: string | null;
   typeSets: string[];
   valueTypes: string[];
+  /** Shown above the form (a definition an AI client proposed). */
+  note?: string;
 }
 
 const reportPassed = (r: CustomReport | null) => !!r && !!r.compiled && !r.checks.some((c) => c.status === "fail");
@@ -546,6 +548,12 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | n
       }
     >
       <div className="pv-custom-editor">
+        {a.note && (
+          <div className="pv-custom-note row">
+            <Icon name="ai" size={18} />
+            <span className="grow">{a.note}</span>
+          </div>
+        )}
         <div className="pv-custom-head">
           <label className="row">
             <span>{t("custom.editor.name")}</span>

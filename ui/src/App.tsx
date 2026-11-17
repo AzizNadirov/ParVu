@@ -34,6 +34,7 @@ import {
   type SheetsView,
   type TabSummary,
   type CustomDefinition,
+  type CustomOffer,
   type FunctionDef,
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
@@ -1479,6 +1480,28 @@ export function App({ boot }: { boot: Bootstrap }) {
       if (op) await applyOp(op);
     });
 
+  /** An AI client proposed a custom tool: the user may review it in the
+   * editor and save it there; nothing is saved otherwise. */
+  const reviewCustomOffer = async (offer: CustomOffer) => {
+    const name = offer.definition.name;
+    const args = { client: offer.client, name, rationale: offer.rationale ?? "" };
+    const message = [
+      t(offer.passed ? "custom.offer.passed" : "custom.offer.failed", args),
+      offer.rationale ? t("custom.offer.rationale", args) : "",
+      t("custom.offer.review"),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    if (!(await ui.confirm(t("custom.offer.title", args), message))) return;
+    try {
+      const l = await api.customList();
+      const note = t("custom.offer.note", args);
+      if (await openCustomEditor(ui, { definition: offer.definition, editing: offer.replaces, typeSets: l.type_sets, valueTypes: l.value_types, note }))
+        reloadCustom();
+    } catch (e) {
+      await showError(t("error.operation_failed"), e);
+    }
+  };
   const newCustom = async (kind: "function" | "operation") => {
     try {
       const l = await api.customList();
@@ -2082,8 +2105,8 @@ export function App({ boot }: { boot: Bootstrap }) {
       /* the tabs reload on their next change */
     }
   };
-  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi, refreshFormulasAfterCustom });
-  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi, refreshFormulasAfterCustom };
+  const handlers = useRef({ browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi, refreshFormulasAfterCustom, reviewCustomOffer });
+  handlers.current = { browse, save, saveAs, exportTab, undo, openSearch, closeTab, openPath, activeTab, search, dialogs, filterRows, groupBy, fillDown, fillRight, showChart, refreshFromAi, toggleAi, refreshFormulasAfterCustom, reviewCustomOffer };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -2129,6 +2152,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         if (!live) status(t("mcp.proposal.expired"), 5000);
       }),
       getCurrentWindow().listen<number>("mcp-changed", (e) => void handlers.current.refreshFromAi(e.payload)),
+      getCurrentWindow().listen<CustomOffer>("custom-proposal", (e) => void handlers.current.reviewCustomOffer(e.payload)),
       // Built-in assistant: streamed events and the end of a run, per tab.
       getCurrentWindow().listen<AiRunEvent>("ai-event", (e) =>
         updateChat(e.payload.tab_id ?? 0, (c) => (c.runId === e.payload.run_id ? applyEvent(c, e.payload.event) : c)),

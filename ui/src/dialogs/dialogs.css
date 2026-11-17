@@ -278,6 +278,7 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-custom-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .pv-custom-head { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
 .pv-custom-head .pv-custom-wide { grid-column: 1 / -1; }
+.pv-custom-note { gap: 8px; padding: 8px 12px; background: var(--md-surface-container-high); border-radius: var(--md-shape-s); }
 .pv-custom-head label > span { min-width: 80px; }
 .pv-custom-params-table td { padding: 2px 4px; vertical-align: middle; }
 .pv-custom-params-table input[type="text"], .pv-custom-params-table select { width: 100%; min-width: 0; }

@@ -214,6 +214,156 @@ pub fn expression_body_sql(def: &Definition) -> Result<String, Issue> {
     Ok(sql)
 }
 
+// ---------------------------------------------------------------- AI and MCP
+
+/// A check message (a translation key with arguments) in English, for AI clients.
+pub fn english(issue: &Issue) -> String {
+    let i18n = parvu_config::I18n::new();
+    let args: Vec<(&str, parvu_config::FmtArg)> = issue.args.iter().map(|(k, v)| (k.as_str(), v.as_str().into())).collect();
+    let text = i18n.tr(&issue.key, &args);
+    // A name-taken reason is itself a key.
+    match issue.args.get("why") {
+        Some(why) if why.starts_with("custom.taken.") => text.replace(why.as_str(), &i18n.t(why)),
+        _ => text,
+    }
+}
+
+/// A validation report as an AI client reads it: each check in English,
+/// the examples' outcomes and, when it compiled, the SQL template.
+pub fn report_json(report: &Report) -> serde_json::Value {
+    use serde_json::json;
+    let checks: Vec<_> = report
+        .checks
+        .iter()
+        .map(|c| {
+            let mut v = json!({ "check": c.id, "status": c.status, "message": english(&c.message) });
+            if let Some(i) = c.example {
+                v["example"] = json!(i + 1);
+            }
+            v
+        })
+        .collect();
+    let examples: Vec<_> = report
+        .examples
+        .iter()
+        .enumerate()
+        .map(|(i, o)| {
+            let mut v = json!({ "example": i + 1, "passed": o.passed });
+            if let Some(e) = &o.error {
+                v["error"] = json!(e);
+            }
+            if !o.passed && o.error.is_none() {
+                v["actual"] = json!(o.actual);
+                v["mismatches"] = json!(o.mismatches);
+            }
+            v
+        })
+        .collect();
+    let mut out = json!({ "passed": report.passed(), "checks": checks, "examples": examples });
+    if let Some(c) = &report.compiled {
+        out["compiled_template"] = json!(c.template);
+    }
+    out
+}
+
+/// How an AI client calls a usable definition: its signature and the
+/// `apply_operation` or formula that runs it.
+pub fn tool_listing(lib: &Library) -> serde_json::Value {
+    use parvu_core::custom::{DefKind, ParamKind, ResultKind};
+    use serde_json::json;
+    let tools: Vec<_> = lib
+        .definitions()
+        .iter()
+        .filter(|d| d.is_usable())
+        .map(|d| {
+            let mut args = serde_json::Map::new();
+            let mut refs = Vec::new();
+            let mut tables = 0;
+            for p in &d.params {
+                match p.kind {
+                    ParamKind::Column => {
+                        args.insert(p.name.clone(), json!({ "column": format!("<{} column>", p.name) }));
+                        refs.push(format!("[<{} column>]", p.name));
+                    }
+                    ParamKind::Value => {
+                        let v = p.default.clone().unwrap_or_else(|| format!("<{}>", p.dtype.as_deref().unwrap_or("VARCHAR")));
+                        if !p.optional {
+                            refs.push(format!("<{} value>", p.name));
+                        }
+                        args.insert(p.name.clone(), json!({ "value": v }));
+                    }
+                    ParamKind::Table => {
+                        // The first table is the one the operation is applied to.
+                        if tables > 0 {
+                            args.insert(p.name.clone(), json!({ "table": "<an open table>" }));
+                        }
+                        tables += 1;
+                    }
+                }
+            }
+            let (kind, usage) = match (d.kind, d.result.kind) {
+                (DefKind::Operation, _) => (
+                    "operation",
+                    json!({ "apply_operation": {
+                        "op": "custom_operation", "name": d.name, "args": args,
+                        "new_table": d.placement() == parvu_core::custom::Placement::NewTable,
+                    } }),
+                ),
+                (_, ResultKind::Value) => (
+                    "summary function",
+                    json!({
+                        "set_formula": format!("{}({}) — one value for the whole column, a column total like SUM", d.name, refs.join(", ")),
+                    }),
+                ),
+                _ => (
+                    "row function",
+                    json!({
+                        "set_formula": format!("{}({})", d.name, refs.join(", ")),
+                        "apply_operation": {
+                            "op": "custom_function", "name": d.name, "args": args,
+                            "output": { "to": "new", "name": "<new column>" },
+                        },
+                    }),
+                ),
+            };
+            let mut v = json!({ "name": d.name, "kind": kind, "signature": d.signature(), "use": usage });
+            if !d.title.is_empty() {
+                v["title"] = json!(d.title);
+            }
+            if !d.description.is_empty() {
+                v["description"] = json!(d.description);
+            }
+            if let Some(ex) = d.examples.first() {
+                v["example"] = json!({ "input": ex.input, "args": ex.args, "expected": ex.expected });
+            }
+            v
+        })
+        .collect();
+    json!({ "custom_tools": tools })
+}
+
+/// A definition an AI client proposes, read from its JSON. What a receiver
+/// computes itself (compiled form, report, status) is dropped.
+pub fn proposed_definition(value: serde_json::Value) -> Result<Definition, String> {
+    let def: Definition = serde_json::from_value(value).map_err(|e| {
+        format!("Not a custom tool definition: {e}. See the propose_custom_tool description for the format.")
+    })?;
+    let mut def = def.for_export();
+    def.sample = false;
+    Ok(def)
+}
+
+/// Validate a proposed definition against the custom tools in `dir` (none
+/// when `None`); `replaces` names the definition it would replace. Nothing
+/// is written.
+pub fn validate_proposal(dir: Option<&std::path::Path>, def: &Definition, replaces: Option<&str>) -> Report {
+    let store = match dir {
+        Some(d) => CustomStore::open(d),
+        None => CustomStore::open(std::path::Path::new("")),
+    };
+    validate_in(&store, def, replaces)
+}
+
 /// Validate `def` with the names in `store` (except `editing`) taken.
 pub fn validate_in(store: &CustomStore, def: &Definition, editing: Option<&str>) -> Report {
     let taken = |n: &str| name_taken(store, editing, n);
@@ -525,6 +675,21 @@ pub async fn custom_preview(
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    /// The samples, validated and compiled, as a library.
+    pub fn sample_library() -> Arc<Library> {
+        let store = CustomStore::open(std::path::Path::new(""));
+        let defs = parvu_core::custom::samples().into_iter().map(|d| {
+            let r = validate_in(&store, &d, None);
+            checked(d, r, true)
+        });
+        Arc::new(Library::new(defs))
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -555,16 +720,7 @@ mod tests {
         assert!(schema.contains("custom_operation") && schema.contains("custom_function"));
     }
 
-    /// The samples, validated and compiled, as a library.
-    fn sample_library() -> Arc<Library> {
-        let dir = tempfile::TempDir::new().unwrap();
-        let store = CustomStore::open(dir.path());
-        let defs = parvu_core::custom::samples().into_iter().map(|d| {
-            let r = validate_in(&store, &d, None);
-            checked(d, r, true)
-        });
-        Arc::new(Library::new(defs))
-    }
+    use super::test_support::sample_library;
 
     fn sales() -> (tempfile::TempDir, parvu_core::Workspace, TabId) {
         let dir = tempfile::TempDir::new().unwrap();

@@ -796,6 +796,17 @@ export interface McpStatus {
 }
 
 /** A change an AI client asks for; the user approves or rejects it. */
+/** A custom tool an AI client proposed (propose_custom_tool), offered for review. */
+export interface CustomOffer {
+  client: string;
+  /** The definition, with its validation report. */
+  definition: CustomDefinition;
+  /** The definition it would replace. */
+  replaces: string | null;
+  rationale: string | null;
+  passed: boolean;
+}
+
 export interface McpProposal {
   id: number;
   window: string;
