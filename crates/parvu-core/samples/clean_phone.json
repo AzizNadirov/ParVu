@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "kind": "function",
+  "name": "clean_phone",
+  "title": "Clean phone number",
+  "description": "Keeps the digits of a phone number and puts a prefix in front. Numbers with fewer than 7 digits become empty.",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "phone", "kind": "column", "type": ["text"], "description": "The phone numbers" },
+    { "name": "prefix", "kind": "value", "dtype": "VARCHAR", "optional": true, "default": "+", "description": "Put in front of the digits" }
+  ],
+  "result": { "kind": "column", "type": ["text"] },
+  "body": {
+    "language": "sql",
+    "source": "CASE WHEN length(regexp_replace(phone, '[^0-9]', '', 'g')) < 7 THEN NULL\n     ELSE prefix || regexp_replace(phone, '[^0-9]', '', 'g') END"
+  },
+  "examples": [
+    {
+      "name": "typical",
+      "input": {
+        "columns": [{ "name": "phone", "dtype": "VARCHAR" }],
+        "rows": [["+1 (555) 010-2030"], ["555.0102"], ["n/a"], [null]]
+      },
+      "args": { "prefix": "+" },
+      "expected": {
+        "columns": [{ "name": "result" }],
+        "rows": [["+15550102030"], ["+5550102"], [null], [null]]
+      }
+    },
+    {
+      "name": "other prefix",
+      "input": {
+        "columns": [{ "name": "phone", "dtype": "VARCHAR" }],
+        "rows": [["(044) 123 45 67"]]
+      },
+      "args": { "prefix": "00" },
+      "expected": { "columns": [{ "name": "result" }], "rows": [["000441234567"]] }
+    }
+  ]
+}

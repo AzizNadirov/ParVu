@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "kind": "function",
+  "name": "percent_of_total",
+  "title": "Percent of total",
+  "description": "Each value as a percentage of the column's total (empty values count as nothing).",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "x", "kind": "column", "type": ["number"], "description": "The numbers" }
+  ],
+  "result": { "kind": "column", "type": ["float"] },
+  "body": {
+    "language": "sql",
+    "source": "100.0 * x / sum(x) OVER ()"
+  },
+  "examples": [
+    {
+      "name": "typical",
+      "input": {
+        "columns": [{ "name": "x", "dtype": "BIGINT" }],
+        "rows": [["1"], ["3"], [null], ["4"]]
+      },
+      "expected": { "columns": [{ "name": "result" }], "rows": [["12.5"], ["37.5"], [null], ["50"]] }
+    }
+  ]
+}

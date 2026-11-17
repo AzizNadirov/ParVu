@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "kind": "function",
+  "name": "weighted_average",
+  "title": "Weighted average",
+  "description": "The average of x weighted by w. Rows where x or w is empty are left out.",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "x", "kind": "column", "type": ["number"], "description": "The values" },
+    { "name": "w", "kind": "column", "type": ["number"], "description": "The weights" }
+  ],
+  "result": { "kind": "value", "type": ["number"] },
+  "body": {
+    "language": "sql",
+    "source": "sum(x * w) / sum(CASE WHEN x IS NOT NULL THEN w END)"
+  },
+  "examples": [
+    {
+      "name": "typical",
+      "input": {
+        "columns": [{ "name": "x", "dtype": "BIGINT" }, { "name": "w", "dtype": "BIGINT" }],
+        "rows": [["10", "1"], ["20", "1"], ["30", "2"]]
+      },
+      "expected": { "columns": [{ "name": "result" }], "rows": [["22.5"]] }
+    },
+    {
+      "name": "empty value",
+      "input": {
+        "columns": [{ "name": "x", "dtype": "DOUBLE" }, { "name": "w", "dtype": "DOUBLE" }],
+        "rows": [["10", "1"], [null, "5"], ["40", null]]
+      },
+      "expected": { "columns": [{ "name": "result" }], "rows": [["10"]] }
+    }
+  ]
+}

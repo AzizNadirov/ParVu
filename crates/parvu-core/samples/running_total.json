@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "kind": "operation",
+  "name": "running_total",
+  "title": "Running total",
+  "description": "Adds the column running_total: the sum of amount over this row and every row before it, with rows sorted by sorted_by. Empty amounts add nothing.",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "t", "kind": "table" },
+    { "name": "amount", "kind": "column", "type": ["number"], "description": "The numbers to add up" },
+    { "name": "sorted_by", "kind": "column", "type": ["any"], "description": "The order of the rows (a date, an id…)" }
+  ],
+  "result": { "kind": "table", "columns": [{ "name": "running_total", "type": ["number"] }] },
+  "placement": "step",
+  "body": {
+    "language": "sql",
+    "source": "SELECT *,\n  sum(amount) OVER (ORDER BY sorted_by ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total\nFROM t\nORDER BY sorted_by"
+  },
+  "examples": [
+    {
+      "name": "by day",
+      "input": {
+        "columns": [{ "name": "day", "dtype": "DATE" }, { "name": "sales", "dtype": "BIGINT" }],
+        "rows": [["2024-01-03", "5"], ["2024-01-01", "10"], ["2024-01-02", null]]
+      },
+      "args": { "amount": "sales", "sorted_by": "day" },
+      "ordered": true,
+      "expected": {
+        "columns": [{ "name": "day" }, { "name": "sales" }, { "name": "running_total" }],
+        "rows": [["2024-01-01", "10", "10"], ["2024-01-02", null, "10"], ["2024-01-03", "5", "15"]]
+      }
+    }
+  ]
+}

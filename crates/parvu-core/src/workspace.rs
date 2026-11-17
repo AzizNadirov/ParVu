@@ -312,6 +312,8 @@ pub struct Workspace {
     detect: DetectOptions,
     /// Sheet changes not saved yet, by workbook.
     workbooks: std::collections::HashMap<PathBuf, crate::workbook::WorkbookPlan>,
+    /// The user's custom functions and operations (a snapshot the app sets).
+    custom: std::sync::Arc<crate::custom::Library>,
 }
 
 impl Workspace {
@@ -335,7 +337,14 @@ impl Workspace {
             page_size: page_size.max(1),
             detect: DetectOptions::default(),
             workbooks: Default::default(),
+            custom: Default::default(),
         })
+    }
+
+    /// The custom functions and operations operations may call. Steps
+    /// already applied keep the SQL they were built with.
+    pub fn set_custom(&mut self, library: std::sync::Arc<crate::custom::Library>) {
+        self.custom = library;
     }
 
     /// How files opened from now on are typed (detection on or off, the
@@ -865,12 +874,14 @@ impl Workspace {
         };
         let conn = &self.conn;
         let query = |sql: &str| crate::page::format_batches(&crate::engine::query_batches(conn, sql)?);
+        let custom = |name: &str| self.custom.get(name);
         op.build(&OpContext {
             table: &t.name,
             current_query: source,
             columns: &columns,
             other_query: &other,
             query: &query,
+            custom: &custom,
         })
     }
 
@@ -881,7 +892,32 @@ impl Workspace {
         let other = |name: &str| self.current_query_of(name);
         let conn = &self.conn;
         let query = |sql: &str| crate::page::format_batches(&crate::engine::query_batches(conn, sql)?);
-        f(&OpContext { table: &t.name, current_query: t.engine.current_query(), columns: &columns, other_query: &other, query: &query })
+        let custom = |name: &str| self.custom.get(name);
+        f(&OpContext {
+            table: &t.name,
+            current_query: t.engine.current_query(),
+            columns: &columns,
+            other_query: &other,
+            query: &query,
+            custom: &custom,
+        })
+    }
+
+    /// What a summary custom function needs to run as a job: the items,
+    /// source and alias for [`crate::sql::query_whole_table`]. Binds the SQL;
+    /// reads no data.
+    pub fn custom_value_input(
+        &self,
+        id: TabId,
+        name: &str,
+        args: &std::collections::BTreeMap<String, crate::custom::CustomArg>,
+    ) -> Result<(String, String, String)> {
+        self.with_ctx(id, |ctx| crate::custom::fill::summary_parts(ctx, name, args))
+    }
+
+    /// The SQL an operation builds on the tab, for a preview job.
+    pub fn op_sql(&self, id: TabId, op: &Operation) -> Result<String> {
+        Ok(self.build_op(id, op)?.sql)
     }
 
     /// The first `n` values of `column` before and after reading them as
