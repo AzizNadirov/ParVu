@@ -1,10 +1,20 @@
 // A positioned popup menu with nested submenus, used for the menu bar and
 // for right-click menus. Closes on outside click, Escape, or selection.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 export type MenuEntry =
-  | { type?: "item"; label: string; shortcut?: string; disabled?: boolean; checked?: boolean; onSelect?: () => void; submenu?: MenuEntry[] }
+  | {
+      type?: "item";
+      label: string;
+      /** Shown before the label (a check mark takes its place when `checked`). */
+      icon?: IconName;
+      shortcut?: string;
+      disabled?: boolean;
+      checked?: boolean;
+      onSelect?: () => void;
+      submenu?: MenuEntry[];
+    }
   | { type: "separator" };
 
 export interface PopupMenuProps {
@@ -115,7 +125,9 @@ export function PopupMenu({ x, y, items, onClose, anchor }: PopupMenuProps) {
                 it.onSelect?.();
               }}
             >
-              <span className="menu-check">{it.checked && <Icon name="check" size={16} />}</span>
+              <span className={`menu-check${it.checked ? "" : " menu-icon"}`}>
+                {it.checked ? <Icon name="check" size={16} /> : it.icon && <Icon name={it.icon} size={16} />}
+              </span>
               <span>{it.label}</span>
               {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
               {it.submenu && (

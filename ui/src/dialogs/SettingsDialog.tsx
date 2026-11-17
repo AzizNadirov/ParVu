@@ -43,6 +43,10 @@ export interface SettingsForm {
   rowsThreshold: string;
   cellsThreshold: string;
   sizeThreshold: string;
+  showQueryPanel: boolean;
+  queryCollapsed: boolean;
+  showSteps: boolean;
+  showAi: boolean;
 }
 
 /** [form field, min, max] for every numeric input. */
@@ -84,6 +88,10 @@ export function settingsToForm(s: Settings, language: string, theme: string): Se
     rowsThreshold: String(toInt(s.warning_threshold_rows, 1_000_000)),
     cellsThreshold: String(toInt(s.warning_threshold_cells, 10_000_000)),
     sizeThreshold: String(toInt(s.warning_threshold_filesize_mb, 100)),
+    showQueryPanel: s.show_query_panel ?? true,
+    queryCollapsed: s.query_panel_collapsed ?? false,
+    showSteps: s.show_steps_panel ?? true,
+    showAi: s.show_ai_panel ?? false,
   };
 }
 
@@ -122,6 +130,10 @@ export function formToValues(f: SettingsForm): Partial<Settings> {
     warning_threshold_rows: n("rowsThreshold"),
     warning_threshold_cells: n("cellsThreshold"),
     warning_threshold_filesize_mb: n("sizeThreshold"),
+    show_query_panel: f.showQueryPanel,
+    query_panel_collapsed: f.queryCollapsed,
+    show_steps_panel: f.showSteps,
+    show_ai_panel: f.showAi,
   };
 }
 
@@ -251,6 +263,14 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
       <fieldset>
         <legend>{t("settings.group.file_history")}</legend>
         {check("saveHistory", t("settings.label.save_history"), t("settings.tooltip.save_history"))}
+      </fieldset>
+      <fieldset>
+        <legend>{t("settings.group.view")}</legend>
+        {check("showQueryPanel", t("settings.label.show_query_panel"))}
+        {check("queryCollapsed", t("settings.label.query_collapsed"))}
+        {check("showSteps", t("settings.label.show_steps"))}
+        {check("showAi", t("settings.label.show_ai"))}
+        <div className="pv-hint">{t("settings.hint.view")}</div>
       </fieldset>
       <fieldset>
         <legend>{t("settings.group.exit")}</legend>

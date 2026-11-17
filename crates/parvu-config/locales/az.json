@@ -1439,5 +1439,21 @@
   "table.from": "{source} · {what}",
   "table.go_to_source": "{source} cədvəlinə keç",
   "table.sql_new_tab": "Nəticə yeni tabda",
-  "mcp.proposal.new_table": "Nəticə yeni tabda açılacaq; {table} olduğu kimi qalacaq."
+  "mcp.proposal.new_table": "Nəticə yeni tabda açılacaq; {table} olduğu kimi qalacaq.",
+  "menu.group.column": "Sütun",
+  "menu.group.type": "Tip",
+  "menu.group.transform": "Çevir",
+  "menu.group.clean": "Təmizlə",
+  "menu.group.analyze": "Təhlil",
+  "menu.group.display": "Görünüş",
+  "context.copy_as": "Kimi kopyala",
+  "menu.view.editor_collapsed": "SQL sorğu panelini yığ",
+  "editor.collapse": "Sorğu panelini yığ",
+  "editor.expand": "Sorğu panelini aç",
+  "settings.group.view": "Görünüş",
+  "settings.label.show_query_panel": "SQL sorğu panelini göstər",
+  "settings.label.query_collapsed": "SQL sorğu paneli yığılmış başlasın",
+  "settings.label.show_steps": "Tətbiq olunmuş addımları göstər",
+  "settings.label.show_ai": "AI köməkçi panelini göstər",
+  "settings.hint.view": "Görünüş menyusundakı dəyişikliklər də burada yadda saxlanılır."
 }

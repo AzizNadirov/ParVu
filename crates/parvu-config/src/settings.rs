@@ -211,6 +211,18 @@ pub struct Settings {
     /// How to read dates such as `03/04/2024` (see [`DateOrderSetting`]).
     pub date_order: DateOrderSetting,
 
+    // View (remembered from the View menu)
+    /// The SQL Query panel is shown.
+    pub show_query_panel: bool,
+    /// The SQL Query panel is collapsed to its title bar.
+    pub query_panel_collapsed: bool,
+    /// Height of the SQL Query panel, in pixels.
+    pub query_panel_height: i64,
+    /// The Applied Steps panel is shown.
+    pub show_steps_panel: bool,
+    /// The AI assistant panel is shown.
+    pub show_ai_panel: bool,
+
     // Legacy colours, kept for backward compatibility
     #[serde(rename = "colour_browseButton")]
     pub colour_browse_button: String,
@@ -259,6 +271,11 @@ impl Default for Settings {
             mcp_allow_clients: false,
             detect_column_types: true,
             date_order: DateOrderSetting::Auto,
+            show_query_panel: true,
+            query_panel_collapsed: false,
+            query_panel_height: 220,
+            show_steps_panel: true,
+            show_ai_panel: false,
             colour_browse_button: "#E8F5E9".into(),
             colour_sql_edit: "#FFF9C4".into(),
             colour_execute_button: "#E1F5FE".into(),
@@ -582,6 +599,11 @@ fn known_keys() -> Vec<&'static str> {
         "mcp_allow_clients",
         "detect_column_types",
         "date_order",
+        "show_query_panel",
+        "query_panel_collapsed",
+        "query_panel_height",
+        "show_steps_panel",
+        "show_ai_panel",
         "colour_browseButton",
         "colour_sqlEdit",
         "colour_executeButton",

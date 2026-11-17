@@ -1439,5 +1439,21 @@
   "table.from": "из {source} · {what}",
   "table.go_to_source": "Перейти к {source}",
   "table.sql_new_tab": "Результат в новой вкладке",
-  "mcp.proposal.new_table": "Результат откроется в новой вкладке; {table} не изменится."
+  "mcp.proposal.new_table": "Результат откроется в новой вкладке; {table} не изменится.",
+  "menu.group.column": "Столбец",
+  "menu.group.type": "Тип",
+  "menu.group.transform": "Преобразовать",
+  "menu.group.clean": "Очистка",
+  "menu.group.analyze": "Анализ",
+  "menu.group.display": "Отображение",
+  "context.copy_as": "Копировать как",
+  "menu.view.editor_collapsed": "Свернуть панель SQL-запроса",
+  "editor.collapse": "Свернуть панель запроса",
+  "editor.expand": "Развернуть панель запроса",
+  "settings.group.view": "Вид",
+  "settings.label.show_query_panel": "Показывать панель SQL-запроса",
+  "settings.label.query_collapsed": "Начинать со свёрнутой панелью SQL-запроса",
+  "settings.label.show_steps": "Показывать применённые шаги",
+  "settings.label.show_ai": "Показывать панель AI-ассистента",
+  "settings.hint.view": "Изменения в меню «Вид» тоже запоминаются здесь."
 }
