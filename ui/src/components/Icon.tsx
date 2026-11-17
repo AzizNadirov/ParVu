@@ -94,6 +94,7 @@ import {
   mdiCheckboxMultipleMarkedOutline,
   mdiFileDocumentOutline,
   mdiPencilBoxOutline,
+  mdiChevronUp,
 } from "@mdi/js";
 
 export const icons = {
@@ -106,6 +107,7 @@ export const icons = {
   chevronDown: mdiChevronDown,
   chevronLeft: mdiChevronLeft,
   chevronRight: mdiChevronRight,
+  chevronUp: mdiChevronUp,
   close: mdiClose,
   copy: mdiContentCopy,
   download: mdiDownload,
