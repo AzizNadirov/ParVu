@@ -233,6 +233,9 @@ fn grouped(
     if spec.agg == AggFunc::List {
         return Err(CoreError::invalid("A list cannot be charted; choose another calculation"));
     }
+    if spec.agg == AggFunc::Custom {
+        return Err(CoreError::invalid("Custom functions can't be charted yet; choose another calculation"));
+    }
     let (agg, value) = match y {
         Some(y) => (spec.agg, q(y)),
         None => (AggFunc::Rows, String::new()),

@@ -113,8 +113,9 @@ import {
   openCustomTools,
   openCustomEditor,
   openCustomApply,
+  openSaveSteps,
 } from "./dialogs/lazy";
-import { CUSTOM_MENU_MAX, customDefinitions, functionsForColumn, isUsable, newDefinition, operationsFor } from "./dialogs/logic";
+import { CUSTOM_MENU_MAX, customAggregates, customDefinitions, functionsForColumn, isUsable, newDefinition, operationsFor } from "./dialogs/logic";
 import { Icon } from "./components/Icon";
 
 /** Per-tab UI state that lives only in the window. */
@@ -1171,7 +1172,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       label: t("context.new_table_from"),
       icon: "newTable",
       submenu: [
-        { label: t("menu.reshape.group_by"), icon: "groupBy", onSelect: () => void runOpDialog(openGroupBy, column, true) },
+        { label: t("menu.reshape.group_by"), icon: "groupBy", onSelect: () => void runOpDialog(openGroupByCustom, column, true) },
         { label: t("menu.reshape.pivot"), icon: "pivot", onSelect: () => void runOpDialog(openPivot, column, true) },
         { label: t("menu.reshape.value_counts"), icon: "valueCounts", onSelect: () => void runOpDialog(openValueCounts, column, true) },
       ],
@@ -1513,6 +1514,25 @@ export function App({ boot }: { boot: Bootstrap }) {
   };
 
   const manageCustom = () => void openCustomTools(ui).then(reloadCustom);
+
+  /** Group By, with the summary custom functions that can aggregate. */
+  const openGroupByCustom: OpDialog = (u, a) => openGroupBy(u, { ...a, custom: customAggregates(customDefs) });
+
+  /** "Save steps as custom operation…": the steps that can be part of it,
+   * columns as parameters, then the editor, prefilled, to review and save. */
+  const saveStepsAsOperation = async () =>
+    withTab(async (tab) => {
+      try {
+        const definition = await openSaveSteps(ui, { tabId: tab.id, table: tab.name });
+        if (!definition) return;
+        const l = await api.customList();
+        const note = t("custom.steps.note", { table: tab.name });
+        if (await openCustomEditor(ui, { definition, editing: null, typeSets: l.type_sets, valueTypes: l.value_types, note, noteIcon: "steps" }))
+          reloadCustom();
+      } catch (e) {
+        await showError(t("error.operation_failed"), e);
+      }
+    });
 
   /** Menu entries for custom tools: usable ones run, drafts and broken
    * ones are shown disabled; past the limit, "More…" opens the manager. */
@@ -2021,7 +2041,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       title: t("menu.table"),
       icon: "table" as const,
       items: (): MenuEntry[] => [
-        { label: t("menu.reshape.group_by"), icon: "groupBy", shortcut: "Ctrl+G", disabled: !activeTab, onSelect: () => void runOpDialog(openGroupBy, undefined, true) },
+        { label: t("menu.reshape.group_by"), icon: "groupBy", shortcut: "Ctrl+G", disabled: !activeTab, onSelect: () => void runOpDialog(openGroupByCustom, undefined, true) },
         { label: t("menu.reshape.pivot"), icon: "pivot", disabled: !activeTab, onSelect: () => void runOpDialog(openPivot, undefined, true) },
         { label: t("menu.reshape.melt"), icon: "melt", disabled: !activeTab, onSelect: () => void runOpDialog(openMelt) },
         { label: t("menu.reshape.transpose"), icon: "transpose", disabled: !activeTab, onSelect: () => void runTranspose() },
@@ -2036,6 +2056,7 @@ export function App({ boot }: { boot: Bootstrap }) {
           : []),
         { type: "separator" },
         { label: t("custom.menu.new_operation"), icon: "plus", onSelect: () => void newCustom("operation") },
+        { label: t("custom.menu.from_steps"), icon: "steps", disabled: !activeTab?.steps.length, onSelect: () => void saveStepsAsOperation() },
         { label: t("custom.menu.manage"), icon: "custom", onSelect: manageCustom },
       ],
     },
@@ -2064,7 +2085,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   // ------------------------------------------------------------ effects
   // Keep refs to the latest handlers for global listeners.
   const filterRows = () => void runOpDialog(openFilter);
-  const groupBy = () => void runOpDialog(openGroupBy, undefined, true);
+  const groupBy = () => void runOpDialog(openGroupByCustom, undefined, true);
   /** An AI client changed a tab (after the user approved it): show the result. */
   const refreshFromAi = async (id: number) => {
     try {
@@ -2303,7 +2324,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         <Icon name="filter" />
         {t("btn.filter")}
       </button>
-      <button className="text" onClick={() => void runOpDialog(openGroupBy, undefined, true)}>
+      <button className="text" onClick={() => void runOpDialog(openGroupByCustom, undefined, true)}>
         <Icon name="groupBy" />
         {t("btn.group_by")}
       </button>
@@ -2505,6 +2526,7 @@ export function App({ boot }: { boot: Bootstrap }) {
               open={stepsOpen}
               onToggle={() => setView({ show_steps_panel: !stepsOpen })}
               onUndo={() => void undo()}
+              onSaveAsOperation={() => void saveStepsAsOperation()}
               busy={busy}
             />
             {formulaEdit && (

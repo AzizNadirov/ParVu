@@ -321,7 +321,7 @@ fn probes(def: &Definition) -> Vec<Probe> {
         .params
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.kind == ParamKind::Column)
+        .filter(|(_, p)| p.takes_columns())
         .map(|(i, p)| (i, probe_families(&p.types)))
         .collect();
     let total: usize = cols.iter().map(|(_, f)| f.len().max(1)).product();
@@ -374,12 +374,30 @@ fn empty_relation(columns: &[(String, String)]) -> String {
     format!("SELECT {} WHERE false", items.join(", "))
 }
 
+/// How many columns a probe gives a columns parameter: two, within its bounds.
+fn probe_count(p: &super::Param) -> usize {
+    let (min, max) = p.column_count();
+    min.max(max.map_or(2, |m| m.min(2))).max(1)
+}
+
+/// The probe's input columns standing for a parameter: its name, or for a
+/// columns parameter `<name>__1`, `<name>__2`… (parameter names can't hold
+/// `__` at their start, and the result may show them).
+fn probe_columns(p: &super::Param) -> Vec<String> {
+    match p.kind {
+        ParamKind::Columns => (1..=probe_count(p)).map(|j| format!("{}__{j}", p.name)).collect(),
+        _ => vec![p.name.clone()],
+    }
+}
+
 /// The SQL a probe binds: the template over empty typed inputs.
 fn probe_sql(def: &Definition, template: &str, probe: &Probe, extra_row: bool, use_defaults: bool) -> crate::Result<String> {
     let mut slots = vec![String::new(); def.params.len()];
     for (i, p) in def.params.iter().enumerate() {
         match p.kind {
-            ParamKind::Column => slots[i] = quote_ident(&p.name),
+            ParamKind::Column | ParamKind::Columns => {
+                slots[i] = probe_columns(p).iter().map(|c| quote_ident(c)).collect::<Vec<_>>().join(", ");
+            }
             ParamKind::Value => {
                 let raw = if use_defaults { p.default.as_deref() } else { None };
                 slots[i] = format!("({})", value_literal(p, raw)?);
@@ -394,7 +412,8 @@ fn probe_sql(def: &Definition, template: &str, probe: &Probe, extra_row: bool, u
                 .params
                 .iter()
                 .enumerate()
-                .filter_map(|(i, p)| probe.types.get(&i).map(|t| (p.name.clone(), t.to_string())))
+                .filter_map(|(i, p)| probe.types.get(&i).map(|t| (p, t)))
+                .flat_map(|(p, t)| probe_columns(p).into_iter().map(move |c| (c, t.to_string())))
                 .collect();
             if extra_row {
                 cols.push(("__pv_rn".into(), "BIGINT".into()));
@@ -412,8 +431,8 @@ fn probe_sql(def: &Definition, template: &str, probe: &Probe, extra_row: bool, u
                     .collect();
                 for (i, p) in def.params.iter().enumerate() {
                     let belongs = def.table_of(p).is_some_and(|x| x.name == t.name);
-                    if p.kind == ParamKind::Column && belongs && let Some(ty) = probe.types.get(&i) {
-                        cols.push((p.name.clone(), ty.to_string()));
+                    if p.takes_columns() && belongs && let Some(ty) = probe.types.get(&i) {
+                        cols.extend(probe_columns(p).into_iter().map(|c| (c, ty.to_string())));
                     }
                 }
                 tables.push(empty_relation(&cols));

@@ -1,21 +1,24 @@
 import { useMemo, useState } from "react";
 import type { Ui, Closer } from "../lib/ui";
 import { api, errorMessage } from "../lib/api";
-import type { CustomBodyLanguage, CustomDefinition, CustomExample, CustomParam, CustomReport, ExampleOutcome, ExampleTable } from "../lib/api";
+import type { Cell, CustomBodyLanguage, CustomDefinition, CustomExample, CustomParam, CustomReport, ExampleOutcome, ExampleTable } from "../lib/api";
 import { Dialog } from "../components/Dialog";
-import { Icon } from "../components/Icon";
+import { Icon, type IconName } from "../components/Icon";
 import { QueryEditor } from "../components/QueryEditor";
 import {
   EXAMPLE_TYPES,
   cellFromInput,
   cellToInput,
+  columnCount,
   customBodySchema,
   customCheckText,
   definitionToSave,
   expectedFromActual,
   formatRequiredColumns,
+  listColumns,
   newExample,
   parseRequiredColumns,
+  setListSize,
   signatureText,
   syncFunctionExample,
 } from "./logic";
@@ -27,8 +30,10 @@ interface Args {
   editing: string | null;
   typeSets: string[];
   valueTypes: string[];
-  /** Shown above the form (a definition an AI client proposed). */
+  /** Shown above the form (a definition an AI client proposed, or made from steps). */
   note?: string;
+  /** The note's icon (default: AI). */
+  noteIcon?: IconName;
 }
 
 const reportPassed = (r: CustomReport | null) => !!r && !!r.compiled && !r.checks.some((c) => c.status === "fail");
@@ -166,8 +171,17 @@ function ExampleEditor(props: {
   const summary = fn && def.result.kind === "value";
   const values = def.params.filter((p) => p.kind === "value");
   const columnParams = def.params.filter((p) => p.kind === "column");
+  const listParams = def.params.filter((p) => p.kind === "columns");
+  const cellArg = (name: string): Cell => {
+    const v = ex.args?.[name];
+    return Array.isArray(v) ? null : (v ?? null);
+  };
+  const listArg = (name: string): string[] => {
+    const v = ex.args?.[name];
+    return Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+  };
   const otherTables = def.params.filter((p) => p.kind === "table").slice(1);
-  const setArg = (name: string, v: string | null) => onChange({ ...ex, args: { ...(ex.args ?? {}), [name]: v } });
+  const setArg = (name: string, v: string | null | string[]) => onChange({ ...ex, args: { ...(ex.args ?? {}), [name]: v } });
   const setExpectedCell = (r: number, v: string) => {
     const rows = ex.expected.rows.map((x) => [...x]);
     while (rows.length <= r) rows.push([null]);
@@ -182,6 +196,7 @@ function ExampleEditor(props: {
     return { columns: [...table.columns, dtype ? { name, dtype: "VARCHAR" } : { name }], rows: table.rows.map((r) => [...r, null]) };
   };
   const inputColumns = ex.input.columns.map((c) => c.name);
+  const allColumns = [...new Set([...inputColumns, ...Object.values(ex.tables ?? {}).flatMap((x) => x.columns.map((c) => c.name))])];
 
   return (
     <div className="col pv-custom-example">
@@ -197,15 +212,51 @@ function ExampleEditor(props: {
           </label>
         )}
       </div>
-      {(values.length > 0 || (!fn && columnParams.length > 0)) && (
+      {(values.length > 0 || listParams.length > 0 || (!fn && columnParams.length > 0)) && (
         <div className="pv-custom-args">
+          {fn &&
+            listParams.map((p) => (
+              <label key={p.name} className="row" title={t("custom.editor.list_size_hint")}>
+                <span className="pv-custom-param-name">{p.name}</span>
+                <span>{t("custom.editor.list_size")}</span>
+                <input
+                  type="number"
+                  min={columnCount(p)[0]}
+                  max={columnCount(p)[1] ?? 50}
+                  className="pv-custom-count"
+                  value={listColumns(p, ex).length}
+                  onChange={(e) => onChange(setListSize(def, ex, p, Number(e.target.value) || 1))}
+                />
+              </label>
+            ))}
+          {!fn &&
+            listParams.map((p) => {
+              const chosen = listArg(p.name);
+              return (
+                <div key={p.name} className="row pv-custom-list-arg">
+                  <span className="pv-custom-param-name">{p.name}</span>
+                  {allColumns.map((c) => (
+                    <label key={c} className="row">
+                      <input
+                        type="checkbox"
+                        checked={chosen.includes(c)}
+                        onChange={(e) =>
+                          setArg(p.name, e.target.checked ? allColumns.filter((x) => x === c || chosen.includes(x)) : chosen.filter((x) => x !== c))
+                        }
+                      />
+                      <span className="pv-mono">{c}</span>
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
           {!fn &&
             columnParams.map((p) => (
               <label key={p.name} className="row">
                 <span className="pv-custom-param-name">{p.name}</span>
-                <select value={ex.args?.[p.name] ?? ""} onChange={(e) => setArg(p.name, e.target.value || null)}>
+                <select value={cellArg(p.name) ?? ""} onChange={(e) => setArg(p.name, e.target.value || null)}>
                   <option value="">—</option>
-                  {[...new Set([...inputColumns, ...Object.values(ex.tables ?? {}).flatMap((x) => x.columns.map((c) => c.name))])].map((c) => (
+                  {allColumns.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>
@@ -220,7 +271,7 @@ function ExampleEditor(props: {
                 type="text"
                 className="pv-mono"
                 placeholder={p.optional ? (p.default ?? "∅") : ""}
-                value={ex.args && p.name in ex.args ? cellToInput(ex.args[p.name] ?? null) : ""}
+                value={ex.args && p.name in ex.args ? cellToInput(cellArg(p.name)) : ""}
                 onChange={(e) => {
                   const args = { ...(ex.args ?? {}) };
                   if (e.target.value === "" && p.optional) delete args[p.name];
@@ -340,7 +391,8 @@ function ParamRow(props: {
 }) {
   const { t, def, p, onChange } = props;
   const tables = def.params.filter((x) => x.kind === "table");
-  const kinds = def.kind === "function" ? (["column", "value"] as const) : (["table", "column", "value"] as const);
+  const kinds = def.kind === "function" ? (["column", "columns", "value"] as const) : (["table", "column", "columns", "value"] as const);
+  const count = (v: string) => (v.trim() === "" ? undefined : Math.max(0, Math.floor(Number(v))) || undefined);
   return (
     <tr>
       <td>
@@ -354,7 +406,7 @@ function ParamRow(props: {
             onChange({
               name: p.name,
               kind,
-              ...(kind === "column" ? { type: ["any"] } : kind === "value" ? { dtype: "VARCHAR" } : {}),
+              ...(kind === "column" || kind === "columns" ? { type: ["any"] } : kind === "value" ? { dtype: "VARCHAR" } : {}),
               description: p.description,
             });
           }}
@@ -367,7 +419,7 @@ function ParamRow(props: {
         </select>
       </td>
       <td>
-        {p.kind === "column" && (
+        {(p.kind === "column" || p.kind === "columns") && (
           <select value={p.type?.[0] ?? "any"} onChange={(e) => onChange({ ...p, type: [e.target.value] })}>
             {props.typeSets.map((s) => (
               <option key={s} value={s}>
@@ -414,7 +466,29 @@ function ParamRow(props: {
             )}
           </span>
         )}
-        {p.kind === "column" && def.kind === "operation" && tables.length > 1 && (
+        {p.kind === "columns" && (
+          <span className="row" title={t("custom.editor.count_hint")}>
+            <span>{t("custom.editor.count_min")}</span>
+            <input
+              type="number"
+              min={1}
+              className="pv-custom-count"
+              value={p.min ?? ""}
+              placeholder="1"
+              onChange={(e) => onChange({ ...p, min: count(e.target.value) })}
+            />
+            <span>{t("custom.editor.count_max")}</span>
+            <input
+              type="number"
+              min={1}
+              className="pv-custom-count"
+              value={p.max ?? ""}
+              placeholder="∞"
+              onChange={(e) => onChange({ ...p, max: count(e.target.value) })}
+            />
+          </span>
+        )}
+        {(p.kind === "column" || p.kind === "columns") && def.kind === "operation" && tables.length > 1 && (
           <select value={p.of ?? tables[0]?.name ?? ""} onChange={(e) => onChange({ ...p, of: e.target.value })} title={t("custom.editor.of")}>
             {tables.map((x) => (
               <option key={x.name} value={x.name}>
@@ -550,7 +624,7 @@ function CustomEditorDialog({ ui, close, a }: { ui: Ui; close: Closer<string | n
       <div className="pv-custom-editor">
         {a.note && (
           <div className="pv-custom-note row">
-            <Icon name="ai" size={18} />
+            <Icon name={a.noteIcon ?? "ai"} size={18} />
             <span className="grow">{a.note}</span>
           </div>
         )}

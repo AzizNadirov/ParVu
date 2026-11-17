@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::compile::{ARGS_TABLE, arg_slot};
 use super::fill::{fill_slots, value_literal, with_tables};
-use super::{DefKind, Definition, Example, ExampleColumn, ExampleTable, ParamKind, ResultKind};
+use super::{DefKind, Definition, Example, ExampleArg, ExampleColumn, ExampleTable, ParamKind, ResultKind};
 use crate::engine::{describe, query_batches};
 use crate::error::{CoreError, Result};
 use crate::page::{Cell, format_batches};
@@ -87,19 +87,26 @@ pub fn example_sql(def: &Definition, template: &str, ex: &Example) -> Result<Str
             ParamKind::Table => {}
             ParamKind::Value => {
                 let raw: Option<String> = match arg(&p.name) {
-                    Some(v) => v,
+                    Some(ExampleArg::Cell(v)) => v,
+                    Some(ExampleArg::Columns(_)) => return Err(CoreError::invalid(format!("{}: expected a value", p.name))),
                     None if p.optional => p.default.clone(),
                     None => return Err(CoreError::invalid(format!("No value for {}", p.name))),
                 };
                 slots[i] = format!("({})", value_literal(p, raw.as_deref())?);
             }
-            ParamKind::Column => {
-                let column = match def.kind {
-                    DefKind::Function => p.name.clone(),
-                    DefKind::Operation => arg(&p.name)
-                        .flatten()
-                        .ok_or_else(|| CoreError::invalid(format!("Choose a column for {}", p.name)))?,
+            ParamKind::Column | ParamKind::Columns => {
+                let columns: Vec<String> = match (p.kind, def.kind, arg(&p.name)) {
+                    (ParamKind::Columns, _, Some(ExampleArg::Columns(list))) => list,
+                    (ParamKind::Columns, _, Some(ExampleArg::Cell(Some(c)))) => vec![c],
+                    (ParamKind::Columns, _, _) => return Err(CoreError::invalid(format!("Choose the columns for {}", p.name))),
+                    (_, DefKind::Function, _) => vec![p.name.clone()],
+                    (_, DefKind::Operation, a) => vec![a.and_then(|a| a.cell().map(str::to_string)).ok_or_else(|| {
+                        CoreError::invalid(format!("Choose a column for {}", p.name))
+                    })?],
                 };
+                if p.kind == ParamKind::Columns {
+                    super::fill::check_count(p, &columns)?;
+                }
                 let table = match def.kind {
                     DefKind::Function => Some(&ex.input),
                     DefKind::Operation => {
@@ -107,10 +114,12 @@ pub fn example_sql(def: &Definition, template: &str, ex: &Example) -> Result<Str
                         if def.tables().next().is_some_and(|f| f.name == t) { Some(&ex.input) } else { ex.tables.get(&t) }
                     }
                 };
-                if !table.is_some_and(|t| t.columns.iter().any(|c| c.name.eq_ignore_ascii_case(&column))) {
-                    return Err(CoreError::invalid(format!("The example has no column {column} for {}", p.name)));
+                for column in &columns {
+                    if !table.is_some_and(|t| t.columns.iter().any(|c| c.name.eq_ignore_ascii_case(column))) {
+                        return Err(CoreError::invalid(format!("The example has no column {column} for {}", p.name)));
+                    }
                 }
-                slots[i] = quote_ident(&column);
+                slots[i] = columns.iter().map(|c| quote_ident(c)).collect::<Vec<_>>().join(", ");
             }
         }
     }
@@ -241,8 +250,8 @@ pub fn clean_error(msg: &str) -> String {
 }
 
 /// Map of argument name to value, for building examples in tests.
-pub fn args<const N: usize>(pairs: [(&str, Option<&str>); N]) -> BTreeMap<String, Cell> {
-    pairs.into_iter().map(|(k, v)| (k.to_string(), v.map(str::to_string))).collect()
+pub fn args<const N: usize>(pairs: [(&str, Option<&str>); N]) -> BTreeMap<String, ExampleArg> {
+    pairs.into_iter().map(|(k, v)| (k.to_string(), ExampleArg::Cell(v.map(str::to_string)))).collect()
 }
 
 #[cfg(test)]

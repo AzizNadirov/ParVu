@@ -375,7 +375,7 @@ mod tests {
         assert_eq!(s.library("test", &db).len(), 0, "nothing is offered before it is validated again");
         s.revalidate("test", &db, false, &check);
         let lib = s.library("test", &db);
-        assert_eq!(lib.len(), 7);
+        assert_eq!(lib.len(), 9);
         let def = lib.get("clean_phone").unwrap();
         let t = &def.compiled.as_ref().unwrap().template;
         assert!(!t.contains("read_text"), "the compiled form is rebuilt from the body: {t}");
@@ -386,8 +386,8 @@ mod tests {
     fn samples_are_seeded_once() {
         let dir = tempfile::TempDir::new().unwrap();
         let mut s = CustomStore::open(dir.path());
-        assert_eq!(s.seed_samples(&check), 7);
-        assert_eq!(s.library("test", &duckdb()).len(), 7);
+        assert_eq!(s.seed_samples(&check), 9);
+        assert_eq!(s.library("test", &duckdb()).len(), 9);
         assert!(s.delete("clean_phone").unwrap());
         let mut again = CustomStore::open(dir.path());
         assert_eq!(again.seed_samples(&check), 0, "deleted samples stay deleted");
@@ -404,7 +404,7 @@ mod tests {
         std::fs::write(dir.path().join("broken.json"), "{ not json").unwrap();
         std::fs::write(dir.path().join("future.json"), r#"{"schema": 99, "anything": true}"#).unwrap();
         let s = CustomStore::open(dir.path());
-        assert_eq!(s.definitions().count(), 7);
+        assert_eq!(s.definitions().count(), 9);
         let bad = s.entries().iter().find(|e| e.file == "broken.json").unwrap();
         assert!(bad.error.is_some());
         assert!(s.entries().iter().find(|e| e.file == "future.json").unwrap().newer);
@@ -420,7 +420,7 @@ mod tests {
         let mut s = CustomStore::open(dir.path());
         s.restore_samples(&check);
         let db = duckdb();
-        assert_eq!(s.library("test", &db).len(), 7);
+        assert_eq!(s.library("test", &db).len(), 9);
         // Another app version: nothing is current until revalidated.
         assert_eq!(s.library("2.0", &db).len(), 0);
         let v2 = |d: &Definition| validate(d, &ValidateEnv { name_taken: &|_| None, app_version: "2.0", expression_sql: None }).unwrap();
@@ -431,7 +431,7 @@ mod tests {
         let mut s = CustomStore::open(dir.path());
         let broken = s.revalidate("2.0", &db, true, &v2);
         assert_eq!(broken, ["title_case"]);
-        assert_eq!(s.library("2.0", &db).len(), 6);
+        assert_eq!(s.library("2.0", &db).len(), 8);
         let reread = CustomStore::open(dir.path());
         assert_eq!(reread.get("title_case").unwrap().status, Status::Broken);
         assert!(reread.get("title_case").unwrap().report.is_some());

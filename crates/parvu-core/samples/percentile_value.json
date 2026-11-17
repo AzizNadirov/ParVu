@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "kind": "function",
+  "name": "percentile_value",
+  "title": "Percentile",
+  "description": "The value below which the share p of the values fall (0.5 is the median, 0.9 the 90th percentile), interpolating between values. Empty values are left out.",
+  "author": "ParVu",
+  "sample": true,
+  "params": [
+    { "name": "x", "kind": "column", "type": ["number"], "description": "The values" },
+    { "name": "p", "kind": "value", "dtype": "DOUBLE", "optional": true, "default": "0.9", "min": 0, "max": 1, "description": "The share, from 0 to 1" }
+  ],
+  "result": { "kind": "value", "type": ["number"] },
+  "body": { "language": "sql", "source": "quantile_cont(x, coalesce(p, 0.9))" },
+  "examples": [
+    {
+      "name": "90th percentile",
+      "input": {
+        "columns": [{ "name": "x", "dtype": "BIGINT" }],
+        "rows": [["1"], ["2"], ["3"], ["4"], ["5"], ["6"], ["7"], ["8"], ["9"], ["10"], [null]]
+      },
+      "expected": { "columns": [{ "name": "result" }], "rows": [["9.1"]] }
+    },
+    {
+      "name": "median",
+      "input": { "columns": [{ "name": "x", "dtype": "DOUBLE" }], "rows": [["1.5"], ["2.5"], ["10"], ["4"]] },
+      "args": { "p": "0.5" },
+      "expected": { "columns": [{ "name": "result" }], "rows": [["3.25"]] }
+    }
+  ]
+}

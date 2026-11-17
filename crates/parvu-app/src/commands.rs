@@ -37,7 +37,7 @@ pub(crate) fn ws_of(state: &AppState, window: &WebviewWindow) -> ApiResult<Ws> {
 }
 
 /// Run `f` with the window's workspace on the blocking pool.
-async fn with_ws<T, F>(state: State<'_, AppState>, window: WebviewWindow, f: F) -> ApiResult<T>
+pub(crate) async fn with_ws<T, F>(state: State<'_, AppState>, window: WebviewWindow, f: F) -> ApiResult<T>
 where
     T: Send + 'static,
     F: FnOnce(&mut Workspace) -> ApiResult<T> + Send + 'static,

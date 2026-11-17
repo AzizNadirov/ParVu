@@ -577,10 +577,43 @@ export function aggNeedsColumn(func: AggFunc): boolean {
 
 export function buildGroupByOp(by: string[], aggregations: Aggregation[]): Operation | null {
   const aggs = aggregations
-    .filter((a) => !aggNeedsColumn(a.func) || a.column)
-    .map((a) => ({ ...a, column: aggNeedsColumn(a.func) ? a.column : "", alias: a.alias?.trim() || null }));
+    .filter((a) => (!aggNeedsColumn(a.func) || a.column) && (a.func !== "custom" || !!a.custom?.name))
+    .map((a) => {
+      const out: Aggregation = { ...a, column: aggNeedsColumn(a.func) ? a.column : "", alias: a.alias?.trim() || null };
+      if (a.func === "custom" && a.custom) {
+        // Empty values are left out, so an optional parameter takes its default.
+        const values = Object.fromEntries(Object.entries(a.custom.values ?? {}).filter(([, v]) => v.trim() !== ""));
+        out.custom = { name: a.custom.name, values };
+      } else delete out.custom;
+      return out;
+    });
   if (!aggs.length || aggs.length !== aggregations.length) return null;
   return { op: "group_by", by, aggregations: aggs };
+}
+
+/** Summary custom functions Group By can use: usable, one column parameter, the others values. */
+export function customAggregates(defs: CustomDefinition[]): CustomDefinition[] {
+  return defs.filter(
+    (d) =>
+      isUsable(d) &&
+      d.kind === "function" &&
+      d.result.kind === "value" &&
+      d.params.filter((p) => p.kind === "column").length === 1 &&
+      d.params.every((p) => p.kind === "column" || p.kind === "value"),
+  );
+}
+
+/** The value in Group By's calculation list: a built-in name, or `custom:<name>`. */
+export function aggChoice(a: Aggregation): string {
+  return a.func === "custom" ? `custom:${a.custom?.name ?? ""}` : a.func;
+}
+
+/** An aggregation with the calculation chosen in the list. */
+export function withAggChoice(a: Aggregation, choice: string): Aggregation {
+  if (choice.startsWith("custom:")) return { ...a, func: "custom", custom: { name: choice.slice(7), values: {} } };
+  const { custom: _drop, ...rest } = a;
+  void _drop;
+  return { ...rest, func: choice as AggFunc };
 }
 
 export function buildPivotOp(index: string[], columns: string, values: string, func: AggFunc): Operation | null {
@@ -978,6 +1011,22 @@ export function familiesOf(types?: string[]): TypeFamily[] {
   return out;
 }
 
+/** A column or columns parameter. */
+export const takesColumns = (p: CustomParam) => p.kind === "column" || p.kind === "columns";
+
+/** A columns parameter's bounds: at least `min` (1 by default), at most `max`. */
+export function columnCount(p: CustomParam): [number, number | null] {
+  const min = Math.max(1, Math.floor(p.min ?? 1));
+  return [min, p.max === undefined || p.max === null ? null : Math.floor(p.max)];
+}
+
+/** ` × 2+`, ` × 1…3`: a columns parameter's count when it isn't "one or more". */
+export function countText(p: CustomParam): string {
+  const [min, max] = columnCount(p);
+  if (max !== null) return max === min ? ` × ${min}` : ` × ${min}…${max}`;
+  return min > 1 ? ` × ${min}+` : "";
+}
+
 /** The columns a column parameter accepts. */
 export function fittingColumns(param: CustomParam, columns: ColumnMeta[]): ColumnMeta[] {
   const fams = familiesOf(param.type);
@@ -993,7 +1042,12 @@ export function signatureText(def: CustomDefinition): string {
       const cols = (p.columns ?? []).map((c) => `${c.name}: ${typeText(c.type)}`);
       return cols.length ? `${p.name}: table{${cols.join(", ")}}` : `${p.name}: table`;
     }
-    const ty = p.kind === "column" ? `column<${typeText(p.type)}>` : `value<${p.dtype ?? "VARCHAR"}>`;
+    const ty =
+      p.kind === "column"
+        ? `column<${typeText(p.type)}>`
+        : p.kind === "columns"
+          ? `columns<${typeText(p.type)}>${countText(p)}`
+          : `value<${p.dtype ?? "VARCHAR"}>`;
     const dflt = p.optional ? (p.default !== undefined && p.default !== null ? ` = ${JSON.stringify(p.default)}` : " = empty") : "";
     return `${p.name}: ${ty}${dflt}`;
   });
@@ -1017,7 +1071,7 @@ export const isUsable = (d: CustomDefinition) => d.status === "ok" && !!d.compil
 export function functionsForColumn(defs: CustomDefinition[], family: TypeFamily | undefined): CustomDefinition[] {
   return defs.filter((d) => {
     if (d.kind !== "function") return false;
-    const first = d.params.find((p) => p.kind === "column");
+    const first = d.params.find(takesColumns);
     return !!first && (!family || familiesOf(first.type).includes(family));
   });
 }
@@ -1035,6 +1089,8 @@ export function isNewTable(d: CustomDefinition): boolean {
  * values are text ("" = not given). */
 export interface CustomForm {
   args: Record<string, string>;
+  /** Columns parameters: the columns chosen, in table order. */
+  lists: Record<string, string[]>;
   toNew: boolean;
   newName: string;
 }
@@ -1046,6 +1102,7 @@ export function initialCustomForm(def: CustomDefinition, columns: ColumnMeta[], 
   const tables = def.params.filter((p) => p.kind === "table");
   const used = new Set<string>();
   tables.slice(1).forEach((t, i) => (args[t.name] = others[i]?.name ?? others[0]?.name ?? ""));
+  const lists: Record<string, string[]> = {};
   for (const p of def.params) {
     if (p.kind === "column") {
       const cols = columnsFor(def, p, columns, args, others);
@@ -1053,11 +1110,19 @@ export function initialCustomForm(def: CustomDefinition, columns: ColumnMeta[], 
       const pick = fits.find((c) => c.name === selected && !used.has(c.name)) ?? fits.find((c) => !used.has(c.name)) ?? fits[0];
       args[p.name] = pick?.name ?? "";
       if (pick) used.add(pick.name);
+    } else if (p.kind === "columns") {
+      // The selected column, then free fitting ones up to the minimum.
+      const fits = fittingColumns(p, columnsFor(def, p, columns, args, others));
+      const [min] = columnCount(p);
+      const pick = fits.filter((c) => c.name === selected && !used.has(c.name)).map((c) => c.name);
+      for (const c of fits) if (pick.length < min && !used.has(c.name) && !pick.includes(c.name)) pick.push(c.name);
+      pick.forEach((c) => used.add(c));
+      lists[p.name] = fits.map((c) => c.name).filter((c) => pick.includes(c));
     } else if (p.kind === "value") {
       args[p.name] = p.default ?? "";
     }
   }
-  return { args, toNew: true, newName: "" };
+  return { args, lists, toNew: true, newName: "" };
 }
 
 /** The columns a column parameter picks from: this table's, or those of
@@ -1096,6 +1161,14 @@ export function customArgProblems(
       const meta = columnsFor(def, p, columns, form.args, others).find((c) => c.name === v);
       if (!v || !meta) out.push([p.name, "custom.apply.choose_column"]);
       else if (!familiesOf(p.type).includes(meta.family ?? "other")) out.push([p.name, "custom.apply.wrong_type"]);
+    } else if (p.kind === "columns") {
+      const list = form.lists?.[p.name] ?? [];
+      const cols = columnsFor(def, p, columns, form.args, others);
+      const [min, max] = columnCount(p);
+      if (list.length < min || (max !== null && list.length > max)) out.push([p.name, "custom.apply.column_count"]);
+      else if (list.some((c) => !cols.some((m) => m.name === c))) out.push([p.name, "custom.apply.choose_column"]);
+      else if (list.some((c) => !familiesOf(p.type).includes(cols.find((m) => m.name === c)?.family ?? "other")))
+        out.push([p.name, "custom.apply.wrong_type"]);
     } else {
       if (!v.trim()) {
         if (!p.optional) out.push([p.name, "custom.apply.enter_value"]);
@@ -1144,6 +1217,7 @@ export function customArgs(def: CustomDefinition, form: CustomForm): Record<stri
   for (const p of def.params) {
     const v = form.args[p.name] ?? "";
     if (p.kind === "column") out[p.name] = { column: v };
+    else if (p.kind === "columns") out[p.name] = { columns: form.lists?.[p.name] ?? [] };
     else if (p.kind === "table") {
       if (p !== tables[0]) out[p.name] = { table: v };
     } else if (v.trim() !== "" || !p.optional) out[p.name] = { value: v };
@@ -1181,13 +1255,30 @@ export function exampleDtype(types?: string[]): string {
 /** Types offered for example columns. */
 export const EXAMPLE_TYPES = ["VARCHAR", "BIGINT", "DOUBLE", "DECIMAL(18,3)", "BOOLEAN", "DATE", "TIMESTAMP", "TIME", "JSON"];
 
+/** The input columns of a function example standing for a columns
+ * parameter: those its argument lists, or `p_1`, `p_2`… */
+export function listColumns(p: CustomParam, ex: CustomExample): string[] {
+  const arg = ex.args?.[p.name];
+  if (Array.isArray(arg) && arg.length) return arg;
+  const [min, max] = columnCount(p);
+  const n = Math.max(min, max === null ? 2 : Math.min(2, max));
+  return Array.from({ length: n }, (_, i) => `${p.name}_${i + 1}`);
+}
+
 /** A function example's input has one column per column parameter, named
- * after it: keep it in step with the signature (types and rows kept). */
+ * after it (a columns parameter: the columns its argument lists): keep it
+ * in step with the signature (types and rows kept). */
 export function syncFunctionExample(def: CustomDefinition, ex: CustomExample): CustomExample {
   if (def.kind !== "function") return ex;
-  const params = def.params.filter((p) => p.kind === "column");
+  const params = def.params.filter(takesColumns);
   const old = ex.input.columns;
-  const columns = params.map((p) => old.find((c) => c.name === p.name) ?? { name: p.name, dtype: exampleDtype(p.type) });
+  const args: Record<string, Cell | string[]> = { ...(ex.args ?? {}) };
+  for (const k of Object.keys(args)) if (Array.isArray(args[k]) && def.params.find((p) => p.name === k)?.kind !== "columns") delete args[k];
+  const columns = params.flatMap((p) => {
+    const names = p.kind === "columns" ? listColumns(p, ex) : [p.name];
+    if (p.kind === "columns") args[p.name] = names;
+    return names.map((n) => old.find((c) => c.name === n) ?? { name: n, dtype: exampleDtype(p.type) });
+  });
   const rows = ex.input.rows.map((r) => columns.map((c) => {
     const i = old.findIndex((o) => o.name === c.name);
     return i >= 0 ? (r[i] ?? null) : null;
@@ -1196,7 +1287,13 @@ export function syncFunctionExample(def: CustomDefinition, ex: CustomExample): C
   let expected = ex.expected.rows;
   if (summary) expected = [expected[0] ?? [null]];
   else expected = rows.map((_, i) => expected[i] ?? [null]);
-  return { ...ex, input: { columns, rows }, expected: { columns: [{ name: "result" }], rows: expected } };
+  return { ...ex, args, input: { columns, rows }, expected: { columns: [{ name: "result" }], rows: expected } };
+}
+
+/** A function example with `n` columns for columns parameter `p` (`p_1`…`p_n`, cells kept). */
+export function setListSize(def: CustomDefinition, ex: CustomExample, p: CustomParam, n: number): CustomExample {
+  const names = Array.from({ length: Math.max(1, n) }, (_, i) => listColumns(p, ex)[i] ?? `${p.name}_${i + 1}`);
+  return syncFunctionExample(def, { ...ex, args: { ...(ex.args ?? {}), [p.name]: names } });
 }
 
 /** A new, empty example for `def`. */
@@ -1204,11 +1301,12 @@ export function newExample(def: CustomDefinition, n: number): CustomExample {
   if (def.kind === "function") {
     return syncFunctionExample(def, { name: `example ${n}`, input: { columns: [], rows: [[]] }, expected: { columns: [{ name: "result" }], rows: [[null]] }, args: {} });
   }
-  const cols = def.params.filter((p) => p.kind === "column").map((p) => ({ name: p.name, dtype: exampleDtype(p.type) }));
+  const cols = def.params.filter(takesColumns).map((p) => ({ name: p.name, dtype: exampleDtype(p.type) }));
   const input: ExampleTable = { columns: cols.length ? cols : [{ name: "a", dtype: "VARCHAR" }], rows: [] };
   input.rows = [input.columns.map(() => null)];
-  const args: Record<string, Cell> = {};
+  const args: Record<string, Cell | string[]> = {};
   for (const p of def.params) if (p.kind === "column") args[p.name] = p.name;
+  else if (p.kind === "columns") args[p.name] = [p.name];
   return { name: `example ${n}`, input, args, expected: { columns: input.columns.map((c) => ({ name: c.name })), rows: [] } };
 }
 
@@ -1276,8 +1374,13 @@ export function definitionToSave(def: CustomDefinition): CustomDefinition {
       delete p.dtype;
       delete p.default;
       delete p.optional;
+      delete p.choices;
     }
-    if (p.kind !== "column") delete p.type;
+    if (p.kind !== "column" && p.kind !== "columns") delete p.type;
+    if (p.kind !== "value" && p.kind !== "columns") {
+      delete p.min;
+      delete p.max;
+    }
     if (p.kind === "value" && !p.optional) delete p.default;
   }
   if (d.kind === "function") delete d.placement;
@@ -1306,7 +1409,7 @@ export function customBodySchema(
             name: tp.name,
             columns: [
               ...(tp.columns ?? []).map((c) => c.name),
-              ...def.params.filter((p) => p.kind === "column" && (p.of ? p.of === tp.name : k === 0)).map((p) => p.name),
+              ...def.params.filter((p) => takesColumns(p) && (p.of ? p.of === tp.name : k === 0)).map((p) => p.name),
             ],
           }));
   return { tables, functions: [], methods: [] };
@@ -1314,6 +1417,12 @@ export function customBodySchema(
 
 /** Menu entries collapse past this many. */
 export const CUSTOM_MENU_MAX = 12;
+
+/** The steps an operation was made from, for its description: joined, cut at `max` characters. */
+export function stepsDescription(labels: string[], max = 300): string {
+  const text = labels.join("; ");
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
 
 /** "amount: number, region" → required columns. */
 export function parseRequiredColumns(text: string): { name: string; type?: string[] }[] {

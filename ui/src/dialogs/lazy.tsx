@@ -70,3 +70,4 @@ export const SearchPanel = lazy(() => load().then((m) => ({ default: m.SearchPan
 export const openCustomTools = deferred("openCustomTools");
 export const openCustomEditor = deferred("openCustomEditor");
 export const openCustomApply = deferred("openCustomApply");
+export const openSaveSteps = deferred("openSaveSteps");

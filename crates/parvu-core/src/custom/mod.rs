@@ -16,6 +16,7 @@
 pub mod compile;
 pub mod examples;
 pub mod fill;
+pub mod record;
 pub mod signature;
 pub mod validate;
 
@@ -27,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use crate::page::Cell;
 
 pub use fill::{CustomArg, call_label};
+pub use record::{StepNote, StepsCapture, StepsDraft};
 pub use signature::{TypeSet, families_of};
 pub use validate::{Check, CheckStatus, Report, ValidateEnv, validate};
 
@@ -58,6 +60,12 @@ pub enum ParamKind {
     /// One column whose type is in the parameter's type set.
     #[default]
     Column,
+    /// Several columns, each of a type in the parameter's type set, between
+    /// `min` and `max` of them. In a body it stands for a comma-separated
+    /// list, so it may appear only where SQL takes one (see
+    /// [`compile`]): the select list, `GROUP BY`, `PARTITION BY`, `ORDER BY`
+    /// without a direction, `DISTINCT ON`, and function arguments.
+    Columns,
     /// One constant of a fixed DuckDB type.
     Value,
     /// A table (operations only); the first is the table the operation runs on.
@@ -77,7 +85,7 @@ pub struct RequiredColumn {
 pub struct Param {
     pub name: String,
     pub kind: ParamKind,
-    /// Column parameters: type set names (`number`, `text`, `any`…).
+    /// Column and columns parameters: type set names (`number`, `text`, `any`…).
     #[serde(default, rename = "type", skip_serializing_if = "Vec::is_empty")]
     pub types: Vec<String>,
     /// Value parameters: the DuckDB type of the value (`BIGINT`, `DOUBLE`,
@@ -92,13 +100,14 @@ pub struct Param {
     /// Value parameters: the only values allowed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub choices: Vec<String>,
-    /// Number value parameters: bounds.
+    /// Number value parameters: bounds. Columns parameters: how many
+    /// columns (`min` defaults to 1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<f64>,
-    /// Column parameters of an operation: the table parameter the column
-    /// belongs to (default: the first).
+    /// Column and columns parameters of an operation: the table parameter
+    /// the column belongs to (default: the first).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub of: Option<String>,
     /// Table parameters: columns the table must have, by exact name.
@@ -202,6 +211,32 @@ pub struct ExampleTable {
     pub rows: Vec<Vec<Cell>>,
 }
 
+/// An argument of an example: a value (or a column name, for an
+/// operation's column parameter), or a list of column names for a columns
+/// parameter. In the file: `"3"`, `null` or `["region", "city"]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ExampleArg {
+    Columns(Vec<String>),
+    Cell(Cell),
+}
+
+impl From<Cell> for ExampleArg {
+    fn from(c: Cell) -> Self {
+        ExampleArg::Cell(c)
+    }
+}
+
+impl ExampleArg {
+    /// The value or column name; `None` for an empty value or a list.
+    pub fn cell(&self) -> Option<&str> {
+        match self {
+            ExampleArg::Cell(c) => c.as_deref(),
+            ExampleArg::Columns(_) => None,
+        }
+    }
+}
+
 /// A test case: inputs and the expected output.
 ///
 /// Functions: `input` has one column per column parameter, named after it;
@@ -218,9 +253,10 @@ pub struct Example {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tables: BTreeMap<String, ExampleTable>,
     /// Value arguments (text, `null` for empty) and, for operations, the
-    /// column chosen for each column parameter.
+    /// column chosen for each column parameter; the columns of a columns
+    /// parameter as a list.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub args: BTreeMap<String, Cell>,
+    pub args: BTreeMap<String, ExampleArg>,
     pub expected: ExampleTable,
     /// Compare table rows in order (otherwise as a multiset).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -297,6 +333,30 @@ pub struct Definition {
     pub modified: String,
 }
 
+/// ` × 1…3`, ` × 2+`: a columns parameter's count, when it isn't "one or more".
+fn count_text(p: &Param) -> String {
+    let (min, max) = p.column_count();
+    match max {
+        Some(max) if max == min => format!(" × {min}"),
+        Some(max) => format!(" × {min}…{max}"),
+        None if min > 1 => format!(" × {min}+"),
+        None => String::new(),
+    }
+}
+
+impl Param {
+    /// A columns parameter's bounds: at least `min` (1 by default), at most `max`.
+    pub fn column_count(&self) -> (usize, Option<usize>) {
+        let min = self.min.map_or(1, |m| m.max(0.0) as usize);
+        (min, self.max.map(|m| m.max(0.0) as usize))
+    }
+
+    /// A column or columns parameter.
+    pub fn takes_columns(&self) -> bool {
+        matches!(self.kind, ParamKind::Column | ParamKind::Columns)
+    }
+}
+
 fn schema_version() -> u32 {
     SCHEMA_VERSION
 }
@@ -341,6 +401,7 @@ impl Definition {
                     if cols.is_empty() { format!("{}: table", p.name) } else { format!("{}: table{{{}}}", p.name, cols.join(", ")) }
                 }
                 ParamKind::Column => format!("{}: column<{}>", p.name, types(&p.types)),
+                ParamKind::Columns => format!("{}: columns<{}>{}", p.name, types(&p.types), count_text(p)),
                 ParamKind::Value => {
                     let default = match (&p.default, p.optional) {
                         (Some(d), true) => format!(" = {}", serde_json::Value::String(d.clone())),
@@ -406,6 +467,8 @@ pub fn samples() -> Vec<Definition> {
         include_str!("../../samples/top_n_per_group.json"),
         include_str!("../../samples/outliers_iqr.json"),
         include_str!("../../samples/running_total.json"),
+        include_str!("../../samples/dedupe_by.json"),
+        include_str!("../../samples/percentile_value.json"),
     ]
     .iter()
     .filter_map(|text| serde_json::from_str(text).map_err(|e| tracing::error!("bad sample definition: {e}")).ok())

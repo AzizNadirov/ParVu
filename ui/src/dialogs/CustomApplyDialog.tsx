@@ -5,10 +5,11 @@ import type { Cell, ColumnMeta, CustomDefinition, CustomParam, ExampleTable, Ope
 import { isCancelled, type Job } from "../lib/jobs";
 import { Dialog } from "../components/Dialog";
 import { Icon } from "../components/Icon";
-import { copyText, SubmitOnEnter, useDebounced } from "./common";
+import { ColumnChecklist, copyText, SubmitOnEnter, useDebounced } from "./common";
 import { WhereSection, initialWhere, whereFilter, type Suggest } from "./ConditionRows";
 import {
   buildCustomOp,
+  columnCount,
   columnsFor,
   customArgProblems,
   customArgs,
@@ -79,7 +80,10 @@ function CustomApplyDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation |
   const summary = def.kind === "function" && def.result.kind === "value";
   const rowFn = def.kind === "function" && def.result.kind === "column";
   const [form, setForm] = useState<CustomForm>(() => initialCustomForm(def, a.columns, a.selected, a.others));
-  const [where, setWhere] = useState(() => initialWhere(form.args[def.params.find((p) => p.kind === "column")?.name ?? ""] ?? ""));
+  const [where, setWhere] = useState(() => {
+    const first = def.params.find((p) => p.kind === "column" || p.kind === "columns");
+    return initialWhere(first?.kind === "columns" ? (form.lists[first.name]?.[0] ?? "") : (form.args[first?.name ?? ""] ?? ""));
+  });
   const filter = rowFn ? whereFilter(where, a.columns) : undefined;
   const problems = customArgProblems(def, a.columns, form, a.others);
   const op = filter === null ? null : buildCustomOp(def, form, a.columns, a.others, filter);
@@ -163,6 +167,33 @@ function CustomApplyDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation |
           {def.params.map((p) => {
             if (p.kind === "table" && p === tables[0]) return null;
             const problem = problemOf(p.name);
+            if (p.kind === "columns") {
+              const fits = fittingColumns(p, columnsFor(def, p, a.columns, form.args, a.others)).map((c) => c.name);
+              const chosen = new Set(form.lists[p.name] ?? []);
+              const [min, max] = columnCount(p);
+              return (
+                <div key={p.name} className="col pv-custom-columns-param" title={p.description}>
+                  <div className="row">
+                    <span className="pv-custom-param-name">{p.name}</span>
+                    <span className="pv-hint grow">
+                      {p.description ? `${p.description} · ` : ""}
+                      {max === null
+                        ? t("custom.apply.count_at_least", { min })
+                        : max === min
+                          ? t("custom.apply.count_exactly", { min })
+                          : t("custom.apply.count_between", { min, max })}
+                    </span>
+                    {problem && <span className="error-text small">{t(problem)}</span>}
+                  </div>
+                  <ColumnChecklist
+                    ui={ui}
+                    columns={fits}
+                    checked={chosen}
+                    onChange={(next) => setForm((f) => ({ ...f, lists: { ...f.lists, [p.name]: fits.filter((c) => next.has(c)) } }))}
+                  />
+                </div>
+              );
+            }
             return (
               <label key={p.name} className="row" title={p.description}>
                 <span className="pv-custom-param-name">{p.name}</span>

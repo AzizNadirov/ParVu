@@ -28,6 +28,8 @@ use crate::types::TypeFamily;
 pub enum CustomArg {
     /// A column of the table, by name.
     Column(String),
+    /// Several columns of the table, by name (a columns parameter).
+    Columns(Vec<String>),
     /// A constant, as text (`"3"`, `"2024-01-31"`, `"+"`).
     Value(String),
     /// Another open table, by name.
@@ -98,6 +100,7 @@ pub fn call_label(name: &str, def: Option<&Definition>, args: &BTreeMap<String, 
         .iter()
         .map(|(_, a)| match a {
             CustomArg::Column(c) | CustomArg::Value(c) | CustomArg::Table(c) => c.clone(),
+            CustomArg::Columns(list) => format!("[{}]", list.join(", ")),
         })
         .collect();
     let joined = text.join(", ");
@@ -125,6 +128,25 @@ fn describe(ctx: &OpContext, query: &str) -> Result<Vec<ColumnMeta>> {
         .into_iter()
         .filter_map(|r| Some(ColumnMeta::new(r.first()?.clone()?, r.get(1)?.clone()?)))
         .collect())
+}
+
+/// A columns argument: within the parameter's count, no column twice.
+pub fn check_count(p: &super::Param, list: &[String]) -> Result<()> {
+    let (min, max) = p.column_count();
+    let n = list.len();
+    if n < min.max(1) || max.is_some_and(|m| n > m) {
+        let wanted = match max {
+            Some(m) if m == min => format!("{min}"),
+            Some(m) => format!("{min} to {m}"),
+            None => format!("at least {}", min.max(1)),
+        };
+        return Err(CoreError::invalid(format!("{}: choose {wanted} columns (got {n})", p.name)));
+    }
+    let mut seen = std::collections::HashSet::new();
+    if let Some(dup) = list.iter().find(|c| !seen.insert(c.as_str())) {
+        return Err(CoreError::invalid(format!("{}: column \"{dup}\" is chosen twice", p.name)));
+    }
+    Ok(())
 }
 
 fn check_family(param: &str, column: &ColumnMeta, types: &[String]) -> Result<()> {
@@ -182,23 +204,41 @@ fn bind(def: &Definition, args: &BTreeMap<String, CustomArg>, ctx: &OpContext) -
     let mut slots = vec![String::new(); def.params.len()];
     let mut first_column = None;
     for (i, p) in def.params.iter().enumerate() {
+        let columns: &[ColumnMeta] = match def.kind {
+            DefKind::Function => ctx.columns,
+            DefKind::Operation if p.takes_columns() => {
+                let k = def.table_of(p).and_then(|t| def.tables().position(|x| x.name == t.name)).unwrap_or(0);
+                &table_columns[k]
+            }
+            DefKind::Operation => &[],
+        };
+        let column = |c: &String| -> Result<()> {
+            let meta = columns.iter().find(|m| &m.name == c).ok_or_else(|| CoreError::UnknownColumn(c.clone()))?;
+            check_family(&p.name, meta, &p.types)
+        };
         match p.kind {
             ParamKind::Table => {}
             ParamKind::Column => {
                 let Some(CustomArg::Column(c)) = arg(&p.name) else {
                     return Err(CoreError::invalid(format!("{}: choose a column", p.name)));
                 };
-                let columns: &[ColumnMeta] = match def.kind {
-                    DefKind::Function => ctx.columns,
-                    DefKind::Operation => {
-                        let k = def.table_of(p).and_then(|t| def.tables().position(|x| x.name == t.name)).unwrap_or(0);
-                        &table_columns[k]
-                    }
-                };
-                let meta = columns.iter().find(|m| &m.name == c).ok_or_else(|| CoreError::UnknownColumn(c.clone()))?;
-                check_family(&p.name, meta, &p.types)?;
+                column(c)?;
                 slots[i] = quote_ident(c);
                 first_column.get_or_insert_with(|| c.clone());
+            }
+            ParamKind::Columns => {
+                let list = match arg(&p.name) {
+                    Some(CustomArg::Columns(list)) => list.clone(),
+                    // One column given as a column: a list of one.
+                    Some(CustomArg::Column(c)) => vec![c.clone()],
+                    _ => return Err(CoreError::invalid(format!("{}: choose the columns", p.name))),
+                };
+                check_count(p, &list)?;
+                for c in &list {
+                    column(c)?;
+                }
+                slots[i] = list.iter().map(|c| quote_ident(c)).collect::<Vec<_>>().join(", ");
+                first_column.get_or_insert_with(|| list[0].clone());
             }
             ParamKind::Value => {
                 let raw = match arg(&p.name) {

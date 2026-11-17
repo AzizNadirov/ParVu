@@ -110,6 +110,10 @@ fn accepted(types: &[String]) -> Option<Vec<LogicalType>> {
 pub fn function_def(def: &Definition) -> Option<FunctionDef> {
     use parvu_core::custom::{DefKind, ParamKind, Shape};
     let compiled = def.compiled.as_ref().filter(|_| def.is_usable() && def.kind == DefKind::Function)?;
+    // A list of columns can't be passed in an expression (yet).
+    if def.params.iter().any(|p| p.kind == ParamKind::Columns) {
+        return None;
+    }
     let mut params = Vec::new();
     for p in &def.params {
         params.push(match p.kind {
@@ -133,7 +137,7 @@ pub fn function_def(def: &Definition) -> Option<FunctionDef> {
                 pd.description = p.description.clone();
                 pd
             }
-            ParamKind::Table => return None,
+            ParamKind::Table | ParamKind::Columns => return None,
         });
     }
     // Value arguments are cast to the type the definition was checked with.
@@ -285,6 +289,15 @@ pub fn tool_listing(lib: &Library) -> serde_json::Value {
                         args.insert(p.name.clone(), json!({ "column": format!("<{} column>", p.name) }));
                         refs.push(format!("[<{} column>]", p.name));
                     }
+                    ParamKind::Columns => {
+                        let (min, max) = p.column_count();
+                        let count = match max {
+                            Some(m) if m == min => format!("{min}"),
+                            Some(m) => format!("{min} to {m}"),
+                            None => format!("{min} or more"),
+                        };
+                        args.insert(p.name.clone(), json!({ "columns": [format!("<{count} {} columns>", p.name)] }));
+                    }
                     ParamKind::Value => {
                         let v = p.default.clone().unwrap_or_else(|| format!("<{}>", p.dtype.as_deref().unwrap_or("VARCHAR")));
                         if !p.optional {
@@ -301,6 +314,7 @@ pub fn tool_listing(lib: &Library) -> serde_json::Value {
                     }
                 }
             }
+            let lists = d.params.iter().any(|p| p.kind == ParamKind::Columns);
             let (kind, usage) = match (d.kind, d.result.kind) {
                 (DefKind::Operation, _) => (
                     "operation",
@@ -309,10 +323,21 @@ pub fn tool_listing(lib: &Library) -> serde_json::Value {
                         "new_table": d.placement() == parvu_core::custom::Placement::NewTable,
                     } }),
                 ),
+                // Not callable in formulas: a list of columns can't be passed there.
+                (_, ResultKind::Value) if lists => ("summary function", json!({ "note": "takes a list of columns; not usable in formulas" })),
                 (_, ResultKind::Value) => (
                     "summary function",
                     json!({
                         "set_formula": format!("{}({}) — one value for the whole column, a column total like SUM", d.name, refs.join(", ")),
+                    }),
+                ),
+                _ if lists => (
+                    "row function",
+                    json!({
+                        "apply_operation": {
+                            "op": "custom_function", "name": d.name, "args": args,
+                            "output": { "to": "new", "name": "<new column>" },
+                        },
                     }),
                 ),
                 _ => (
@@ -326,6 +351,18 @@ pub fn tool_listing(lib: &Library) -> serde_json::Value {
                     }),
                 ),
             };
+            let mut usage = usage;
+            if parvu_core::reshape::is_custom_aggregate(d) {
+                let values: serde_json::Map<String, serde_json::Value> = d
+                    .params
+                    .iter()
+                    .filter(|p| p.kind == ParamKind::Value)
+                    .map(|p| (p.name.clone(), json!(p.default.clone().unwrap_or_else(|| format!("<{}>", p.name)))))
+                    .collect();
+                usage["group_by_aggregation"] = json!({
+                    "column": "<column>", "func": "custom", "custom": { "name": d.name, "values": values },
+                });
+            }
             let mut v = json!({ "name": d.name, "kind": kind, "signature": d.signature(), "use": usage });
             if !d.title.is_empty() {
                 v["title"] = json!(d.title);
@@ -427,10 +464,13 @@ fn publish(app: &AppHandle, state: &AppState) {
     *lock(&state.custom_library) = lib.clone();
     let workspaces: Vec<_> = lock(&state.workspaces).values().cloned().collect();
     for ws in workspaces {
-        let mut ws = lock(&ws);
-        ws.set_custom(lib.clone());
-        for id in refresh_formulas(&mut ws) {
-            if let Ok(summary) = ws.summary(id) {
+        let tabs = {
+            let mut ws = lock(&ws);
+            ws.set_custom(lib.clone());
+            ws.tab_ids()
+        };
+        for id in refresh_formulas(&ws, &tabs) {
+            if let Ok(summary) = lock(&ws).summary(id) {
                 crate::commands::remember_formulas(&summary);
             }
         }
@@ -438,33 +478,76 @@ fn publish(app: &AppHandle, state: &AppState) {
     let _ = app.emit("custom-changed", ());
 }
 
-/// Compile the formulas of every tab again with the workspace's current
-/// custom library: a formula follows the current definition of the custom
-/// functions it calls, and one whose function was deleted or broke is kept
-/// with its error (an empty column). Returns the tabs whose formulas changed.
+/// Tab `id`'s formulas compiled again with the workspace's current custom
+/// library, when that changes them: a formula follows the current
+/// definition of the custom functions it calls, and one whose function was
+/// deleted or broke is kept with its error (an empty column).
+fn recompiled_formulas(ws: &Workspace, id: TabId) -> Option<Vec<Formula>> {
+    let current = ws.formulas(id).ok()?;
+    if current.is_empty() {
+        return None;
+    }
+    let next: Vec<Formula> = current
+        .iter()
+        .map(|f| {
+            crate::commands::compile_tab_formula(ws, id, f.name.clone(), &f.source, f.after.clone())
+                .unwrap_or_else(|e| Formula::broken(f.name.clone(), f.source.clone(), f.after.clone(), e.message))
+        })
+        .collect();
+    (next != current).then_some(next)
+}
+
+/// [`recompiled_formulas`] for each of `tabs`, put in place. Returns the
+/// tabs whose formulas changed.
 ///
-/// Only a tab whose formulas compile differently is rebuilt, so this costs
-/// nothing for the tabs that don't use the changed functions.
-pub fn refresh_formulas(ws: &mut Workspace) -> Vec<TabId> {
+/// Compiling is quick and done holding the workspace; a total (`SUM([x])`
+/// in a formula) reads the whole table, so the totals are computed on a
+/// second connection without holding it, and paging stays responsive
+/// (AGENTS.md pitfall 5). Only a tab whose formulas compile differently is
+/// rebuilt. A tab that changed meanwhile is compiled again.
+pub fn refresh_formulas(ws: &Mutex<Workspace>, tabs: &[TabId]) -> Vec<TabId> {
     let mut changed = Vec::new();
-    for id in ws.tab_ids() {
-        let Ok(current) = ws.formulas(id).map(<[Formula]>::to_vec) else { continue };
-        if current.is_empty() {
-            continue;
-        }
-        let next: Vec<Formula> = current
-            .iter()
-            .map(|f| {
-                crate::commands::compile_tab_formula(ws, id, f.name.clone(), &f.source, f.after.clone())
-                    .unwrap_or_else(|e| Formula::broken(f.name.clone(), f.source.clone(), f.after.clone(), e.message))
-            })
-            .collect();
-        if next == current {
-            continue;
-        }
-        match ws.restore_formulas(id, next) {
-            Ok(()) => changed.push(id),
-            Err(e) => tracing::warn!("formulas of tab {id} not updated after a custom tool changed: {e}"),
+    for &id in tabs {
+        for _attempt in 0..3 {
+            let job = {
+                let w = lock(ws);
+                let Some(next) = recompiled_formulas(&w, id) else { break };
+                match w.formula_totals_job(id, next) {
+                    Ok(job) => job,
+                    Err(e) => {
+                        tracing::warn!("formulas of tab {id} not updated after a custom tool changed: {e}");
+                        break;
+                    }
+                }
+            };
+            let resolved = match job.resolve() {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!("formulas of tab {id} not updated after a custom tool changed: {e}");
+                    break;
+                }
+            };
+            let placed = lock(ws).set_resolved_formulas(id, &job, &resolved);
+            match placed {
+                Ok((true, recount)) => {
+                    if let Some(query) = recount {
+                        match job.count(&query) {
+                            Ok(n) => {
+                                let _ = lock(ws).set_counted_rows(id, &query, n);
+                            }
+                            Err(e) => tracing::warn!("rows of tab {id} not counted again: {e}"),
+                        }
+                    }
+                    changed.push(id);
+                    break;
+                }
+                // The tab changed meanwhile: compile again.
+                Ok((false, _)) => continue,
+                Err(e) => {
+                    tracing::warn!("formulas of tab {id} not updated after a custom tool changed: {e}");
+                    break;
+                }
+            }
         }
     }
     changed
@@ -674,6 +757,40 @@ pub async fn custom_preview(
     .await
 }
 
+/// A free name for a new definition: `name`, or `name_2`, `name_3`…
+fn free_name(store: &CustomStore, name: &str) -> String {
+    let taken = |n: &str| name_taken(store, None, n).is_some();
+    if !taken(name) {
+        return name.to_string();
+    }
+    (2..).map(|i| format!("{name}_{i}")).find(|n| !taken(n)).unwrap_or_default()
+}
+
+/// "Save steps as custom operation…": tab `id`'s steps as a draft custom
+/// operation, the input columns in `params` becoming column parameters,
+/// with an example made of its first rows. Nothing is saved: the window
+/// opens the editor with it. The workspace is held only to read the steps
+/// and the first rows; the rest runs on a small database of its own.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn custom_from_steps(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    params: Vec<String>,
+) -> ApiResult<parvu_core::custom::StepsDraft> {
+    let dir = lock(&state.custom).dir().to_path_buf();
+    let capture = crate::commands::with_ws(state, window, move |ws| Ok(ws.steps_capture(id)?)).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut draft = parvu_core::custom::record::draft(&capture, &params)?;
+        if let Some(def) = &mut draft.definition {
+            def.name = free_name(&CustomStore::open(&dir), &def.name);
+        }
+        Ok(draft)
+    })
+    .await
+    .map_err(|e| ApiError::new("app", e.to_string()))?
+}
+
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
@@ -721,6 +838,33 @@ mod tests {
     }
 
     use super::test_support::sample_library;
+
+    #[test]
+    fn columns_parameters_are_listed_for_ai_clients() {
+        let lib = sample_library();
+        let listing = tool_listing(&lib);
+        let tools = listing["custom_tools"].as_array().unwrap();
+        let d = tools.iter().find(|t| t["name"] == "dedupe_by").unwrap();
+        assert_eq!(d["use"]["apply_operation"]["args"]["keys"], serde_json::json!({ "columns": ["<1 or more keys columns>"] }));
+        assert!(d["signature"].as_str().unwrap().contains("keys: columns<any>"));
+        assert_eq!(d["example"]["args"]["keys"], serde_json::json!(["customer"]));
+        let p = tools.iter().find(|t| t["name"] == "percentile_value").unwrap();
+        assert_eq!(p["use"]["group_by_aggregation"]["custom"], serde_json::json!({ "name": "percentile_value", "values": { "p": "0.9" } }));
+        let w = tools.iter().find(|t| t["name"] == "weighted_average").unwrap();
+        assert!(w["use"].get("group_by_aggregation").is_none(), "two columns");
+        // Not callable in formulas: not in the expression language's registry.
+        let mut join = (*lib.get("title_case").unwrap()).clone();
+        join.name = "join_text".into();
+        join.params[0].kind = parvu_core::custom::ParamKind::Columns;
+        assert!(function_def(&join).is_none());
+        // The operation schema takes a list of columns.
+        let op: Operation = serde_json::from_value(serde_json::json!({
+            "op": "custom_operation", "name": "dedupe_by",
+            "args": { "keys": { "columns": ["a", "b"] }, "latest": { "column": "c" } }
+        }))
+        .unwrap();
+        assert!(matches!(op, Operation::CustomOperation { ref args, .. } if args["keys"] == CustomArg::Columns(vec!["a".into(), "b".into()])));
+    }
 
     fn sales() -> (tempfile::TempDir, parvu_core::Workspace, TabId) {
         let dir = tempfile::TempDir::new().unwrap();
@@ -789,22 +933,42 @@ mod tests {
         ws.set_formula(id, f).unwrap();
         let f = crate::commands::compile_tab_formula(&ws, id, "twice".into(), "= [price] * 2", None).unwrap();
         ws.set_formula(id, f).unwrap();
-        assert!(refresh_formulas(&mut ws).is_empty(), "nothing changed, nothing rebuilt");
+        let ws = Mutex::new(ws);
+        let refresh = |ws: &Mutex<Workspace>| refresh_formulas(ws, &[id]);
+        assert!(refresh(&ws).is_empty(), "nothing changed, nothing rebuilt");
         // Delete weighted_average.
         let rest = lib.definitions().into_iter().filter(|d| d.name != "weighted_average").map(|d| (*d).clone());
-        ws.set_custom(Arc::new(Library::new(rest)));
-        assert_eq!(refresh_formulas(&mut ws), [id]);
-        let formulas = ws.formulas(id).unwrap().to_vec();
-        assert_eq!(formulas.len(), 2, "kept, not dropped");
-        assert_eq!(formulas[0].source, "[price] - weighted_average([price], [qty])");
-        assert!(formulas[0].error.as_deref().unwrap().contains("weighted_average"), "{:?}", formulas[0].error);
-        assert_eq!(column(&ws, id, "gap"), [None, None, None]);
-        assert_eq!(column(&ws, id, "twice"), [Some("20".into()), Some("40".into()), Some("60".into())]);
-        // It comes back with the function.
-        ws.set_custom(lib);
-        assert_eq!(refresh_formulas(&mut ws), [id]);
-        assert!(ws.formulas(id).unwrap()[0].error.is_none());
-        assert_eq!(column(&ws, id, "gap")[0].as_deref(), Some("-12.5"));
+        lock(&ws).set_custom(Arc::new(Library::new(rest)));
+        assert_eq!(refresh(&ws), [id]);
+        {
+            let ws = lock(&ws);
+            let formulas = ws.formulas(id).unwrap().to_vec();
+            assert_eq!(formulas.len(), 2, "kept, not dropped");
+            assert_eq!(formulas[0].source, "[price] - weighted_average([price], [qty])");
+            assert!(formulas[0].error.as_deref().unwrap().contains("weighted_average"), "{:?}", formulas[0].error);
+            assert_eq!(column(&ws, id, "gap"), [None, None, None]);
+            assert_eq!(column(&ws, id, "twice"), [Some("20".into()), Some("40".into()), Some("60".into())]);
+        }
+        // It comes back with the function; its total is computed off the workspace.
+        lock(&ws).set_custom(lib.clone());
+        assert_eq!(refresh(&ws), [id]);
+        {
+            let mut w = lock(&ws);
+            assert!(w.formulas(id).unwrap()[0].error.is_none());
+            assert_eq!(column(&w, id, "gap")[0].as_deref(), Some("-12.5"));
+            // A step that filters on the formula: its rows are counted again.
+            w.run_sql(id, "SELECT * FROM sales WHERE gap IS NOT NULL", None).unwrap();
+            assert_eq!(w.summary(id).unwrap().total_rows, 3);
+            let rest = lib.definitions().into_iter().filter(|d| d.name != "weighted_average").map(|d| (*d).clone());
+            w.set_custom(Arc::new(Library::new(rest)));
+        }
+        assert_eq!(refresh(&ws), [id]);
+        assert_eq!(lock(&ws).summary(id).unwrap().total_rows, 0, "gap is empty now");
+        // Totals are kept as markers, so a later rebuild computes them again.
+        lock(&ws).set_custom(lib);
+        assert_eq!(refresh(&ws), [id]);
+        assert_eq!(lock(&ws).summary(id).unwrap().total_rows, 3);
+        assert_eq!(lock(&ws).formulas(id).unwrap()[0].totals.len(), 1);
     }
 
     #[test]
