@@ -28,7 +28,7 @@ The client can list, describe, sample and query the open tables freely. When it 
 
 **Apply** adds a normal step to Applied Steps, which `Ctrl+Z` undoes. **Reject** tells the client no. Opening and saving files stays with you: in this mode the client has no `open_file` or `export` tool.
 
-If ParVu isn't running when the client starts, `parvu mcp --attach` opens it and connects once it's ready, so the order you start things in doesn't matter. If ParVu is open with AI clients switched off, the client is told how to switch them on; no second window opens.
+If ParVu isn't running, `parvu mcp --attach` waits: it answers the client's startup itself, and opens ParVu only when the AI first uses a tool. Starting Claude Code (or a new VS Code window) therefore doesn't open ParVu, and the order you start things in doesn't matter. If ParVu is open with AI clients switched off, the client is told how to switch them on; no second window opens.
 
 While a client is connected, the status bar shows **AI clients: N**. With several ParVu windows open, the client works on the window you used last. Switching the setting off disconnects every client.
 

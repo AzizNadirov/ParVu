@@ -2,13 +2,8 @@
 
 ## [Unreleased]
 
-### Added
-- **Column formulas and the formula bar.** A formula column computes every row from an expression such as `= [qty] * [price]`.
-  - **Starting a formula:** type `=` in a cell, use the *fx* button of the new formula bar above the grid, or choose **New Formula Column After This** in the column menu.
-  - **Writing it:** the bar has the expression language's highlighting and autocomplete. Each column the formula refers to gets its own colour, both in the bar and as a tinted column in the grid, and clicking a column header inserts it.
-  - **Live, like Excel:** change a cell and the formulas using it update at once. Cell editing stays available, and undo covers adding, changing and removing a formula.
-  - Formula columns show an *fx* icon. Their cells open the formula instead of being edited directly.
-  - Saving writes the computed values.
+### Fixed
+- **ParVu no longer opens whenever Claude Code (or VS Code with Claude) starts.** MCP clients start their servers when a session opens, and `parvu mcp --attach` used to open ParVu right then. Now it answers the client's startup itself and opens ParVu only when the AI first uses a tool.
 
 ## [1.0.0-alpha.5]
 
