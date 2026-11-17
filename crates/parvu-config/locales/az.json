@@ -664,6 +664,8 @@
   "editor.preview_empty": "Önizləmə: (ifadə daxil edin)",
   "editor.preview_invalid": "Önizləmə: (səhv — {error})",
   "editor.run_hint": "İcra üçün Ctrl+Enter",
+  "editor.custom_function": "xüsusi funksiya",
+  "editor.custom_summary": "xüsusi yekun funksiya · GROUP BY və ya OVER",
   "error.append_needs_tab": "Əlavə etmək üçün başqa tab açın.",
   "error.empty_query": "Boş sorğu",
   "error.empty_query_msg": "Zəhmət olmasa SQL sorğusu daxil edin.",

@@ -552,7 +552,7 @@ impl ParvuMcp {
                     join and append open their result as a new tab. set_formula adds a live formula column, e.g. \
                     [price] / SUM([price]). If they reject it, don't retry the same change; ask them instead.\n\
                     list_custom_tools shows the custom functions and operations the user defined, and how to call \
-                    them (apply_operation or set_formula). propose_custom_tool checks a new definition and offers \
+                    them (apply_operation, set_formula, or by name inside query). propose_custom_tool checks a new definition and offers \
                     it to the user in ParVu's editor; only the user can save it.\n\
                     Files are opened and saved by the user in ParVu."
                 .into();
@@ -567,7 +567,8 @@ impl ParvuMcp {
              apply_operation changes a table for this session only (filters, new columns…); undo \
              reverts it. Group by, pivot, unpivot, transpose, value counts, describe, join and \
              append open their result as a new table instead (named in the answer). Files on disk are never changed{}.\n\
-             list_custom_tools shows the user's custom functions and operations and how to call them; \
+             list_custom_tools shows the user's custom functions and operations and how to call them \
+             (custom functions also work by name inside query); \
              propose_custom_tool only checks a new definition (it is never saved from here).",
             if self.allow_write() { ", except by export" } else { "" }
         )
@@ -974,7 +975,7 @@ impl ParvuMcp {
         ok(rows_json(&rows))
     }
 
-    #[tool(description = "Run one read-only DuckDB SELECT over the open tables (referenced by table name) and return the rows. Joins, CTEs, window functions and aggregates work; reading other files does not.")]
+    #[tool(description = "Run one read-only DuckDB SELECT over the open tables (referenced by table name) and return the rows. Joins, CTEs, window functions and aggregates work, and so do the user's custom functions (see list_custom_tools); reading other files does not.")]
     async fn query(&self, Parameters(args): Parameters<QueryArgs>) -> Result<CallToolResult, ErrorData> {
         let max = args.max_rows.clamp(1, MAX_QUERY_ROWS);
         let rows = try_tool!(self.read(move |ro| ro.query(&args.sql, max, Some(QUERY_TIMEOUT))).await);
@@ -1497,6 +1498,7 @@ mod tool_tests {
         assert_eq!(phone["kind"], "row function");
         assert!(phone["signature"].as_str().unwrap().starts_with("clean_phone(phone: column<text>"));
         assert_eq!(phone["use"]["apply_operation"]["op"], "custom_function");
+        assert_eq!(phone["use"]["query"], "SELECT clean_phone(<phone column>) FROM <table>");
         assert_eq!(find("weighted_average")["kind"], "summary function");
         assert_eq!(find("top_n_per_group")["use"]["apply_operation"]["op"], "custom_operation");
 
@@ -1532,6 +1534,31 @@ mod tool_tests {
         let op: Operation = serde_json::from_value(json!({"op": "custom_function", "name": "nope", "args": {}})).unwrap();
         let r = s.apply_impl(ApplyArgs { table: "people".into(), operation: op, rationale: None }, "test".into()).await.unwrap();
         assert_eq!(r.is_error, Some(true));
+    }
+
+    /// The query tool expands custom function calls before the read-only
+    /// guard checks the SQL, so a file function inside an argument is still
+    /// refused.
+    #[tokio::test]
+    async fn query_calls_custom_functions() {
+        let (dir, s) = server(false);
+        s.workspace().unwrap().lock().unwrap().set_custom(crate::custom::test_support::sample_library());
+        std::fs::write(dir.path().join("people.csv"), "name,phone,score\nann,+1 (555) 010-2030,3\nbob,n/a,9\ncid,555.0102,5\n").unwrap();
+        let p = dir.path().join("people.csv").display().to_string();
+        s.open_file(Parameters(OpenFileArgs { path: p, sheet: None })).await.unwrap();
+
+        let sql = "SELECT name, clean_phone(phone) AS p, weighted_average(score, 1) OVER () AS wa FROM people ORDER BY name";
+        let q = |sql: &str| QueryArgs { sql: sql.into(), max_rows: 10 };
+        let r = s.query(Parameters(q(sql))).await.unwrap();
+        assert_ne!(r.is_error, Some(true), "{}", text(&r));
+        assert!(text(&r).contains("[\"ann\",\"+15550102030\",\"5.66666666666667\"]"), "{}", text(&r));
+
+        let r = s.query(Parameters(q("SELECT clean_phone((SELECT content FROM read_text('/etc/passwd'))) FROM people"))).await.unwrap();
+        assert_eq!(r.is_error, Some(true));
+        assert!(text(&r).contains("read_text"), "{}", text(&r));
+        let r = s.query(Parameters(q("SELECT clean_phone(phone, '+', 1) FROM people"))).await.unwrap();
+        assert_eq!(r.is_error, Some(true));
+        assert!(text(&r).contains("clean_phone takes 1 to 2 arguments"), "{}", text(&r));
     }
 
     pub(super) fn shout(body: &str) -> serde_json::Value {

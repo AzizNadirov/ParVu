@@ -352,6 +352,21 @@ pub fn tool_listing(lib: &Library) -> serde_json::Value {
                 ),
             };
             let mut usage = usage;
+            // The query tool expands calls of functions without a list of columns.
+            if d.kind == DefKind::Function && !lists {
+                let sql_args: Vec<String> = d
+                    .params
+                    .iter()
+                    .filter(|p| !(p.kind == ParamKind::Value && p.optional))
+                    .map(|p| if p.kind == ParamKind::Value { format!("<{} value>", p.name) } else { format!("<{} column>", p.name) })
+                    .collect();
+                let call = format!("{}({})", d.name, sql_args.join(", "));
+                usage["query"] = json!(if d.result.kind == ResultKind::Value {
+                    format!("SELECT <group column>, {call} FROM <table> GROUP BY ALL — or {call} OVER (PARTITION BY …)")
+                } else {
+                    format!("SELECT {call} FROM <table>")
+                });
+            }
             if parvu_core::reshape::is_custom_aggregate(d) {
                 let values: serde_json::Map<String, serde_json::Value> = d
                     .params

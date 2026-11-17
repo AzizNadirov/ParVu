@@ -151,7 +151,7 @@ fn rewrite(v: &mut Value, ctes: &HashSet<String>, resolve: &dyn Fn(&str) -> Opti
 
 /// DuckDB's message without the "LINE 1: …" excerpt, which would show the
 /// internal, rewritten SQL instead of the caller's.
-fn clean_db_error(msg: &str) -> String {
+pub(crate) fn clean_db_error(msg: &str) -> String {
     msg.split("\n\nLINE ").next().unwrap_or(msg).trim().to_string()
 }
 
@@ -187,10 +187,12 @@ pub struct ReadSession {
     /// lower-cased tab name → (tab name, view name, steps)
     tables: HashMap<String, (String, String, Vec<crate::ops::StepLabel>)>,
     order: Vec<String>,
+    /// Custom functions `query` may call (expanded before the guard).
+    custom: Arc<crate::custom::Library>,
 }
 
 impl ReadSession {
-    pub(crate) fn new(conn: Connection, tables: Vec<SessionTable>) -> Result<Self> {
+    pub(crate) fn new(conn: Connection, tables: Vec<SessionTable>, custom: Arc<crate::custom::Library>) -> Result<Self> {
         let mut map = HashMap::new();
         let mut order = Vec::new();
         for (i, t) in tables.into_iter().enumerate() {
@@ -199,7 +201,7 @@ impl ReadSession {
             order.push(t.name.clone());
             map.insert(t.name.to_lowercase(), (t.name, view, t.steps));
         }
-        Ok(Self { conn, tables: map, order })
+        Ok(Self { conn, tables: map, order, custom })
     }
 
     /// Stops the query running on this session (from another thread).
@@ -232,9 +234,17 @@ impl ReadSession {
 
     /// Run a guarded SELECT, returning at most `max_rows` rows. With
     /// `timeout`, the query is interrupted when it runs longer.
+    /// Calls of the user's custom functions are expanded first, so the
+    /// guard checks the SQL that actually runs.
     pub fn query(&self, sql: &str, max_rows: usize, timeout: Option<Duration>) -> Result<QueryRows> {
-        let safe = self.guard(sql)?;
-        self.run(&safe, max_rows, timeout)
+        let x = crate::custom::sqlmode::expand(&self.conn, sql, &self.custom)?;
+        let safe = self.guard(&x.sql)?;
+        self.run(&safe, max_rows, timeout).map_err(|e| match e {
+            CoreError::Invalid(msg) if x.is_expanded() && !msg.starts_with("The query took too long") => {
+                x.explain_message(&msg)
+            }
+            other => other,
+        })
     }
 
     fn run(&self, safe_sql: &str, max_rows: usize, timeout: Option<Duration>) -> Result<QueryRows> {

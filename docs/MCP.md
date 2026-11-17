@@ -93,7 +93,7 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 | `sample_rows` | First, last or random rows |
 | `column_stats` | Rows, nulls, distinct values, min, max, mean, standard deviation |
 | `value_counts` | Most frequent values of a column |
-| `query` | One DuckDB `SELECT` over the open tables, by table name (up to 1,000 rows, 30-second limit) |
+| `query` | One DuckDB `SELECT` over the open tables, by table name (up to 1,000 rows, 30-second limit). The user's custom functions can be called by name, as in SQL mode ([CUSTOM.md](CUSTOM.md#in-sql-mode)) |
 | `apply_operation` | Any ParVu table operation (filter, sort, add column, fill missing values, window functions…) as a step. Group by, pivot, melt, transpose, value counts, describe, join and append leave the table as it is and open their result as a new table (`new_table` in the answer) |
 | `set_formula` | Add or change a formula column: a live column computed from each row, e.g. `[qty] * [price]`, `[price] / SUM([price])` (share of the column's total) or `SUM([q1:q4])` (across a row). Cells stay editable and the column updates when they change. Formulas approved in your window are remembered for the file, like your own. |
 | `undo` | Revert the last step on a table |
@@ -104,7 +104,7 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 ### Safety
 
 - **Files:** the client can open files only from the allowed folders. Paths are resolved first, so `..` and symbolic links can't escape them.
-- **Queries:** `query` runs one `SELECT` and reads only the open tables. Statements that change anything (`INSERT`, `COPY`, `ATTACH`, `PRAGMA`, …) are refused. So are DuckDB functions that read files (`read_csv`, `read_text`, `glob`, …) and file paths used as table names, so a query can't reach files you didn't allow. The same check applies to expressions inside `apply_operation`.
+- **Queries:** `query` runs one `SELECT` and reads only the open tables. Statements that change anything (`INSERT`, `COPY`, `ATTACH`, `PRAGMA`, …) are refused. So are DuckDB functions that read files (`read_csv`, `read_text`, `glob`, …) and file paths used as table names, so a query can't reach files you didn't allow. The same check applies to expressions inside `apply_operation`. Calls of custom functions are expanded into their SQL **before** the check, so it sees everything that runs, arguments included.
 - **Changes:** `apply_operation` and `undo` change only this session's tables, never your files. Only `export` writes, and only with `--allow-write`.
 - **Approval:** your AI client decides whether tool calls need your approval; Claude Code and Claude Desktop ask by default.
 - **What the model sees:** query results go to the client's model. Treat it like pasting those rows into a chat with that model.

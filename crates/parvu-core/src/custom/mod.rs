@@ -18,6 +18,7 @@ pub mod examples;
 pub mod fill;
 pub mod record;
 pub mod signature;
+pub mod sqlmode;
 pub mod validate;
 
 use std::collections::{BTreeMap, HashMap};

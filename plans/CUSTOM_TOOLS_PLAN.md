@@ -1,6 +1,6 @@
 # Custom functions and custom operations — design
 
-Status: phases 1–7 implemented (see "Implementation notes" below), except SQL-mode macros. File paths are relative to the repo root. User guide: `docs/CUSTOM.md`.
+Status: phases 1–7 implemented (see "Implementation notes" below), and custom functions in SQL mode by query rewriting, not macros (§11.5 question 5). File paths are relative to the repo root. User guide: `docs/CUSTOM.md`.
 
 **What was not verified when this was written.** No DuckDB was available on this machine (no `duckdb` Python package, no CLI), so every statement about DuckDB behaviour is from memory. Those statements are marked **[verify]** and listed in §11.4. The repo facts were read from the code.
 
@@ -51,6 +51,22 @@ Phase 6, MCP and the assistant:
 - **Custom aggregates in Group By.** `AggFunc::Custom` + `Aggregation.custom { name, values }`; `reshape::is_custom_aggregate` (usable summary function, one column parameter, the rest values). Pivot and charts refuse it.
 - **Formula cells** set `allowOverlay: false` in `DataGrid.tsx`, so Glide's read-only overlay no longer opens over the formula bar; `onCellActivated` still opens the formula.
 - **Formula refresh off the lock.** `refresh_formulas(&Mutex<Workspace>, tabs)`: compile under the lock; `Workspace::formula_totals_job` (a cloned connection, the edits view and a snapshot); `FormulaTotalsJob::resolve` computes the totals without the lock; `set_resolved_formulas` puts the resolved views in place only if the tab's formulas and edits are unchanged (else compile again, up to three times) and keeps the markers so later rebuilds compute totals again; when steps follow, the rows are counted off the lock too (`set_counted_rows`). Not a UI job (`run_job`): it runs in `publish`, not from a window, so there's no progress or cancel; the scan is still off the workspace lock.
+
+
+### Implementation notes (SQL mode)
+
+§11.5 question 5 answered yes, **without DuckDB macros**: `custom/sqlmode.rs` rewrites the query instead, so there is no catalog state for cloned job connections, steps or Refresh to depend on, and the read-only guard sees the expanded SQL.
+
+- `expand(conn, sql, lib)`: a text pre-check (no library name in the SQL → unchanged, no parse); `json_serialize_sql`; `FUNCTION` / `WINDOW` nodes with no schema or catalog whose lower-cased name is in the library and **not** in `duckdb_functions()` are calls. Nothing matched (or not one SELECT, or a parse error) → the input string is returned byte for byte; DuckDB reports its own errors when it runs.
+- Each call becomes the template's tree (`SELECT <template>` parsed once per definition and query), slots (`COLUMN_REF __pv_arg_N`) replaced by the argument trees; `__pv_arg_N.field` becomes `STRUCT_EXTRACT`. Post-order, so custom calls inside arguments are expanded first. Column parameters take any expression; value arguments get `CAST(… AS dtype)` (built by parsing `CAST(NULL AS dtype)`, `is_safe_type_name` first); a left-out optional takes `value_literal(default)` cast the same way. Named arguments (`p := x`) map by name. The call's alias moves to the expansion.
+- **Column names:** an unaliased select item containing a custom call gets the alias DuckDB would print for the original item (`clean_phone(Phone)`), via one `json_deserialize_sql` of `SELECT <item>`.
+- **Summary + `OVER` / `FILTER`:** distributed to every aggregate (`duckdb_functions()` `function_type = 'aggregate'`) in the template, not inside a window: a `FUNCTION` becomes a `WINDOW_AGGREGATE` with the call's partitions, orders and frame (its `order_bys` → `arg_orders`, its `filter` → `filter_expr`). This supports `sum(x*w)/sum(w)` templates. Refused with the name: `OVER`/`FILTER` on a row function, `DISTINCT`, `ORDER BY` or `IGNORE NULLS` in the call, `FILTER` when the template already filters, a template with no aggregate.
+- Refused with the name: wrong arity (with the signature), unknown or repeated named argument, `columns` parameters, operations (called as a function or as a table function), drafts / broken.
+- **Choices and min/max of value parameters are not checked** in SQL mode (an argument is an expression, not a constant); the cast is.
+- **Errors:** `Expanded::explain` turns a DuckDB error into one naming the function when the message mentions a function of its template (`regexp_replace(BIGINT, …)` → "clean_phone: an argument has a type this function doesn't take. It is <signature>"), else appends "(The query calls the custom function …)" except for missing columns/catalog errors; the "LINE 1:" excerpt (of the expansion) is dropped.
+- **Where:** `Workspace::run_sql` (the step, its recipe and its `step.query` label keep the expanded SQL; the editor keeps the typed text), `plan_result(Derivation::Sql)` (the derivation keeps the typed SQL, so Refresh expands with the current definitions; the label is the typed SQL), and `ReadSession::query` (MCP `query`, the assistant), expanded **before** `guard`. `ReadSession::guard` / `check_operation` don't expand: `AddColumn` expressions are applied without expansion, so accepting calls there would fail later.
+- `list_custom_tools` adds a `use.query` example for callable functions; MCP server instructions and the assistant prompt mention it.
+- UI: `lib/sqlComplete.ts` adds a completion source to the SQL language (`language.data.of({ autocomplete })`, beside lang-sql's own), fed from `sqlCallable(customDefs)` (`dialogs/logic.ts`) with `signatureText` and the description; not offered after a dot or inside strings, quoted names and `--` comments.
 
 ---
 

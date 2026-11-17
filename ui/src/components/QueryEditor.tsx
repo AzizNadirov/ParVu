@@ -8,6 +8,7 @@ import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { bracketMatching, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { exprCompletions, type ExprSchema } from "../lib/exprComplete";
+import { sqlCustomCompletions, type SqlFunctionInfo } from "../lib/sqlComplete";
 import { exprLanguage, highlight } from "../lib/exprLanguage";
 
 export type EditorMode = "sql" | "expression";
@@ -20,6 +21,8 @@ export interface QueryEditorProps {
   /** Tables and their columns, for SQL and expression autocomplete. */
   schema: ExprSchema;
   keywords: string[];
+  /** Custom functions SQL mode can call, for autocomplete. */
+  sqlFunctions?: SqlFunctionInfo[];
   fontFamily: string;
   fontSize: number;
   placeholder?: string;
@@ -37,8 +40,11 @@ export function QueryEditor(props: QueryEditorProps) {
     if (mode === "sql") {
       const sqlSchema: Record<string, string[]> = {};
       for (const t of schema.tables) sqlSchema[t.name] = t.columns;
+      const lang = sql({ dialect: PostgreSQL, schema: sqlSchema, upperCaseKeywords: true });
       return [
-        sql({ dialect: PostgreSQL, schema: sqlSchema, upperCaseKeywords: true }),
+        lang,
+        // Beside the dialect's own completions (tables, columns, keywords).
+        lang.language.data.of({ autocomplete: sqlCustomCompletions(() => latest.current.sqlFunctions ?? []) }),
         autocompletion({ activateOnTyping: true }),
       ];
     }
