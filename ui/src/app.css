@@ -42,7 +42,13 @@
 }
 .editor-toolbar { flex: 0 0 auto; }
 .editor-panel.collapsed { min-height: 0; padding-top: 4px; padding-bottom: 4px; }
-.editor-toolbar .panel-toggle { width: 28px; height: 28px; min-height: 28px; padding: 0; margin-left: -4px; }
+/* The chevron and title line up with the Applied Steps header below: its
+   chevron sits 9px in, its title 6px after the chevron. (.icon outranks
+   the padding that buttons starting with an icon get.) */
+.editor-toolbar .panel-toggle.icon {
+  width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0;
+  margin-left: -9px; margin-right: calc(1px - var(--pv-layout-spacing, 8px));
+}
 .editor-toolbar strong { font-weight: 500; }
 .segmented {
   display: inline-flex;
