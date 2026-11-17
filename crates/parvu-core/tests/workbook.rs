@@ -145,3 +145,25 @@ fn save_as_copy_and_old_excel_files() {
     ws.save(id, Some(&csv)).unwrap();
     assert!(std::fs::read_to_string(&csv).unwrap().starts_with("item,qty"));
 }
+
+/// A duplicate moved in front of its original: the tab still shows the
+/// original, and a cell edit is saved into the original, not the copy.
+#[test]
+fn edits_go_to_the_original_after_moving_its_copy() {
+    let dir = TempDir::new().unwrap();
+    let path = book(&dir);
+    let mut ws = Workspace::new(100, None).unwrap();
+    let id = ws.open(&path).unwrap();
+    ws.sheet_op(id, &SheetOp::Duplicate { sheet: "Q1".into() }).unwrap();
+    let view = ws.sheet_op(id, &SheetOp::Move { sheet: "Q1 (2)".into(), by: -1 }).unwrap();
+    assert_eq!(view.current, "Q1");
+    ws.edit_cell(id, 0, "item", Some("EDITED".into())).unwrap();
+    ws.save(id, None).unwrap();
+    let names: Vec<String> = sheets(&path).unwrap().into_iter().map(|s| s.name).collect();
+    assert_eq!(names, ["Q1 (2)", "Q1", "Q2", "Totals"]);
+    let mut other = Workspace::new(100, None).unwrap();
+    let q1 = other.open_sheet(&path, &CsvOptions::default(), Some("Q1")).unwrap();
+    assert_eq!(cells(&other, q1)[0][0].as_deref(), Some("EDITED"));
+    let copy = other.open_sheet(&path, &CsvOptions::default(), Some("Q1 (2)")).unwrap();
+    assert_eq!(cells(&other, copy)[0][0].as_deref(), Some("A"), "the copy keeps the saved values");
+}
