@@ -187,3 +187,33 @@ fn previous_row_in_file_order() {
     // Sorted by qty: C(1, prev B=5), A(2, none), B(5, prev A=2).
     assert_eq!(col(&ws, id, "prev_qty"), vec![Some("5".into()), None, Some("2".into())]);
 }
+
+/// A formula with a window over groups (`COUNTIF([region], [region])`)
+/// keeps the file's row order; PREV still reads the row above.
+#[test]
+fn windowed_formulas_keep_the_row_order() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("sales.parquet");
+    let mut ws = Workspace::new(100, None).unwrap();
+    ws.connection()
+        .execute_batch(&format!(
+            "COPY (SELECT i AS id, ['north','south','east','west'][1 + (hash(i) % 4)::INTEGER] AS region FROM range(200000) t(i)) \
+             TO '{}' (FORMAT PARQUET, ROW_GROUP_SIZE 2048)",
+            path.display()
+        ))
+        .unwrap();
+    let id = ws.open(&path).unwrap();
+    // A pending cell edit puts the edits overlay under the formulas.
+    ws.edit_cell(id, 7, "region", Some("north".into())).unwrap();
+    ws.set_formula(id, f("same", "COUNT(sales.region) OVER (PARTITION BY sales.region)", None)).unwrap();
+    ws.set_formula(id, f("prev", "LAG(sales.id, 1) OVER ()", None)).unwrap();
+    let ids: Vec<i64> = col(&ws, id, "id").into_iter().map(|v| v.unwrap().parse().unwrap()).collect();
+    assert_eq!(ids, (0..100).collect::<Vec<i64>>(), "rows stay in the file's order");
+    let prev = col(&ws, id, "prev");
+    assert_eq!((prev[0].as_deref(), prev[1].as_deref(), prev[50].as_deref()), (None, Some("0"), Some("49")));
+    let total: i64 = ws
+        .connection()
+        .query_row("SELECT sum(same) FROM (SELECT DISTINCT region, same FROM sales)", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(total, 200000);
+}

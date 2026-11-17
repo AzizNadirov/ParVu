@@ -184,6 +184,9 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const [tabs, setTabs] = useState<TabSummary[]>([]);
   const [active, setActive] = useState<number | null>(null);
+  /** The active tab right now (a prompt may switch tabs while a handler waits). */
+  const activeRef = useRef<number | null>(null);
+  activeRef.current = active;
   const tabUi = useRef(new Map<number, TabUi>());
   // Bumped when view-only tab state (widths, frozen columns, formats) changes.
   const [, setViewTick] = useState(0);
@@ -1656,7 +1659,8 @@ export function App({ boot }: { boot: Bootstrap }) {
       tabUi.current.delete(id);
       const rest = tabs.filter((x) => x.id !== id);
       setTabs(rest);
-      if (id === active) {
+      // The prompt about unsaved changes switches to the tab it asks about.
+      if (id === active || id === activeRef.current) {
         if (rest.length) {
           const idx = Math.min(tabs.findIndex((x) => x.id === id), rest.length - 1);
           switchTo(rest[idx].id);

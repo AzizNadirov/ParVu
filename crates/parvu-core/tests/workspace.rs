@@ -246,6 +246,30 @@ fn join_and_append_use_each_tabs_current_state() {
     assert_eq!(ws.summary(ia).unwrap().total_rows, 33);
 }
 
+/// Append matches columns by name: the same columns in another order line
+/// up, and a column only one table has is empty in the other's rows.
+#[test]
+fn append_matches_columns_by_name() {
+    let d = TempDir::new().unwrap();
+    let a = d.path().join("a.parquet");
+    let b = d.path().join("b.parquet");
+    make_file(&a, 2);
+    make_file(&b, 2);
+    let mut ws = Workspace::new(100, None).unwrap();
+    let ia = ws.open(&a).unwrap();
+    let ib = ws.open(&b).unwrap();
+    ws.run_sql(ib, "SELECT flag, name, id + 100 AS id, 'extra' AS note FROM b", None).unwrap();
+    ws.apply(ia, &Operation::Append { tables: vec!["b".into()], distinct: false }).unwrap();
+    let p = ws.page(ia, 1).unwrap();
+    let names: Vec<&str> = p.columns.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["id", "name", "score", "flag", "day", "note"]);
+    let id_col: Vec<&str> = p.rows.iter().map(|r| r[0].as_deref().unwrap()).collect();
+    assert_eq!(id_col, ["0", "1", "100", "101"]);
+    assert_eq!(p.rows[2][1].as_deref(), Some("name_0"), "names stay under name");
+    assert_eq!((p.rows[0][5].as_deref(), p.rows[2][5].as_deref()), (None, Some("extra")));
+    assert_eq!(ws.column_type(ia, "id").unwrap(), "BIGINT", "types are kept, not turned into text");
+}
+
 #[test]
 fn cell_edits_overlay_validate_and_undo() {
     let (_d, _p, mut ws, id) = setup(250, "parquet");

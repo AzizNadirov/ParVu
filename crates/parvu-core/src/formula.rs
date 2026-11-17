@@ -74,10 +74,27 @@ pub fn with_totals(conn: &Connection, base: &str, table: &str, formulas: &[Formu
 }
 
 /// `base` with each formula as one more column, in order.
+/// The row number that keeps the file's order when a formula uses a window
+/// (`COUNTIF([region], [region])`, `PREV([x])`): DuckDB returns a window's
+/// rows grouped by partition, which reordered the table (and the saved file).
+const ROW: &str = "__pv_frn";
+
+fn windowed(formulas: &[Formula]) -> bool {
+    formulas.iter().any(|f| f.sql.contains(" OVER ("))
+}
+
 fn layers(base: &str, table: &str, formulas: &[Formula]) -> String {
-    let mut query = format!("SELECT * FROM {}", quote_ident(base));
+    let ordered = windowed(formulas);
+    let mut query = if ordered {
+        format!("SELECT *, ROW_NUMBER() OVER () AS {} FROM {}", quote_ident(ROW), quote_ident(base))
+    } else {
+        format!("SELECT * FROM {}", quote_ident(base))
+    };
     for f in formulas {
-        query = format!("SELECT *, ({}) AS {} FROM ({query}) AS {}", f.sql, quote_ident(&f.name), quote_ident(table));
+        // Neighbouring rows (PREV / NEXT) follow the row number, not the
+        // order an earlier window left the rows in.
+        let sql = if ordered { f.sql.replace(" OVER ()", &format!(" OVER (ORDER BY {})", quote_ident(ROW))) } else { f.sql.clone() };
+        query = format!("SELECT *, ({sql}) AS {} FROM ({query}) AS {}", quote_ident(&f.name), quote_ident(table));
     }
     query
 }
@@ -96,7 +113,11 @@ pub fn formula_sql(base: &str, table: &str, base_columns: &[ColumnMeta], formula
         order.insert(at, &f.name);
     }
     let list: Vec<String> = order.iter().map(|c| quote_ident(c)).collect();
-    format!("SELECT {} FROM ({query})", list.join(", "))
+    if windowed(formulas) {
+        format!("SELECT {} FROM ({query}) ORDER BY {}", list.join(", "), quote_ident(ROW))
+    } else {
+        format!("SELECT {} FROM ({query})", list.join(", "))
+    }
 }
 
 #[cfg(test)]
