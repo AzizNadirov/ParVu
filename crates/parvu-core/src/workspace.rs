@@ -386,6 +386,31 @@ impl Workspace {
         Ok(label)
     }
 
+    /// The table's first `n` rows as they would be with `formula` added (or
+    /// changed, by name), without changing anything: for approval cards.
+    pub fn preview_formula(&self, id: TabId, formula: &Formula, n: u64) -> Result<(Vec<ColumnMeta>, Vec<Vec<Cell>>)> {
+        let t = self.tab(id)?;
+        let mut list = t.formulas.clone();
+        match list.iter().position(|f| f.name == formula.name) {
+            Some(i) => list[i] = formula.clone(),
+            None => list.push(formula.clone()),
+        }
+        let base = edits_view(&t.name);
+        let src_columns = describe(&self.conn, &format!("SELECT * FROM {}", quote_ident(&source_view(&t.name))))?;
+        let resolved = crate::formula::with_totals(&self.conn, &base, &t.name, &list)?;
+        let sql = format!("{} LIMIT {n}", formula_sql(&base, &t.name, &src_columns, &resolved));
+        let columns = describe(&self.conn, &sql)?;
+        let rows = crate::page::format_batches(&crate::engine::query_batches(&self.conn, &sql)?)?;
+        Ok((columns, rows))
+    }
+
+    /// Put back formulas remembered for the file when it opens again: no
+    /// undo step (they are part of the table, like "Read as" choices).
+    /// Fails, changing nothing, when they don't run.
+    pub fn restore_formulas(&mut self, id: TabId, formulas: Vec<Formula>) -> Result<()> {
+        self.replace_formulas(id, formulas)
+    }
+
     /// Remove a formula column. Undoable; refused while other formulas or
     /// steps use it.
     pub fn remove_formula(&mut self, id: TabId, name: &str) -> Result<StepLabel> {

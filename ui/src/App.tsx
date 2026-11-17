@@ -35,7 +35,7 @@ import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types"
 import { columnHighlights, errorOffset, formulaBody, formulaRefs, newFormulaName, refFor } from "./lib/formula";
 import { jobResult } from "./lib/jobs";
 import { StatusJobs } from "./components/JobProgress";
-import { fillEdge, fillFromHandle, type FillCell, type FillDirection, type Rect } from "./lib/fill";
+import { fillEdge, fillFromHandle, fillSeries, type FillCell, type FillDirection, type Rect } from "./lib/fill";
 import { FormulaBar, type FormulaBarHandle } from "./components/FormulaBar";
 import { isDark } from "./lib/chart";
 import { DATE_FILTERS, EXTRACT_FNS, fnLabelKey, hasTime, isDateFamily, previewValues, TEXT_FNS, type FnName } from "./lib/colfn";
@@ -95,6 +95,7 @@ import {
   openThemeSelector,
   openTranspose,
   openUniqueValues,
+  openSeries,
   openUnsavedChanges,
   openValueCounts,
   openWindow,
@@ -231,10 +232,25 @@ export function App({ boot }: { boot: Bootstrap }) {
   const allMethods = useMemo(() => [...new Set(Object.values(boot.methods).flat())].sort(), [boot.methods]);
 
   // ------------------------------------------------------------ ui helpers
+  // A message shown for a while (`ms`) is not replaced by a plain one, such
+  // as the page info after loading: that one waits until the time is up.
+  const statusHold = useRef<{ until: number; next: string }>({ until: 0, next: "" });
   const status = useCallback((text: string, ms?: number) => {
+    const hold = statusHold.current;
+    if (!ms && Date.now() < hold.until) {
+      hold.next = text;
+      return;
+    }
     window.clearTimeout(statusTimer.current);
     setStatusText(text);
-    if (ms) statusTimer.current = window.setTimeout(() => setStatusText(""), ms);
+    if (ms) {
+      hold.until = Date.now() + ms;
+      hold.next = "";
+      statusTimer.current = window.setTimeout(() => {
+        hold.until = 0;
+        setStatusText(hold.next);
+      }, ms);
+    }
   }, []);
 
   const showDialog = useCallback(<T,>(render: (close: Closer<T>) => ReactNode, _dismiss: T): Promise<T> => {
@@ -435,7 +451,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         upsertTab(s);
         switchTo(s.id);
         void refreshSchema();
-        status(t("status.loaded", { filename: path.split(/[\\/]/).pop() ?? path, rows: s.total_rows }), 5000);
+        const loaded = t("status.loaded", { filename: path.split(/[\\/]/).pop() ?? path, rows: s.total_rows });
+        // Formulas made for this file before come back with it.
+        status(s.formulas.length ? `${loaded} ${t("status.formulas_restored", { count: s.formulas.length })}` : loaded, 6000);
       } catch (e) {
         setBusy(false);
         const err = e as ApiError;
@@ -956,6 +974,8 @@ export function App({ boot }: { boot: Bootstrap }) {
       { label: t("context.fill_up"), disabled: rows, onSelect: () => void fillRange("up") },
       { label: t("context.fill_right"), shortcut: "Ctrl+R", disabled: cols, onSelect: () => void fillRange("right") },
       { label: t("context.fill_left"), disabled: cols, onSelect: () => void fillRange("left") },
+      { type: "separator" },
+      { label: t("context.fill_series"), disabled: rows && cols, onSelect: () => void runSeries() },
     ];
   };
 
@@ -1208,6 +1228,18 @@ export function App({ boot }: { boot: Bootstrap }) {
         return;
       }
       await writeFill(fillEdge((r, c) => page.rows[r]?.[c] ?? null, range, direction));
+    });
+  /** Series…: fill the selection from its first cell with an explicit step. */
+  const runSeries = async () =>
+    withTab(async () => {
+      const range = grid.current?.selectionRange();
+      if (!page || !range || (range.height < 2 && range.width < 2)) {
+        status(t("status.fill_rows_select"), 4000);
+        return;
+      }
+      const get = (r: number, c: number) => page.rows[r]?.[c] ?? null;
+      const spec = await openSeries(ui, { seed: get(range.y, range.x), rows: range.height, cols: range.width });
+      if (spec) await writeFill(fillSeries(get, range, spec));
     });
   const fillDown = () => fillRange("down");
   const fillRight = () => fillRange("right");

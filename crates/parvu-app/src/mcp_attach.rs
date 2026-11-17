@@ -220,6 +220,10 @@ impl AttachHost for TauriHost {
     fn changed(&self, window: &str, tab_id: u64) {
         let _ = self.app.emit_to(window, "mcp-changed", tab_id);
     }
+
+    fn formulas_changed(&self, summary: &parvu_core::TabSummary) {
+        crate::commands::remember_formulas(summary);
+    }
 }
 
 // ---------------------------------------------------------------- commands

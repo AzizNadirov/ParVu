@@ -13,12 +13,15 @@
   - **Ranges across a row:** `= SUM([q1:q4])` adds the columns q1 to q4 of each row (also AVG, MIN, MAX, COUNT). Shift+click a second column header in the formula bar to make a range; the grid tints every column in it.
   - **Neighbouring rows:** `= [total] - PREV([total])`, `NEXT([x], 2)`, in the file's row order, on tables up to 2 million rows.
   - Errors are underlined at their position in the formula bar, and Table Info lists each formula.
+  - **Remembered per file:** a file's formulas come back when you open it again, as long as the file hasn't changed (like "Read as" choices).
+  - **AI clients can add formulas:** the new `set_formula` tool (MCP and the built-in assistant) proposes a formula column on an approval card with a preview; nothing changes until you approve it.
 - **Filling, as in a spreadsheet.** Drag the square at the corner of a selection to fill the cells next to it, down, up, left or right. ParVu continues the series instead of copying:
   - numbers by their step (1, 2 → 3, 4; one number is copied);
   - dates by day, or by month or year when the seeds share a day of the month (31 Jan, 29 Feb → 31 Mar keeps to month ends); timestamps keep their format;
   - month and day names in English, Russian and Azerbaijani (Jan → Feb, пн → вт), keeping their case;
   - text ending in a number (Item 1 → Item 2, INV-007 → INV-008);
   - anything else repeats the selected cells.
+  - **Series…** (Data → Fill, or the cell menu) fills from the first selected cell with a step you choose: linear, growth, or dates by days, weeks, months or years, with an optional stop value.
   - **Fill Down, Up, Right and Left** in the Data menu and the cell menu copy the selection's edge row or column; Ctrl+D fills down and Ctrl+R fills right. Every fill is one step that undo reverts. Formula columns are left as they are.
 
 ### Fixed
