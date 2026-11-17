@@ -56,8 +56,7 @@ pub fn with_totals(conn: &Connection, base: &str, table: &str, formulas: &[Formu
             .enumerate()
             .map(|(i, t)| format!("CAST(({t}) AS VARCHAR) AS v{i}, typeof(({t})) AS t{i}"))
             .collect();
-        let sql = format!("SELECT {} FROM ({input}) AS {}", parts.join(", "), quote_ident(table));
-        let values: Vec<(Option<String>, String)> = conn.query_row(&sql, [], |r| {
+        let values: Vec<(Option<String>, String)> = crate::sql::query_whole_table(conn, &parts.join(", "), &input, &quote_ident(table), |r| {
             (0..f.totals.len()).map(|i| Ok((r.get(2 * i)?, r.get(2 * i + 1)?))).collect()
         })?;
         let mut resolved = f.sql.clone();

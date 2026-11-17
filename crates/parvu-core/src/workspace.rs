@@ -226,6 +226,7 @@ impl Workspace {
     /// needs more memory than is available.
     pub fn new(page_size: u64, temp_dir: Option<&Path>) -> Result<Self> {
         let conn = Connection::open_in_memory()?;
+        crate::interrupts::register(&conn);
         conn.execute_batch(&resource_settings())?;
         if let Some(dir) = temp_dir {
             std::fs::create_dir_all(dir)?;
@@ -507,6 +508,7 @@ impl Workspace {
     /// (exports, long statistics) while the UI keeps paging.
     pub fn clone_connection(&self) -> Result<Connection> {
         let conn = self.conn.try_clone()?;
+        crate::interrupts::register(&conn);
         connection_settings(&conn)?;
         Ok(conn)
     }

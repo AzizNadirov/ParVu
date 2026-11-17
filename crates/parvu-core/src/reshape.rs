@@ -132,11 +132,13 @@ pub(crate) fn group_by(ctx: &OpContext, by: &[String], aggregations: &[Aggregati
     }
     let ordered = aggregations.iter().any(|a| a.func.needs_order());
     let src = source_for(ctx, ordered);
-    let mut sql = format!("SELECT {} FROM ({src})", items.join(", "));
-    if !by.is_empty() {
+    let sql = if by.is_empty() {
+        // The whole table as one group, within DuckDB's memory limit.
+        crate::sql::whole_table_view(&items.join(", "), &src, "__pv_t")
+    } else {
         let keys = key_list(by);
-        sql.push_str(&format!(" GROUP BY {keys} ORDER BY {keys} NULLS LAST"));
-    }
+        format!("SELECT {} FROM ({src}) GROUP BY {keys} ORDER BY {keys} NULLS LAST", items.join(", "))
+    };
     let funcs: Vec<String> = aggregations
         .iter()
         .map(|a| if a.func == AggFunc::Rows { "rows".to_string() } else { format!("{}({})", a.func.name(), a.column) })

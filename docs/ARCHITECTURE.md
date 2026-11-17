@@ -58,6 +58,8 @@ Conditional formatting, frozen columns and column widths belong to the window (`
 
 Each window's DuckDB connection is limited to 8 threads and to the **query memory limit** setting (1 GB by default, `PARVU_MEMORY_LIMIT_MB` overrides it). Above the limit DuckDB spills to `~/.cache/ParVu/duckdb`. Freed memory is returned to the system after large queries. Pages are fetched with `LIMIT/OFFSET`, so the first pages of a sorted result only need a top-N, while jumping deep into a sorted big file needs a full sort. A sort applied right after another sort replaces it rather than wrapping it, so the data is sorted once. A tab's column list is cached until its query changes.
 
+DuckDB's limit does not bound every operator: a whole-table `MODE` or `COUNT(DISTINCT …)` can grow past it. ParVu writes whole-table aggregates as a group over one constant key (`sql::whole_table`, `whole_table_view`, `query_whole_table`), which DuckDB can spill. As a last line of defence, the **memory guard** (`parvu-app/src/memguard.rs`) polls the process's resident memory every 200 ms. When it is above the ceiling (2 × the query limit + 1 GB, at most 65 % of RAM; `PARVU_MEMORY_GUARD_MB` overrides it, `0` turns it off) and still growing, it interrupts every DuckDB connection (`parvu_core::interrupts`, which every connection registers with). The interrupted command fails with the error kind `memory`, and the windows get a `memory-guard` event. On Linux, ParVu also raises its `oom_score_adj`, so the kernel stops ParVu before other programs.
+
 In the UI, the grid reads theme colours once per theme, reuses its style objects, and only re-renders when the page, sort or theme changes. Dialogs are loaded on first use.
 
 ### Read-only sessions

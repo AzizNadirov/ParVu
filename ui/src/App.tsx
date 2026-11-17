@@ -17,6 +17,7 @@ import {
   type ColumnFn,
   type ColumnMeta,
   type CsvOptions,
+  setErrorTranslator,
   type DatePartName,
   type TimeUnitName,
   type AiRunEvent,
@@ -155,6 +156,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [settings, setSettings] = useState<Settings>(boot.settings);
   const [translations, setTranslations] = useState(boot.translations);
   const t = useMemo(() => makeTranslator(translations, boot.english), [translations, boot.english]);
+  useEffect(() => setErrorTranslator(t), [t]);
   const [themeKey, setThemeKey] = useState(boot.theme.name);
   const [recents, setRecents] = useState(boot.recents);
   /** AI clients connected through `parvu mcp --attach`. */
@@ -1726,6 +1728,8 @@ export function App({ boot }: { boot: Bootstrap }) {
         ),
       ),
       listen<number>("mcp-clients", (e) => setAiClients(e.payload)),
+      // The memory guard stopped running queries (memguard.rs).
+      listen<number>("memory-guard", (e) => status(t("memory.guard_stopped", { mb: e.payload }), 10000)),
       getCurrentWebview().onDragDropEvent(async (e) => {
         if (e.payload.type !== "drop") return;
         for (const p of e.payload.paths) {

@@ -105,6 +105,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 ## Known pitfalls
 
 1. **Compiling DuckDB** (`bundled-duckdb`) can exhaust memory; it is only for installers (see above).
+   **Whole-table aggregates** (`MODE`, `COUNT(DISTINCT …)`, or anything with no GROUP BY over a big table) can grow past DuckDB's memory limit: build them with `sql::whole_table*`. Probe heavy queries only inside `systemd-run --user --scope -p MemoryMax=… -p MemorySwapMax=0`. The memory guard (`parvu-app/src/memguard.rs`) is the last line of defence, not a substitute.
 2. **Grid coordinates:** Glide Data Grid rows are page-relative; add `page.offset` for absolute rows (edits, search).
 3. **React StrictMode** runs effects twice in development; one-time startup work is guarded (`bootstrapOnce` in `main.tsx`, `started` ref in `App.tsx`).
 4. **Tauri build hooks** (`beforeDevCommand` / `beforeBuildCommand`) run from the `crates/` folder, not from `crates/parvu-app`.

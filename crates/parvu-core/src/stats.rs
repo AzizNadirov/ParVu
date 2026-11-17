@@ -42,12 +42,12 @@ pub const EXACT_DISTINCT_ROWS: u64 = 2_000_000;
 pub fn column_stats(conn: &Connection, source: &str, column: &str, dtype: &str, approx: bool) -> Result<ColumnStats> {
     let q = quote_ident(column);
     let distinct = if approx { format!("approx_count_distinct({q})") } else { format!("COUNT(DISTINCT {q})") };
-    let sql = format!(
-        "SELECT COUNT(*), COUNT({q}), COUNT(*) - COUNT({q}), {distinct}, \
+    let items = format!(
+        "COUNT(*), COUNT({q}), COUNT(*) - COUNT({q}), {distinct}, \
          CAST(MIN({q}) AS VARCHAR), CAST(MAX({q}) AS VARCHAR), \
-         AVG(TRY_CAST({q} AS DOUBLE)), STDDEV(TRY_CAST({q} AS DOUBLE)) FROM ({source})"
+         AVG(TRY_CAST({q} AS DOUBLE)), STDDEV(TRY_CAST({q} AS DOUBLE))"
     );
-    let stats = conn.query_row(&sql, [], |r| {
+    let stats = crate::sql::query_whole_table(conn, &items, source, "__pv_t", |r| {
         Ok(ColumnStats {
             column: column.to_string(),
             dtype: dtype.to_string(),

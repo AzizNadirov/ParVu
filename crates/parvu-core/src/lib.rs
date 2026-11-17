@@ -11,6 +11,7 @@ pub mod engine;
 pub mod error;
 pub mod export;
 pub mod format;
+pub mod interrupts;
 pub mod formula;
 pub mod job;
 pub mod ops;

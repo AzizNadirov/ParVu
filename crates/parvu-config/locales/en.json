@@ -695,6 +695,8 @@
   "error.unique_values_error": "Error",
   "error.unique_values_error_msg": "Failed to get unique values: {error}",
   "error.unsupported_drop": "Unsupported file: {path}",
+  "error.memory_guard": "This operation needed more memory than allowed and was stopped. Try it on fewer rows, or raise the query memory limit in Settings.",
+  "memory.guard_stopped": "ParVu was using {mb} MB of memory, so the running queries were stopped.",
   "excel.cat.conditional": "Conditional totals",
   "excel.cat.date": "Date and time",
   "excel.cat.information": "Information",

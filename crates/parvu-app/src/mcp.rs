@@ -138,6 +138,8 @@ pub fn run(args: Vec<String>) -> i32 {
                 return 1;
             }
         };
+        let limit = std::env::var("PARVU_MEMORY_LIMIT_MB").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(1024);
+        crate::memguard::start(move || limit, |_| {});
         tracing::info!("MCP server starting");
         match server.serve(rmcp::transport::stdio()).await {
             Ok(running) => {

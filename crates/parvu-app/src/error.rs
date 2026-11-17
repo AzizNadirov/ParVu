@@ -28,6 +28,9 @@ impl std::fmt::Display for ApiError {
 impl From<parvu_core::CoreError> for ApiError {
     fn from(e: parvu_core::CoreError) -> Self {
         use parvu_core::CoreError as E;
+        if matches!(e, E::Db(_)) && crate::memguard::tripped_recently() && e.to_string().contains("nterrupt") {
+            return ApiError::new("memory", "This operation needed more memory than allowed.");
+        }
         let kind = match e {
             E::Db(_) => "query",
             E::FileNotFound(_) => "file_not_found",

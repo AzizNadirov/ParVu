@@ -38,6 +38,12 @@ keyring = "4.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "net", "sync", "time"] }
 getrandom = "0.3"
 
+# Memory guard (src/memguard.rs): this process's memory use.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_System_SystemInformation"] }
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
 [features]
 default = []
 # Link DuckDB statically, compiled from source (installers; see build.sh).

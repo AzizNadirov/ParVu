@@ -695,6 +695,8 @@
   "error.unique_values_error": "Xəta",
   "error.unique_values_error_msg": "Unikal dəyərləri əldə etmək mümkün olmadı: {error}",
   "error.unsupported_drop": "Dəstəklənməyən fayl: {path}",
+  "error.memory_guard": "Bu əməliyyata icazə veriləndən çox yaddaş lazım oldu və dayandırıldı. Daha az sətirlə yoxlayın və ya Ayarlarda sorğu yaddaşı limitini artırın.",
+  "memory.guard_stopped": "ParVu {mb} MB yaddaş istifadə edirdi, ona görə də işləyən sorğular dayandırıldı.",
   "excel.cat.conditional": "Şərtli cəmlər",
   "excel.cat.date": "Tarix və vaxt",
   "excel.cat.information": "Dəyər yoxlaması",

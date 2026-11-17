@@ -228,8 +228,34 @@ fn fill_null_methods() {
     check(&["qty"], FillMethod::Forward, "", "qty", &["3", "3", "5", "2", "7", "7"]);
     check(&["qty"], FillMethod::Backward, "", "qty", &["3", "5", "5", "2", "7", "∅"]);
     check(&["qty"], FillMethod::Mean, "", "qty", &["3.0", "4.25", "5.0", "2.0", "7.0", "4.25"]);
+    check(&["qty"], FillMethod::Median, "", "qty", &["3", "4", "5", "2", "7", "4"]);
+    check(&["price"], FillMethod::Mode, "", "price", &["1.5", "2.0", "1.0", "3.0", "1.5", "1.5"]);
     check(&["note"], FillMethod::Value, "n/a", "note", &["a-b-c", "n/a", "x-y", "", "p", "q-r"]);
     check(&["day"], FillMethod::Forward, "", "day", &["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-05"]);
+}
+
+/// Whole-table aggregates are written as a group over one constant key so
+/// DuckDB can spill them (MODE and COUNT(DISTINCT) over a whole big table
+/// otherwise grow past the memory limit). An empty table must still give
+/// one row, as a plain aggregate does.
+#[test]
+fn whole_table_aggregates_on_an_empty_table() {
+    let (_d, mut ws, id) = setup();
+    ws.apply(id, &Operation::Filter { conditions: vec![cond("qty", CondOp::Gt, "100")], combine: Combine::And }).unwrap();
+    assert!(rows(&ws, id).is_empty());
+    let stats = ws.column_stats(id, "qty").unwrap();
+    assert_eq!((stats.row_count, stats.distinct), (0, 0));
+    ws.apply(id, &Operation::FillNull { columns: s(&["qty"]), method: FillMethod::Mode, value: "".into() }).unwrap();
+    assert!(rows(&ws, id).is_empty());
+    ws.apply(
+        id,
+        &Operation::GroupBy {
+            by: vec![],
+            aggregations: vec![agg("", AggFunc::Rows), agg("product", AggFunc::CountDistinct), agg("price", AggFunc::Mode)],
+        },
+    )
+    .unwrap();
+    assert_eq!(rows(&ws, id), vec![vec![Some("0".into()), Some("0".into()), None]]);
 }
 
 #[test]
