@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.8]
+
+Custom tools: define your own functions and operations once, with typed parameters and examples that must pass, and use them from the menus, in formulas, in SQL and from AI clients. Seven samples are included. Also a new app icon, the Excel Material and Jupyter themes, and fixes. 1.0.0 follows after this release is tested.
+
 ### Changed
 - **A new app icon.** Three columns cut into chunks on ParVu's violet, with one chunk in amber: the way a Parquet file stores data. It's drawn by hand at 16 and 24 px so it stays sharp in the taskbar and file lists. Linux uses it for `.parquet` and `.csv` files too.
 - **Excel is now Excel Material.** Excel's green in Material Design 3: green-tinted surfaces, tonal buttons, light green column headers instead of solid green ones, and dense rows in Calibri. If you chose Excel before, ParVu opens Excel Material.
