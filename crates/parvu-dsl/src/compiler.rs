@@ -188,7 +188,13 @@ impl Compiler<'_> {
             Expr::Call {
                 func_name, args, ..
             } => {
-                let name = match self.registry.lookup(func_name) {
+                let def = self.registry.lookup(func_name);
+                if let Some(f) = def
+                    && let Some(template) = &f.sql_template
+                {
+                    return self.templated(f, template, args.iter());
+                }
+                let name = match def {
                     Some(f) => f.sql_name.clone().unwrap_or_else(|| f.name.clone()),
                     None => func_name.clone(),
                 };
@@ -203,6 +209,9 @@ impl Compiler<'_> {
                 let Some(f) = self.registry.lookup_method(method_name) else {
                     return cerr(format!("Unknown method: {method_name}"));
                 };
+                if let Some(template) = &f.sql_template {
+                    return self.templated(f, template, std::iter::once(&**receiver).chain(args));
+                }
                 let name = f.sql_name.clone().unwrap_or_else(|| f.name.clone());
                 self.function(&name, std::iter::once(&**receiver).chain(args))
             }
@@ -243,6 +252,25 @@ impl Compiler<'_> {
                 ))
             }
         }
+    }
+
+    /// A registry function written as a SQL template; optional arguments
+    /// left out take their parameter's default.
+    fn templated<'e>(
+        &self,
+        f: &crate::registry::FunctionDef,
+        template: &str,
+        args: impl Iterator<Item = &'e Expr>,
+    ) -> Result<String, DslError> {
+        // Arguments in parentheses: `a + b` stays one value inside `{0} * 2`.
+        let mut sql: Vec<String> = args.map(|a| self.sql(a).map(|s| format!("({s})"))).collect::<Result<_, _>>()?;
+        for p in f.params.iter().skip(sql.len()) {
+            match &p.default {
+                Some(d) => sql.push(d.clone()),
+                None => break,
+            }
+        }
+        Ok(format!("({})", fill_template(template, &sql)))
     }
 
     fn function<'e>(

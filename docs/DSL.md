@@ -18,6 +18,7 @@ ParVu includes a small domain-specific language (DSL) for data transformations. 
   - [Aggregation](#aggregation)
   - [Special](#special)
 - [Column Formulas](#column-formulas)
+- [Excel Functions](#excel-functions)
 - [Examples](#examples)
 - [Auto-Completion](#auto-completion)
 - [Error Handling](#error-handling)
@@ -295,6 +296,38 @@ A formula column (type `=` in a cell, or use the *fx* button of the formula bar)
 In the formula bar, click a column header to insert `[column]`; then Shift+click another header to turn it into the range `[column:other]`. Errors are underlined where the formula goes wrong.
 
 Totals and ranges follow Excel: `SUM(B:B)` is a column total and `SUM(B2:D2)` adds across a row; here they are `SUM([b])` and `SUM([b:d])`.
+
+## Excel Functions
+
+Excel's most used functions work under their Excel names and argument order, in formulas and in expression mode. **Help → Expression Language Guide → Excel functions** lists all of them, by category, with an example each; the functions that don't fit a formula point to the menu that does the job.
+
+| How Excel writes it | In ParVu |
+|---|---|
+| `=A2*B2` | `= [qty] * [price]` |
+| `=SUM(A:A)` | `= SUM([amount])`: a column inside an aggregate is the whole column (a total) |
+| `=SUM(B2:E2)` | `= SUM([q1:q4])`: a range of columns of the same row |
+| `=COUNTIF(A:A, A2)` | `= COUNTIF([region], [region])`: rows like this one |
+| `=IF(A2="North", 1, 0)` | `= IF([region] = "North", 1, 0)`: a single `=` compares |
+| `=VLOOKUP(A2, Prices!A:B, 2, FALSE)` | `= VLOOKUP([sku], prices[sku:price], 2, FALSE)`: another open tab |
+
+| Category | Functions |
+|---|---|
+| Math | SUM, SUMPRODUCT, PRODUCT, ROUND, ROUNDUP, ROUNDDOWN, MROUND, INT, TRUNC, CEILING, FLOOR, ABS, SIGN, MOD, POWER, SQRT, EXP, LN, LOG, LOG10, PI, QUOTIENT, RAND, RANDBETWEEN |
+| Statistics (column totals) | AVERAGE, COUNT, COUNTA, COUNTBLANK, MIN, MAX, MEDIAN, MODE, STDEV, STDEV.P, VAR, VAR.P, LARGE, SMALL, PERCENTILE, QUARTILE, CORREL |
+| Conditional totals | COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, MAXIFS, MINIFS |
+| Logical | IF, IFS, IFERROR, IFNA, AND, OR, NOT, XOR, SWITCH, CHOOSE |
+| Information | ISBLANK, ISNUMBER, ISTEXT, ISEVEN, ISODD, NA |
+| Text | LEFT, RIGHT, MID, LEN, FIND, SEARCH, SUBSTITUTE, UPPER, LOWER, PROPER, TRIM, CLEAN, CONCAT, CONCATENATE, TEXTJOIN, TEXT, VALUE, REPT, EXACT, TEXTBEFORE, TEXTAFTER |
+| Date and time | TODAY, NOW, DATE, TIME, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY, WEEKNUM, ISOWEEKNUM, EDATE, EOMONTH, DATEDIF, DAYS, NETWORKDAYS, YEARFRAC, DATEVALUE |
+| Lookup | XLOOKUP, VLOOKUP |
+
+Details:
+
+- **Criteria** in COUNTIF and the other conditional totals are written as in Excel: a value (`"North"`, `5`), a comparison (`">10"`, `"<>0"`, `">=2024-01-01"`), `""` for empty cells, `"<>"` for non-empty ones, and `*` / `?` wildcards. Text compares ignoring case. A criterion that is the range's own column (`COUNTIF([region], [region])`) compares each row with its own value; like `PREV` this reads the whole table on every page, so it works on tables up to 2,000,000 rows.
+- **TEXT** understands Excel's format codes: `0`, `0.00`, `#,##0.00`, `0%`, `$#,##0`, `0 "kg"`, `dd.mm.yyyy`, `yyyy-mm-dd`, `mmm yyyy`, `mmmm d, yyyy`, `dddd`, `hh:mm`, `h:mm AM/PM`.
+- **XLOOKUP / VLOOKUP** look up in another open tab, exact matches only. The formula reads that tab's current result, so keep it open.
+- **IFERROR** catches failed conversions and division by zero; ParVu has no error values, so a failure is an empty value elsewhere.
+- **Not as functions:** `REPLACE` keeps ParVu's meaning (replace text); use `LEFT`, `MID`, `RIGHT` for positions. INDEX, MATCH, HLOOKUP, OFFSET, FILTER, SORT, UNIQUE, TRANSPOSE, SUBTOTAL, GROUPBY and PIVOTBY are table operations in the menus; the Excel functions tab names the menu for each.
 
 ## Examples
 

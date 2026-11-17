@@ -523,6 +523,17 @@ export interface ParamDef {
   description: string;
 }
 
+/** One of Excel's functions in the reference. */
+export interface ExcelEntry {
+  name: string;
+  /** math, statistics, conditional, logical, information, text, date, lookup, tables */
+  category: string;
+  /** The ParVu function to write. */
+  function: string | null;
+  /** For functions that don't fit a formula: what does the job. */
+  instead: string | null;
+}
+
 export interface FunctionDef {
   name: string;
   params: ParamDef[];
@@ -560,6 +571,8 @@ export interface Bootstrap {
   cast_types: string[];
   parquet_compressions: string[];
   functions: FunctionDef[];
+  /** Excel's functions and what to write for each in ParVu. */
+  excel_functions?: ExcelEntry[];
   methods: Record<string, string[]>;
   crash_report: string | null;
   initial_files: string[];

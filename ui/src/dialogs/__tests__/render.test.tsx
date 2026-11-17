@@ -111,6 +111,10 @@ function makeUi(): Ui {
         },
       ],
       methods: { TEXT: ["upper"] },
+      excel_functions: [
+        { name: "UPPER", category: "text", function: "UPPER", instead: null },
+        { name: "FILTER", category: "tables", function: null, instead: "Data → Filter Rows" },
+      ],
       cast_types: ["", "VARCHAR"],
       parquet_compressions: ["snappy", "zstd"],
       log_dir: "/tmp/logs",
@@ -210,6 +214,18 @@ describe("dialogs render and resolve", () => {
     expect((screen.getByText("btn.ok") as HTMLButtonElement).disabled).toBe(true);
     escape();
     await expect(p).resolves.toBeNull();
+  });
+
+  it("the expression guide has an Excel functions tab", async () => {
+    const ui = makeUi();
+    const p = D.openExpressionHelp(ui);
+    await flush();
+    fireEvent.click(screen.getByText("dialog.expr_help.excel"));
+    expect(screen.getByText("excel.cat.text")).toBeTruthy();
+    expect(screen.getByText("Data → Filter Rows")).toBeTruthy();
+    expect(screen.getByText("= UPPER(data[a])")).toBeTruthy();
+    escape();
+    await p;
   });
 
   it("drop null submits with Enter", async () => {

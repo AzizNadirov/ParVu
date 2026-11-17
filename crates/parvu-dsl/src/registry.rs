@@ -13,6 +13,9 @@ pub struct ParamDef {
     pub logical_type: LogicalType,
     pub required: bool,
     pub description: String,
+    /// SQL used for an optional parameter left out (template functions).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
 }
 
 impl ParamDef {
@@ -22,7 +25,13 @@ impl ParamDef {
             logical_type,
             required: true,
             description: String::new(),
+            default: None,
         }
+    }
+
+    /// An optional parameter that defaults to `sql` when left out.
+    pub fn with_default(name: &str, logical_type: LogicalType, sql: &str) -> Self {
+        Self { required: false, default: Some(sql.to_string()), ..Self::new(name, logical_type) }
     }
 
     pub fn optional(name: &str, logical_type: LogicalType) -> Self {
@@ -44,7 +53,9 @@ pub struct FunctionDef {
     pub example: String,
     /// SQL function name emitted by the compiler (e.g. `DATE_DIFF`).
     pub sql_name: Option<String>,
-    /// Reserved for special rendering rules; unused by the defaults.
+    /// SQL written around the arguments (`{0}`, `{1}`…), for functions
+    /// with no DuckDB function of their own (most Excel functions).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sql_template: Option<String>,
 }
 
@@ -790,6 +801,9 @@ impl FunctionRegistry {
             Some("JSON_EXTRACT_STRING"),
         );
 
+        // Excel's functions under their own names.
+        crate::excel::register(self);
+
         // Method mappings
         for lt in LogicalType::ALL {
             for method in methods_for_type(lt) {
@@ -806,7 +820,10 @@ mod tests {
     #[test]
     fn defaults() {
         let r = FunctionRegistry::default();
-        assert_eq!(r.all_functions().len(), 33 + 25 + 12 + 2); // + PREV, NEXT
+        // Native functions, PREV / NEXT, and Excel's (crate::excel).
+        let mut excel = FunctionRegistry::empty();
+        crate::excel::register(&mut excel);
+        assert_eq!(r.all_functions().len(), 33 + 25 + 12 + 2 + excel.all_functions().len());
         assert_eq!(r.lookup("sum").unwrap().name, "SUM");
         assert_eq!(
             r.lookup("countd").unwrap().sql_name.as_deref(),

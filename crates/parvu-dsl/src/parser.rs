@@ -93,8 +93,10 @@ pub enum Ast {
         op: UnOp,
         operand: Box<Ast>,
     },
-    /// `[first:last]`: a range of columns of the current table (raw tokens).
+    /// `[first:last]` (current table, `table` empty) or `table[first:last]`:
+    /// a range of columns (raw tokens).
     RangeRef {
+        table: String,
         from: String,
         to: String,
     },
@@ -257,7 +259,14 @@ fn build(pair: Pair<'_, Rule>) -> Ast {
             let mut it = pair.into_inner();
             let from = it.next().unwrap().as_str().to_string();
             let to = it.next().unwrap().as_str().to_string();
-            Ast::RangeRef { from, to }
+            Ast::RangeRef { table: String::new(), from, to }
+        }
+        Rule::table_range => {
+            let mut it = pair.into_inner();
+            let table = it.next().unwrap().as_str().to_string();
+            let from = it.next().unwrap().as_str().to_string();
+            let to = it.next().unwrap().as_str().to_string();
+            Ast::RangeRef { table, from, to }
         }
         Rule::number => Ast::Number(pair.as_str().to_string()),
         Rule::string => Ast::String(pair.as_str().to_string()),
@@ -282,7 +291,7 @@ fn bin_op(s: &str) -> BinOp {
     match s {
         "||" | "OR" => BinOp::LogicalOr,
         "&&" | "AND" => BinOp::LogicalAnd,
-        "==" => BinOp::Eq,
+        "==" | "=" => BinOp::Eq,
         "!=" | "<>" => BinOp::Ne,
         ">" => BinOp::Gt,
         ">=" => BinOp::Gte,
@@ -413,7 +422,9 @@ mod tests {
         assert!(parse("NULLIF(1)").is_err());
         assert!(parse("true").is_err());
         assert!(parse("1e5").is_err());
-        assert!(parse("sales[a] + sales[b] = 1").is_err());
+        // Inside an expression a single "=" compares (as in Excel).
+        assert_eq!(rule("sales[a] + sales[b] = 1"), "eq");
+        assert_eq!(rule("IF(sales[a] = 1, 2, 3)"), "func_call");
         assert!(parse("").is_err());
     }
 

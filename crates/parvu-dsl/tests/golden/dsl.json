@@ -3649,10 +3649,13 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "error_kind": "parse"
+    "kind": {
+     "type": "scalar"
+    },
+    "sql": "SELECT sales.id + sales.qty = 1 FROM sales"
    },
    "preview": {
-    "error_kind": "parse"
+    "sql": "sales.id + sales.qty = 1"
    }
   },
   {
@@ -3660,10 +3663,13 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "error_kind": "parse"
+    "kind": {
+     "type": "scalar"
+    },
+    "sql": "SELECT sales.id = 1 FROM sales"
    },
    "preview": {
-    "error_kind": "parse"
+    "sql": "sales.id = 1"
    }
   },
   {
@@ -3671,10 +3677,13 @@
    "table": "sales",
    "catalog": "main",
    "expected": {
-    "error_kind": "parse"
+    "kind": {
+     "type": "scalar"
+    },
+    "sql": "SELECT UPPER(sales.id) = 1 FROM sales"
    },
    "preview": {
-    "error_kind": "parse"
+    "sql": "UPPER(sales.id) = 1"
    }
   },
   {
@@ -5637,6 +5646,1768 @@
     "description": "The value at a JSON path, as text.",
     "example": "JSON_EXTRACT_STRING(events[payload], '$.address.city')",
     "sql_name": "JSON_EXTRACT_STRING"
+   },
+   {
+    "name": "ROUNDUP",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "digits",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "0"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Rounds away from zero to `digits` decimals.",
+    "example": "ROUNDUP([price] * 1.18, 2)",
+    "sql_name": null
+   },
+   {
+    "name": "ROUNDDOWN",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "digits",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "0"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Rounds towards zero to `digits` decimals.",
+    "example": "ROUNDDOWN([price], 1)",
+    "sql_name": null
+   },
+   {
+    "name": "TRUNC",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "digits",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "0"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Cuts off the decimals after `digits` (towards zero).",
+    "example": "TRUNC([price])",
+    "sql_name": null
+   },
+   {
+    "name": "MROUND",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "multiple",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Rounds to the nearest multiple.",
+    "example": "MROUND([minutes], 15)",
+    "sql_name": null
+   },
+   {
+    "name": "INT",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Rounds down to the whole number below.",
+    "example": "INT([price])",
+    "sql_name": null
+   },
+   {
+    "name": "CEILING",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "significance",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "1"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Rounds up to a multiple of `significance`.",
+    "example": "CEILING([price], 0.05)",
+    "sql_name": null
+   },
+   {
+    "name": "FLOOR.MATH",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "significance",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "1"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Rounds down to a multiple of `significance` (Excel's FLOOR(number, significance) means the same).",
+    "example": "FLOOR.MATH([price], 0.5)",
+    "sql_name": null
+   },
+   {
+    "name": "LOG",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "base",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "10"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Logarithm in `base` (10 by default).",
+    "example": "LOG([value], 2)",
+    "sql_name": null
+   },
+   {
+    "name": "PI",
+    "params": [],
+    "return_type": "NUMERIC",
+    "description": "The number π.",
+    "example": "PI() * POWER([radius], 2)",
+    "sql_name": null
+   },
+   {
+    "name": "QUOTIENT",
+    "params": [
+     {
+      "name": "numerator",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "denominator",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The whole-number part of a division.",
+    "example": "QUOTIENT([minutes], 60)",
+    "sql_name": null
+   },
+   {
+    "name": "PRODUCT",
+    "params": [
+     {
+      "name": "number1",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "number2",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Multiplies its arguments (a range like [a:c] counts as its columns).",
+    "example": "PRODUCT([qty], [price])",
+    "sql_name": null
+   },
+   {
+    "name": "RAND",
+    "params": [],
+    "return_type": "NUMERIC",
+    "description": "A random number from 0 to 1 (new each time the table is read).",
+    "example": "RAND()",
+    "sql_name": null
+   },
+   {
+    "name": "RANDBETWEEN",
+    "params": [
+     {
+      "name": "bottom",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "top",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "A random whole number from `bottom` to `top` (new each time the table is read).",
+    "example": "RANDBETWEEN(1, 6)",
+    "sql_name": null
+   },
+   {
+    "name": "AVERAGE",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's average (same as AVG).",
+    "example": "[price] / AVERAGE([price])",
+    "sql_name": "AVG"
+   },
+   {
+    "name": "COUNTA",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "How many values the column has (empty ones left out).",
+    "example": "COUNTA([email])",
+    "sql_name": null
+   },
+   {
+    "name": "COUNTBLANK",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "How many values of the column are empty.",
+    "example": "COUNTBLANK([email])",
+    "sql_name": null
+   },
+   {
+    "name": "MEDIAN",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's median (middle value).",
+    "example": "MEDIAN([price])",
+    "sql_name": null
+   },
+   {
+    "name": "MODE",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's most frequent value.",
+    "example": "MODE([price])",
+    "sql_name": null
+   },
+   {
+    "name": "MODE.SNGL",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's most frequent value.",
+    "example": "MODE.SNGL([price])",
+    "sql_name": null
+   },
+   {
+    "name": "STDEV",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's standard deviation (sample).",
+    "example": "STDEV([price])",
+    "sql_name": null
+   },
+   {
+    "name": "STDEV.S",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's standard deviation (sample).",
+    "example": "STDEV.S([price])",
+    "sql_name": null
+   },
+   {
+    "name": "STDEV.P",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's standard deviation (whole population).",
+    "example": "STDEV.P([price])",
+    "sql_name": null
+   },
+   {
+    "name": "VAR",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's variance (sample).",
+    "example": "VAR([price])",
+    "sql_name": null
+   },
+   {
+    "name": "VAR.S",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's variance (sample).",
+    "example": "VAR.S([price])",
+    "sql_name": null
+   },
+   {
+    "name": "VAR.P",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's variance (whole population).",
+    "example": "VAR.P([price])",
+    "sql_name": null
+   },
+   {
+    "name": "LARGE",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "k",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The k-th largest value of the column.",
+    "example": "LARGE([score], 3)",
+    "sql_name": null
+   },
+   {
+    "name": "SMALL",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "k",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The k-th smallest value of the column.",
+    "example": "SMALL([score], 1)",
+    "sql_name": null
+   },
+   {
+    "name": "PERCENTILE",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "k",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's k-th percentile, k from 0 to 1.",
+    "example": "PERCENTILE([price], 0.9)",
+    "sql_name": null
+   },
+   {
+    "name": "PERCENTILE.INC",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "k",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's k-th percentile, k from 0 to 1.",
+    "example": "PERCENTILE.INC([price], 0.9)",
+    "sql_name": null
+   },
+   {
+    "name": "QUARTILE",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "quart",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's quartile: 0 minimum, 1, 2 (median), 3, 4 maximum.",
+    "example": "QUARTILE([price], 1)",
+    "sql_name": null
+   },
+   {
+    "name": "QUARTILE.INC",
+    "params": [
+     {
+      "name": "column",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "quart",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The column's quartile: 0 minimum, 1, 2 (median), 3, 4 maximum.",
+    "example": "QUARTILE.INC([price], 1)",
+    "sql_name": null
+   },
+   {
+    "name": "CORREL",
+    "params": [
+     {
+      "name": "column1",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "column2",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The correlation of two columns (-1 to 1).",
+    "example": "CORREL([ads], [sales])",
+    "sql_name": null
+   },
+   {
+    "name": "SUMPRODUCT",
+    "params": [
+     {
+      "name": "column1",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "column2",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Multiplies the columns row by row and adds it all up: the column total of the products.",
+    "example": "SUMPRODUCT([qty], [price])",
+    "sql_name": null
+   },
+   {
+    "name": "COUNTIF",
+    "params": [
+     {
+      "name": "range",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "How many rows meet the criteria: a value ('North', 5) or a comparison ('>10', '<>0', '>=2024-01-01'); * and ? are wildcards. With a column of this row, e.g. COUNTIF([region], [region]), it counts the rows like this one.",
+    "example": "COUNTIF([region], 'North')",
+    "sql_name": null
+   },
+   {
+    "name": "COUNTIFS",
+    "params": [
+     {
+      "name": "range1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "range2",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     },
+     {
+      "name": "criteria2",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "How many rows meet every criteria (pairs of range and criteria).",
+    "example": "COUNTIFS([region], 'North', [qty], '>5')",
+    "sql_name": null
+   },
+   {
+    "name": "SUMIF",
+    "params": [
+     {
+      "name": "range",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "sum_range",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The total of `sum_range` (or `range`) over the rows that meet the criteria.",
+    "example": "SUMIF([region], 'North', [amount])",
+    "sql_name": null
+   },
+   {
+    "name": "SUMIFS",
+    "params": [
+     {
+      "name": "sum_range",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "range1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The total of `sum_range` over the rows that meet every criteria.",
+    "example": "SUMIFS([amount], [region], 'North', [qty], '>5')",
+    "sql_name": null
+   },
+   {
+    "name": "AVERAGEIF",
+    "params": [
+     {
+      "name": "range",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "average_range",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The average of `average_range` (or `range`) over the rows that meet the criteria.",
+    "example": "AVERAGEIF([qty], '>0')",
+    "sql_name": null
+   },
+   {
+    "name": "AVERAGEIFS",
+    "params": [
+     {
+      "name": "average_range",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "range1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The average of `average_range` over the rows that meet every criteria.",
+    "example": "AVERAGEIFS([amount], [region], 'North')",
+    "sql_name": null
+   },
+   {
+    "name": "MAXIFS",
+    "params": [
+     {
+      "name": "max_range",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "range1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The largest `max_range` value among the rows that meet every criteria.",
+    "example": "MAXIFS([amount], [region], [region])",
+    "sql_name": null
+   },
+   {
+    "name": "MINIFS",
+    "params": [
+     {
+      "name": "min_range",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "range1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "criteria1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The smallest `min_range` value among the rows that meet every criteria.",
+    "example": "MINIFS([amount], [region], 'North')",
+    "sql_name": null
+   },
+   {
+    "name": "XLOOKUP",
+    "params": [
+     {
+      "name": "lookup_value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "lookup_column",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "return_column",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "if_not_found",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Finds `lookup_value` in a column of another table and returns the same row's value from another column; `if_not_found` (or empty) when there is no match.",
+    "example": "XLOOKUP([id], prices[id], prices[price], 0)",
+    "sql_name": null
+   },
+   {
+    "name": "VLOOKUP",
+    "params": [
+     {
+      "name": "lookup_value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "table_range",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "column_number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "range_lookup",
+      "logical_type": "BOOLEAN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Finds `lookup_value` in the first column of a range of another table (prices[id:price]) and returns column `column_number` of that row. Exact matches only.",
+    "example": "VLOOKUP([id], prices[id:price], 2, FALSE)",
+    "sql_name": null
+   },
+   {
+    "name": "TEXT",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "format_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The value as text in an Excel format: '0.00', '#,##0', '0%', 'dd.mm.yyyy', 'mmm yyyy', 'dddd', 'hh:mm'…",
+    "example": "TEXT([date], 'dd.mm.yyyy')",
+    "sql_name": null
+   },
+   {
+    "name": "ISBLANK",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE when the value is empty (NULL or empty text).",
+    "example": "ISBLANK([email])",
+    "sql_name": null
+   },
+   {
+    "name": "ISNUMBER",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE when the value is a number (not text that looks like one).",
+    "example": "ISNUMBER([amount])",
+    "sql_name": null
+   },
+   {
+    "name": "ISTEXT",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE when the value is text.",
+    "example": "ISTEXT([code])",
+    "sql_name": null
+   },
+   {
+    "name": "ISEVEN",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE for even numbers.",
+    "example": "ISEVEN([row_id])",
+    "sql_name": null
+   },
+   {
+    "name": "ISODD",
+    "params": [
+     {
+      "name": "number",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE for odd numbers.",
+    "example": "ISODD([row_id])",
+    "sql_name": null
+   },
+   {
+    "name": "NA",
+    "params": [],
+    "return_type": "UNKNOWN",
+    "description": "An empty value (Excel's #N/A).",
+    "example": "IF([qty] > 0, [qty], NA())",
+    "sql_name": null
+   },
+   {
+    "name": "IFERROR",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "value_if_error",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "`value`, or `value_if_error` when it fails (bad conversion, division by zero) or is empty.",
+    "example": "IFERROR([total] / [qty], 0)",
+    "sql_name": null
+   },
+   {
+    "name": "IFNA",
+    "params": [
+     {
+      "name": "value",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "value_if_na",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "`value`, or `value_if_na` when it is empty.",
+    "example": "IFNA(XLOOKUP([id], prices[id], prices[price]), 0)",
+    "sql_name": null
+   },
+   {
+    "name": "NOT",
+    "params": [
+     {
+      "name": "logical",
+      "logical_type": "BOOLEAN",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "Reverses TRUE and FALSE.",
+    "example": "NOT([returned])",
+    "sql_name": null
+   },
+   {
+    "name": "IFS",
+    "params": [
+     {
+      "name": "condition1",
+      "logical_type": "BOOLEAN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "value1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "condition2",
+      "logical_type": "BOOLEAN",
+      "required": false,
+      "description": ""
+     },
+     {
+      "name": "value2",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The value of the first condition that is TRUE; empty when none is. Pairs of condition, value.",
+    "example": "IFS([score] >= 90, 'A', [score] >= 80, 'B', TRUE, 'C')",
+    "sql_name": null
+   },
+   {
+    "name": "SWITCH",
+    "params": [
+     {
+      "name": "expression",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "value1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "result1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "default",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "Compares `expression` with each value and returns the matching result; an odd last argument is the default.",
+    "example": "SWITCH([code], 'N', 'North', 'S', 'South', 'Other')",
+    "sql_name": null
+   },
+   {
+    "name": "CHOOSE",
+    "params": [
+     {
+      "name": "index",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "value1",
+      "logical_type": "UNKNOWN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "value2",
+      "logical_type": "UNKNOWN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The value at position `index` (1, 2, …).",
+    "example": "CHOOSE(WEEKDAY([date], 2), 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')",
+    "sql_name": null
+   },
+   {
+    "name": "AND",
+    "params": [
+     {
+      "name": "logical1",
+      "logical_type": "BOOLEAN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "logical2",
+      "logical_type": "BOOLEAN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE when every argument is TRUE.",
+    "example": "AND([qty] > 0, [price] > 0)",
+    "sql_name": null
+   },
+   {
+    "name": "OR",
+    "params": [
+     {
+      "name": "logical1",
+      "logical_type": "BOOLEAN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "logical2",
+      "logical_type": "BOOLEAN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE when any argument is TRUE.",
+    "example": "OR([region] = 'North', [region] = 'East')",
+    "sql_name": null
+   },
+   {
+    "name": "XOR",
+    "params": [
+     {
+      "name": "logical1",
+      "logical_type": "BOOLEAN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "logical2",
+      "logical_type": "BOOLEAN",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE when an odd number of arguments is TRUE.",
+    "example": "XOR([paid], [refunded])",
+    "sql_name": null
+   },
+   {
+    "name": "MID",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "start",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "length",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "`length` characters starting at position `start` (1 is the first).",
+    "example": "MID([code], 3, 2)",
+    "sql_name": null
+   },
+   {
+    "name": "FIND",
+    "params": [
+     {
+      "name": "find_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "within_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "start",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "1"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Position of `find_text` in `within_text` (case-sensitive); empty when not found.",
+    "example": "FIND('-', [code])",
+    "sql_name": null
+   },
+   {
+    "name": "SEARCH",
+    "params": [
+     {
+      "name": "find_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "within_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "start",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "1"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Position of `find_text` in `within_text`, ignoring case; empty when not found.",
+    "example": "SEARCH('ltd', [company])",
+    "sql_name": null
+   },
+   {
+    "name": "SUBSTITUTE",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "old_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "new_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Replaces every `old_text` with `new_text`.",
+    "example": "SUBSTITUTE([phone], ' ', '')",
+    "sql_name": null
+   },
+   {
+    "name": "PROPER",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Capitalises the first letter of each word.",
+    "example": "PROPER([name])",
+    "sql_name": null
+   },
+   {
+    "name": "CLEAN",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Removes non-printable characters (line breaks, tabs…).",
+    "example": "CLEAN([comment])",
+    "sql_name": null
+   },
+   {
+    "name": "CONCATENATE",
+    "params": [
+     {
+      "name": "text1",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "text2",
+      "logical_type": "TEXT",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Joins texts (empty values count as empty text).",
+    "example": "CONCATENATE([first], ' ', [last])",
+    "sql_name": null
+   },
+   {
+    "name": "TEXTJOIN",
+    "params": [
+     {
+      "name": "delimiter",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "ignore_empty",
+      "logical_type": "BOOLEAN",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "text1",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "text2",
+      "logical_type": "TEXT",
+      "required": false,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Joins texts with `delimiter`, skipping empty ones when `ignore_empty` is TRUE. A range [a:c] counts as its columns.",
+    "example": "TEXTJOIN(', ', TRUE, [street], [city], [zip])",
+    "sql_name": null
+   },
+   {
+    "name": "VALUE",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The number in a text (thousands commas allowed); empty when it isn't one.",
+    "example": "VALUE([amount_text])",
+    "sql_name": null
+   },
+   {
+    "name": "REPT",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "times",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "Repeats `text`.",
+    "example": "REPT('*', [stars])",
+    "sql_name": null
+   },
+   {
+    "name": "EXACT",
+    "params": [
+     {
+      "name": "text1",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "text2",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "BOOLEAN",
+    "description": "TRUE when both texts are exactly equal, case included.",
+    "example": "EXACT([code], [code_check])",
+    "sql_name": null
+   },
+   {
+    "name": "TEXTBEFORE",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "delimiter",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The text before the first `delimiter`; empty when there is none.",
+    "example": "TEXTBEFORE([email], '@')",
+    "sql_name": null
+   },
+   {
+    "name": "TEXTAFTER",
+    "params": [
+     {
+      "name": "text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "delimiter",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "TEXT",
+    "description": "The text after the first `delimiter`; empty when there is none.",
+    "example": "TEXTAFTER([email], '@')",
+    "sql_name": null
+   },
+   {
+    "name": "DATE",
+    "params": [
+     {
+      "name": "year",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "month",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "day",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "DATE",
+    "description": "The date from a year, month and day; months and days past the end roll over (month 13 is January).",
+    "example": "DATE([year], [month], 1)",
+    "sql_name": null
+   },
+   {
+    "name": "TIME",
+    "params": [
+     {
+      "name": "hour",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "minute",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "second",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "UNKNOWN",
+    "description": "The time of day.",
+    "example": "TIME(9, 30, 0)",
+    "sql_name": null
+   },
+   {
+    "name": "SECOND",
+    "params": [
+     {
+      "name": "time",
+      "logical_type": "TIMESTAMP",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The seconds (0–59).",
+    "example": "SECOND([created])",
+    "sql_name": null
+   },
+   {
+    "name": "WEEKDAY",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "return_type",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "1"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The day of the week: 1 (Sunday) to 7 by default; type 2: 1 (Monday) to 7; type 3: 0 (Monday) to 6.",
+    "example": "WEEKDAY([date], 2)",
+    "sql_name": null
+   },
+   {
+    "name": "WEEKNUM",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "return_type",
+      "logical_type": "NUMERIC",
+      "required": false,
+      "description": "",
+      "default": "1"
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The week of the year; the week with 1 January is week 1. Weeks start on Sunday (type 1) or Monday (type 2).",
+    "example": "WEEKNUM([date])",
+    "sql_name": null
+   },
+   {
+    "name": "ISOWEEKNUM",
+    "params": [
+     {
+      "name": "date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The ISO week of the year (weeks start on Monday).",
+    "example": "ISOWEEKNUM([date])",
+    "sql_name": null
+   },
+   {
+    "name": "EDATE",
+    "params": [
+     {
+      "name": "start_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "months",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "DATE",
+    "description": "The date `months` months later (earlier when negative); 31 January + 1 is 28 or 29 February.",
+    "example": "EDATE([start], 3)",
+    "sql_name": null
+   },
+   {
+    "name": "EOMONTH",
+    "params": [
+     {
+      "name": "start_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "months",
+      "logical_type": "NUMERIC",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "DATE",
+    "description": "The last day of the month, `months` months later.",
+    "example": "EOMONTH([date], 0)",
+    "sql_name": null
+   },
+   {
+    "name": "DATEDIF",
+    "params": [
+     {
+      "name": "start_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "end_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "unit",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Complete years (\"Y\"), months (\"M\") or days (\"D\") between two dates; \"MD\" and \"YM\" give the days or months left over.",
+    "example": "DATEDIF([birth], TODAY(), 'Y')",
+    "sql_name": null
+   },
+   {
+    "name": "DAYS",
+    "params": [
+     {
+      "name": "end_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "start_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Days from `start_date` to `end_date`.",
+    "example": "DAYS([due], TODAY())",
+    "sql_name": null
+   },
+   {
+    "name": "NETWORKDAYS",
+    "params": [
+     {
+      "name": "start_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "end_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "Working days (Monday to Friday) from `start_date` to `end_date`, both included.",
+    "example": "NETWORKDAYS([start], [end])",
+    "sql_name": null
+   },
+   {
+    "name": "YEARFRAC",
+    "params": [
+     {
+      "name": "start_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     },
+     {
+      "name": "end_date",
+      "logical_type": "DATE",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "NUMERIC",
+    "description": "The fraction of a year between two dates (30/360, Excel's default basis).",
+    "example": "YEARFRAC([start], [end])",
+    "sql_name": null
+   },
+   {
+    "name": "DATEVALUE",
+    "params": [
+     {
+      "name": "date_text",
+      "logical_type": "TEXT",
+      "required": true,
+      "description": ""
+     }
+    ],
+    "return_type": "DATE",
+    "description": "The date in a text like 2024-03-31; empty when it isn't one.",
+    "example": "DATEVALUE([date_text])",
+    "sql_name": null
    }
   ],
   "methods": [

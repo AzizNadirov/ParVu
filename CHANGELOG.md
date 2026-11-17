@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- **Excel functions.** About 100 of Excel's most used functions work in formulas and expressions under their Excel names and argument order: `ROUNDUP`, `MROUND`, `IFS`, `SWITCH`, `IFERROR`, `PROPER`, `TEXTJOIN`, `TEXTBEFORE`, `DATEDIF`, `EOMONTH`, `NETWORKDAYS`, `AVERAGE`, `MEDIAN`, `LARGE`, `COUNTIF`, `SUMIFS`, `MAXIFS`, `XLOOKUP`, `VLOOKUP`, `TEXT` with Excel format codes, and more.
+  - Conditional totals take Excel's criteria (`"North"`, `">10"`, `"a*"`), and `COUNTIF([region], [region])` counts the rows like this one.
+  - `XLOOKUP` and `VLOOKUP` look up values in another open tab.
+  - A single `=` compares, as in Excel: `IF([region] = "North", 1, 0)`.
+  - **Help → Expression Language Guide** has a new **Excel functions** tab: every function by category with an example, and for the ones that don't fit a formula (INDEX, FILTER, OFFSET…) the menu that does the job. The guide has many more examples.
 - **Excel workbooks with several sheets.** A workbook opens on its first visible sheet, and a **Sheet: … ▾** button next to the table name lists every sheet (it lives in the table's header, so sheets never look like the tabs at the bottom):
   - **Show in This Tab** switches the tab to another sheet; **Open in New Tab** and **Open All Sheets as Tabs** show sheets side by side (as tables `book_q2_2024`…, ready to join).
   - **Rename, Hide / Unhide, Duplicate, Move Left / Right, Delete** change the workbook's sheets. Like cell edits, they are saved with the workbook (`Ctrl+S`); until then a deleted sheet can be restored, and the tab shows the unsaved dot.

@@ -92,6 +92,8 @@ pub struct Bootstrap {
     pub cast_types: Vec<&'static str>,
     pub parquet_compressions: Vec<&'static str>,
     pub functions: Vec<FunctionDef>,
+    /// Excel's functions and what to write for each in ParVu.
+    pub excel_functions: Vec<parvu_dsl::excel::ExcelEntry>,
     pub methods: BTreeMap<String, Vec<String>>,
     pub crash_report: Option<String>,
     pub initial_files: Vec<PathBuf>,
@@ -127,6 +129,7 @@ pub fn bootstrap(state: State<'_, AppState>, window: WebviewWindow) -> ApiResult
         cast_types: CAST_TYPES.to_vec(),
         parquet_compressions: PARQUET_COMPRESSIONS.to_vec(),
         functions: FunctionRegistry::default().all_functions().into_iter().cloned().collect(),
+        excel_functions: parvu_dsl::excel::catalog(),
         methods: methods_by_type(),
         crash_report: if is_first { lock(&state.pending_crash).take() } else { None },
         initial_files: if is_first { std::mem::take(&mut *lock(&state.initial_files)) } else { Vec::new() },

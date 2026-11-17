@@ -194,14 +194,27 @@ impl Resolver<'_> {
     }
 
     fn func_call(&self, name: &str, args: &[Ast]) -> Result<Expr, DslError> {
+        // Excel's FLOOR(number, significance); FLOOR(number) stays ParVu's.
+        let name = if name.eq_ignore_ascii_case("FLOOR") && args.len() == 2 { "FLOOR.MATH" } else { name };
         let upper = name.to_uppercase();
-        if let [Ast::RangeRef { from, to }] = args
+        if let [Ast::RangeRef { table, from, to }] = args
             && ROW_FUNCS.contains(&upper.as_str())
         {
-            return self.row_range(&upper, from, to);
+            return self.row_range(&upper, table, from, to);
         }
         if upper == "PREV" || upper == "NEXT" {
             return self.neighbour(&upper, args);
+        }
+        if crate::excel::VARIADIC.contains(&upper.as_str()) {
+            return self.variadic(&upper, args);
+        }
+        if crate::excel::CONDITIONAL.contains(&upper.as_str()) {
+            return self.conditional(&upper, args);
+        }
+        match upper.as_str() {
+            "XLOOKUP" | "VLOOKUP" => return self.lookup(&upper, args),
+            "TEXT" => return self.text(args),
+            _ => {}
         }
         let args = self.args(args)?;
         match name.to_uppercase().as_str() {
@@ -222,11 +235,27 @@ impl Resolver<'_> {
         })
     }
 
-    /// `SUM([q1:q4])` and friends: across the columns of one row, NULLs
-    /// skipped (a single column inside SUM stays the column's total).
-    fn row_range(&self, func: &str, from: &str, to: &str) -> Result<Expr, DslError> {
+    /// Arguments of a function that takes any number of them; a range
+    /// `[a:c]` counts as its columns.
+    fn spread_args(&self, args: &[Ast]) -> Result<Vec<Expr>, DslError> {
+        let mut out = Vec::new();
+        for a in args {
+            match a {
+                Ast::RangeRef { table, from, to } => out.extend(self.range_columns(table, from, to)?),
+                other => out.push(self.node(other)?),
+            }
+        }
+        out.iter().try_for_each(ensure_scalar)?;
+        Ok(out)
+    }
+
+    /// The columns of `[from:to]` (or `table[from:to]`), in table order.
+    fn range_columns(&self, table: &str, from: &str, to: &str) -> Result<Vec<Expr>, DslError> {
         let (from, to) = (column_name(from), column_name(to));
-        let table = self.bare_table(&from)?;
+        let table = if table.is_empty() { self.bare_table(&from)? } else { table.to_string() };
+        if !self.catalog.has_table(&table) {
+            return err(format!("Unknown table: '{table}'"));
+        }
         let columns = self.catalog.columns(&table);
         let position = |c: &str| {
             columns.iter().position(|x| x == c).ok_or_else(|| DslError::Resolve {
@@ -234,15 +263,215 @@ impl Resolver<'_> {
             })
         };
         let (a, b) = (position(&from)?, position(&to)?);
-        let picked = &columns[a.min(b)..=a.max(b)];
-        let args: Vec<Expr> = picked
+        Ok(columns[a.min(b)..=a.max(b)]
             .iter()
             .map(|c| Expr::ColumnRef {
                 logical_type: self.catalog.resolve_column(&table, c),
                 table: table.clone(),
                 column: c.clone(),
             })
-            .collect();
+            .collect())
+    }
+
+    /// Excel's functions with any number of arguments.
+    fn variadic(&self, func: &str, args: &[Ast]) -> Result<Expr, DslError> {
+        let args = self.spread_args(args)?;
+        let n = args.len();
+        let each = |range: std::ops::Range<usize>, f: &dyn Fn(usize) -> String, sep: &str| {
+            range.map(f).collect::<Vec<_>>().join(sep)
+        };
+        let need = |min: usize, usage: &str| -> Result<(), DslError> {
+            if n < min { err(format!("{func} needs {usage}")) } else { Ok(()) }
+        };
+        let (template, ty) = match func {
+            "AND" | "OR" => {
+                need(1, "at least one condition")?;
+                (each(0..n, &|i| format!("({{{i}}})"), if func == "AND" { " AND " } else { " OR " }), LogicalType::Boolean)
+            }
+            "XOR" => {
+                need(1, "at least one condition")?;
+                (format!("({}) % 2 = 1", each(0..n, &|i| format!("CAST(({{{i}}}) AS INTEGER)"), " + ")), LogicalType::Boolean)
+            }
+            "SUMPRODUCT" => {
+                need(2, "at least two columns")?;
+                let t = format!("sum({})", each(0..n, &|i| format!("({{{i}}})"), " * "));
+                return Ok(Expr::Template { template: t, args, logical_type: LogicalType::Numeric, aggregate: true });
+            }
+            "PRODUCT" => {
+                need(1, "at least one number")?;
+                (each(0..n, &|i| format!("COALESCE(({{{i}}}), 1)"), " * "), LogicalType::Numeric)
+            }
+            "CONCATENATE" => {
+                need(1, "at least one text")?;
+                (format!("concat({})", each(0..n, &|i| format!("({{{i}}})"), ", ")), LogicalType::Text)
+            }
+            "TEXTJOIN" => {
+                need(3, "a delimiter, TRUE or FALSE (skip empty values), and texts")?;
+                let texts = |skip: bool| {
+                    each(2..n, &|i| if skip { format!("NULLIF(CAST(({{{i}}}) AS VARCHAR), '')") } else { format!("COALESCE(CAST(({{{i}}}) AS VARCHAR), '')") }, ", ")
+                };
+                let t = match &args[1] {
+                    Expr::Literal { value: LiteralValue::Bool(b), .. } => format!("concat_ws(({{0}}), {})", texts(*b)),
+                    _ => format!("CASE WHEN ({{1}}) THEN concat_ws(({{0}}), {}) ELSE concat_ws(({{0}}), {}) END", texts(true), texts(false)),
+                };
+                (t, LogicalType::Text)
+            }
+            "IFS" => {
+                if n < 2 || n % 2 != 0 {
+                    return err("IFS takes pairs of condition and value, e.g. IFS([x] > 10, 'high', TRUE, 'low')");
+                }
+                let whens = each(0..n / 2, &|k| format!("WHEN ({{{}}}) THEN ({{{}}})", 2 * k, 2 * k + 1), " ");
+                (format!("CASE {whens} END"), args[1].logical_type())
+            }
+            "SWITCH" => {
+                if n < 3 {
+                    return err("SWITCH takes an expression, then pairs of value and result, and an optional default");
+                }
+                let pairs = (n - 1) / 2;
+                let whens = each(0..pairs, &|k| format!("WHEN ({{{}}}) THEN ({{{}}})", 1 + 2 * k, 2 + 2 * k), " ");
+                let default = if (n - 1) % 2 == 1 { format!(" ELSE ({{{}}})", n - 1) } else { String::new() };
+                (format!("CASE ({{0}}) {whens}{default} END"), args[2].logical_type())
+            }
+            _ => {
+                // CHOOSE
+                need(2, "an index and at least one value")?;
+                let whens = each(1..n, &|i| format!("WHEN {i} THEN ({{{i}}})"), " ");
+                (format!("CASE CAST(({{0}}) AS BIGINT) {whens} END"), args[1].logical_type())
+            }
+        };
+        Ok(Expr::Template { template, args, logical_type: ty, aggregate: false })
+    }
+
+    /// COUNTIF and friends. Criteria that are values ('North', '>10') make a
+    /// column total; a criterion that is the range's own column
+    /// (COUNTIF([region], [region])) compares with this row: a window.
+    fn conditional(&self, func: &str, args: &[Ast]) -> Result<Expr, DslError> {
+        let args = self.args(args)?;
+        args.iter().try_for_each(ensure_scalar)?;
+        let n = args.len();
+        let usage = |u: &str| err(format!("{func} takes {u}"));
+        // (index of the values to total, first criteria pair)
+        let (value, first) = match func {
+            "COUNTIF" if n == 2 => (None, 0),
+            "COUNTIF" => return usage("a range and a criteria, e.g. COUNTIF([region], 'North')"),
+            "COUNTIFS" if n >= 2 && n % 2 == 0 => (None, 0),
+            "COUNTIFS" => return usage("pairs of range and criteria"),
+            "SUMIF" | "AVERAGEIF" if n == 2 || n == 3 => (Some(if n == 3 { 2 } else { 0 }), 0),
+            "SUMIF" | "AVERAGEIF" => return usage("a range, a criteria and optionally the values to add"),
+            _ if n >= 3 && n % 2 == 1 => (Some(0), 1),
+            _ => return usage("the values, then pairs of range and criteria"),
+        };
+        let mut conds = Vec::new();
+        let mut parts = Vec::new();
+        // SUMIF / AVERAGEIF: one pair, then the values to total.
+        let end = if func == "SUMIF" || func == "AVERAGEIF" { 2 } else { n };
+        for k in (first..end).step_by(2) {
+            let (r, c) = (k, k + 1);
+            match &args[c] {
+                Expr::Literal { value, .. } => conds.push(crate::excel::criterion(r, value)),
+                e if *e == args[r] => parts.push(format!("({{{r}}})")),
+                _ => {
+                    return err(format!(
+                        "{func}'s criteria is a value ('North', '>10') or the range's own column for this row, e.g. COUNTIF([region], [region])"
+                    ));
+                }
+            }
+        }
+        let agg = match (func, value) {
+            (f, _) if f.starts_with("COUNT") => "count(*)".to_string(),
+            (f, Some(v)) if f.starts_with("SUM") => format!("sum(({{{v}}}))"),
+            (f, Some(v)) if f.starts_with("AVERAGE") => format!("avg(({{{v}}}))"),
+            ("MAXIFS", Some(v)) => format!("max(({{{v}}}))"),
+            (_, Some(v)) => format!("min(({{{v}}}))"),
+            _ => unreachable!(),
+        };
+        let filter = if conds.is_empty() { String::new() } else { format!(" FILTER (WHERE {})", conds.join(" AND ")) };
+        let (template, aggregate) = if parts.is_empty() {
+            (format!("{agg}{filter}"), true)
+        } else {
+            (format!("{agg}{filter} OVER (PARTITION BY {})", parts.join(", ")), false)
+        };
+        Ok(Expr::Template { template, args, logical_type: LogicalType::Numeric, aggregate })
+    }
+
+    /// XLOOKUP(value, other[key], other[result], [if_not_found]) and
+    /// VLOOKUP(value, other[key:…], column, [FALSE]): the value of the first
+    /// matching row of another table.
+    fn lookup(&self, func: &str, args: &[Ast]) -> Result<Expr, DslError> {
+        let quote = |s: &str| format!("\"{}\"", s.replace('"', "\"\""));
+        let (value, table, key, result, fallback) = if func == "XLOOKUP" {
+            if !(3..=4).contains(&args.len()) {
+                return err("XLOOKUP takes a value, the column to search and the column to return, e.g. XLOOKUP([id], prices[id], prices[price])");
+            }
+            let key = self.node(&args[1])?;
+            let result = self.node(&args[2])?;
+            let (Expr::ColumnRef { table: t1, column: k, .. }, Expr::ColumnRef { table: t2, column: r, .. }) = (&key, &result) else {
+                return err("XLOOKUP searches and returns columns of another table, e.g. prices[id] and prices[price]");
+            };
+            if t1 != t2 {
+                return err("XLOOKUP's search and return columns must come from the same table");
+            }
+            (self.node(&args[0])?, t1.clone(), k.clone(), r.clone(), args.get(3).map(|a| self.node(a)).transpose()?)
+        } else {
+            if !(3..=4).contains(&args.len()) {
+                return err("VLOOKUP takes a value, a range of another table and a column number, e.g. VLOOKUP([id], prices[id:price], 2)");
+            }
+            let Ast::RangeRef { table, from, to } = &args[1] else {
+                return err("VLOOKUP's second argument is a range of another table, e.g. prices[id:price]");
+            };
+            let cols = self.range_columns(table, from, to)?;
+            let Expr::Literal { value: LiteralValue::Int(n), .. } = self.node(&args[2])? else {
+                return err("VLOOKUP's column number is a whole number, e.g. 2");
+            };
+            let n: usize = n.parse().unwrap_or(0);
+            if n == 0 || n > cols.len() {
+                return err(format!("VLOOKUP's range has {} columns; the column number must be 1 to {}", cols.len(), cols.len()));
+            }
+            if let Some(a) = args.get(3)
+                && !matches!(self.node(a)?, Expr::Literal { value: LiteralValue::Bool(false), .. })
+            {
+                return err("VLOOKUP finds exact matches only: write FALSE as the last argument, or leave it out");
+            }
+            let column = |e: &Expr| match e {
+                Expr::ColumnRef { table, column, .. } => (table.clone(), column.clone()),
+                _ => unreachable!(),
+            };
+            let (t, k) = column(&cols[0]);
+            let (_, r) = column(&cols[n - 1]);
+            (self.node(&args[0])?, t, k, r, None)
+        };
+        if self.current == Some(table.as_str()) {
+            return err(format!("{func} looks up values in another open table"));
+        }
+        ensure_scalar(&value)?;
+        let found = format!(
+            "SELECT __pv_lookup.{} FROM {} AS __pv_lookup WHERE __pv_lookup.{} = ({{0}}) LIMIT 1",
+            quote(&result),
+            quote(&table),
+            quote(&key)
+        );
+        let (template, args) = match fallback {
+            Some(f) => (format!("COALESCE(({found}), ({{1}}))"), vec![value, f]),
+            None => (format!("({found})"), vec![value]),
+        };
+        Ok(Expr::Template { template, args, logical_type: LogicalType::Unknown, aggregate: false })
+    }
+
+    /// TEXT(value, 'format'): Excel's format codes.
+    fn text(&self, args: &[Ast]) -> Result<Expr, DslError> {
+        let args = self.args(args)?;
+        let [value, Expr::Literal { value: LiteralValue::Str(format), .. }] = args.as_slice() else {
+            return err("TEXT takes a value and an Excel format in quotes, e.g. TEXT([date], 'dd.mm.yyyy')");
+        };
+        ensure_scalar(value)?;
+        let template = crate::excel::text_format(format).map_err(|m| DslError::Resolve { message: m })?;
+        Ok(Expr::Template { template, args: vec![value.clone()], logical_type: LogicalType::Text, aggregate: false })
+    }
+
+    /// `SUM([q1:q4])` and friends: across the columns of one row, NULLs
+    /// skipped (a single column inside SUM stays the column's total).
+    fn row_range(&self, func: &str, table: &str, from: &str, to: &str) -> Result<Expr, DslError> {
+        let args = self.range_columns(table, from, to)?;
         let each = |f: &dyn Fn(usize) -> String, sep: &str| (0..args.len()).map(f).collect::<Vec<_>>().join(sep);
         let sum = || each(&|i| format!("COALESCE({{{i}}}, 0)"), " + ");
         let count = || each(&|i| format!("CAST({{{i}}} IS NOT NULL AS INTEGER)"), " + ");
@@ -253,7 +482,7 @@ impl Resolver<'_> {
             "MIN" => (format!("LEAST({})", each(&|i| format!("{{{i}}}"), ", ")), args[0].logical_type()),
             _ => (format!("GREATEST({})", each(&|i| format!("{{{i}}}"), ", ")), args[0].logical_type()),
         };
-        Ok(Expr::Template { template, args, logical_type: ty })
+        Ok(Expr::Template { template, args, logical_type: ty, aggregate: false })
     }
 
     /// `PREV([x])`, `NEXT([x], 2)`: the value `n` rows before or after, in
@@ -279,6 +508,7 @@ impl Resolver<'_> {
             template: format!("{window}({{0}}, {n}) OVER ()"),
             logical_type: args[0].logical_type(),
             args,
+            aggregate: false,
         })
     }
 

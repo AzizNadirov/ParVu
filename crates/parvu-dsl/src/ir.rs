@@ -114,6 +114,9 @@ pub enum Expr {
         template: String,
         args: Vec<Expr>,
         logical_type: LogicalType,
+        /// It aggregates the whole table (a column total in formulas).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        aggregate: bool,
     },
     /// Drop rows where `column` is NULL (`null_value` = `Null`) or equals the
     /// sentinel `null_value` (real NULLs are then kept).

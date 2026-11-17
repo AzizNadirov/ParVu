@@ -259,6 +259,22 @@ fn golden_registry() {
             })
         })
         .collect();
+    // Regenerating after adding functions on purpose:
+    // GOLDEN_REGISTRY_OUT=/path cargo test --test golden golden_registry
+    // writes the registry as computed, to splice into dsl.json.
+    if let Ok(out) = std::env::var("GOLDEN_REGISTRY_OUT") {
+        let mut by_type = serde_json::Map::new();
+        for lt in LogicalType::ALL {
+            by_type.insert(lt.name().to_string(), json!(reg.methods_for_type(lt)));
+        }
+        let mut targets = serde_json::Map::new();
+        for m in reg.all_methods() {
+            targets.insert(m.clone(), json!(reg.lookup_method(&m).map(|f| f.name.clone())));
+        }
+        let dump = json!({ "functions": functions, "methods": reg.all_methods(), "methods_for_type": by_type, "method_targets": targets });
+        std::fs::write(out, serde_json::to_string(&dump).unwrap()).unwrap();
+        return;
+    }
     assert_eq!(Value::Array(functions), want["functions"]);
     assert_eq!(json!(reg.all_methods()), want["methods"]);
 

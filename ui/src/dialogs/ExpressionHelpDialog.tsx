@@ -3,7 +3,7 @@ import type { Ui } from "../lib/ui";
 import type { Translate } from "../lib/i18n";
 import { Dialog } from "../components/Dialog";
 import { Markdown, useAutoFocus } from "./common";
-import { filterFunctions, formatSignature, groupFunctions } from "./logic";
+import { excelGroups, filterFunctions, formatSignature, groupFunctions } from "./logic";
 import "./dialogs.css";
 
 export function expressionGuideMarkdown(t: Translate): string {
@@ -33,14 +33,32 @@ export function expressionGuideMarkdown(t: Translate): string {
   return parts.join("\n\n");
 }
 
-type Tab = "guide" | "functions";
+type Tab = "guide" | "functions" | "excel";
+
+/** A description with `code` spans. */
+function Described({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("`").map((part, i) => (i % 2 === 1 ? <code key={i}>{part}</code> : <span key={i}>{part}</span>))}
+    </>
+  );
+}
 
 function ExpressionHelpDialog({ ui, close }: { ui: Ui; close: () => void }) {
   const t = ui.t;
   const [tab, setTab] = useState<Tab>("guide");
   const [query, setQuery] = useState("");
   const guide = useMemo(() => expressionGuideMarkdown(t), [t]);
-  const groups = useMemo(() => groupFunctions(filterFunctions(ui.boot.functions, query)), [ui.boot.functions, query]);
+  const excelEntries = useMemo(() => ui.boot.excel_functions ?? [], [ui.boot.excel_functions]);
+  const groups = useMemo(
+    () =>
+      groupFunctions(
+        filterFunctions(ui.boot.functions, query),
+        excelEntries.map((e) => e.function ?? ""),
+      ),
+    [ui.boot.functions, query, excelEntries],
+  );
+  const excel = useMemo(() => excelGroups(excelEntries, ui.boot.functions, query), [excelEntries, ui.boot.functions, query]);
   const searchRef = useAutoFocus<HTMLInputElement>();
   const methods = Object.entries(ui.boot.methods ?? {}).filter(([, m]) => m.length > 0);
 
@@ -63,13 +81,78 @@ function ExpressionHelpDialog({ ui, close }: { ui: Ui; close: () => void }) {
           role="tab"
           aria-selected={tab === "functions"}
           className={tab === "functions" ? "active" : ""}
-          onClick={() => setTab("functions")}
+          onClick={() => {
+            setTab("functions");
+            window.setTimeout(() => searchRef.current?.focus(), 0);
+          }}
         >
           {t("dialog.expr_help.reference")}
         </button>
+        {excelEntries.length > 0 && (
+          <button role="tab" aria-selected={tab === "excel"} className={tab === "excel" ? "active" : ""} onClick={() => {
+              setTab("excel");
+              window.setTimeout(() => searchRef.current?.focus(), 0);
+            }}>
+            {t("dialog.expr_help.excel")}
+          </button>
+        )}
       </div>
       {tab === "guide" ? (
         <Markdown source={guide} />
+      ) : tab === "excel" ? (
+        <div className="col pv-fill">
+          <div className="pv-hint">{t("dialog.expr_help.excel_intro")}</div>
+          <input
+            ref={searchRef}
+            type="search"
+            placeholder={t("dialog.expr_help.search")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {excel.length === 0 && <div className="muted">{t("dialog.expr_help.no_results")}</div>}
+          <div className="doc pv-selectable">
+            {excel.map(([category, rows]) => (
+              <section key={category}>
+                <h3>{t(`excel.cat.${category}`)}</h3>
+                <table className="simple pv-func-table">
+                  <thead>
+                    <tr>
+                      <th>{t("dialog.expr_help.col.excel")}</th>
+                      <th>{t("dialog.expr_help.col.parvu")}</th>
+                      <th>{t("dialog.expr_help.col.description")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ entry, def }) => (
+                      <tr key={entry.name}>
+                        <td>
+                          <code>{entry.name}</code>
+                        </td>
+                        <td>{def ? <code>{formatSignature(def)}</code> : <span className="muted">{t("dialog.expr_help.not_a_function")}</span>}</td>
+                        <td>
+                          {def ? (
+                            <>
+                              <Described text={def.description} />
+                              {def.example && (
+                                <div className="small">
+                                  {t("dialog.expr_help.example")} <code>= {def.example}</code>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {t("dialog.expr_help.use_instead")} <strong>{entry.instead}</strong>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="col pv-fill">
           <div className="pv-hint">{t("expr.functions_text")}</div>
@@ -104,7 +187,7 @@ function ExpressionHelpDialog({ ui, close }: { ui: Ui; close: () => void }) {
                           {f.return_type && <div className="muted small">→ {f.return_type}</div>}
                         </td>
                         <td>
-                          {f.description}
+                          <Described text={f.description} />
                           {f.params.length > 0 && (
                             <ul className="small">
                               {f.params.map((p) => (
