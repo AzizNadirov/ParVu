@@ -9,6 +9,7 @@ import {
   mdiCodeBraces,
   mdiCodeBrackets,
   mdiDecimal,
+  mdiFunctionVariant,
   mdiFileTreeOutline,
   mdiHelpCircleOutline,
   mdiNumeric,
@@ -50,6 +51,7 @@ export function headerIcons(): Record<string, (p: { fgColor: string; bgColor: st
   const map: Record<string, (p: { fgColor: string; bgColor: string }) => string> = {};
   for (const [family, path] of Object.entries(FAMILY_ICON)) map[`pv-${family}`] = sprite(path);
   map["pv-ambiguous"] = sprite(mdiCalendarQuestion);
+  map["pv-formula"] = sprite(mdiFunctionVariant);
   return map;
 }
 

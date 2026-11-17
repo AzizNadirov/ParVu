@@ -32,8 +32,11 @@ import {
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
+import { formulaBody, formulaRefs, newFormulaName, refColors, refFor } from "./lib/formula";
+import { FormulaBar, type FormulaBarHandle } from "./components/FormulaBar";
+import { isDark } from "./lib/chart";
 import { DATE_FILTERS, EXTRACT_FNS, fnLabelKey, hasTime, isDateFamily, previewValues, TEXT_FNS, type FnName } from "./lib/colfn";
-import { applyThemeCss } from "./lib/theme";
+import { applyThemeCss, resolvedColor } from "./lib/theme";
 import { UiContext, type Closer, type MessageButton, type Ui } from "./lib/ui";
 import { formatRows, pythonTuple } from "./lib/copy";
 import type { ExprSchema } from "./lib/exprComplete";
@@ -179,6 +182,10 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [editorText, setEditorText] = useState("");
   const [mode, setMode] = useState<EditorMode>("sql");
   const [page, setPage] = useState<Page | null>(null);
+  // The column formula being written in the formula bar, if any.
+  const [formulaEdit, setFormulaEdit] = useState<{ name: string; isNew: boolean; after: string | null; source: string; error: string } | null>(null);
+  const [currentCell, setCurrentCell] = useState<{ row: number; col: number } | null>(null);
+  const formulaBar = useRef<FormulaBarHandle>(null);
   // How each column of the active tab's CSV file is read ("Read as").
   const [sourceCols, setSourceCols] = useState<SourceColumn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -858,9 +865,19 @@ export function App({ boot }: { boot: Bootstrap }) {
     return entries;
   };
 
+  const formulaMenu = (column: string): MenuEntry[] =>
+    formulaNames.includes(column)
+      ? [
+          { label: t("formula.edit"), onSelect: () => editFormula(column) },
+          { label: t("formula.remove"), onSelect: () => void removeFormula(column) },
+          { type: "separator" },
+        ]
+      : [{ label: t("formula.new_after"), onSelect: () => startFormula(column) }, { type: "separator" }];
+
   const headerMenu = (column: string): MenuEntry[] => [
     { label: t("context.copy_column"), onSelect: () => void copyText(column, t("status.copied_name")) },
     { type: "separator" },
+    ...formulaMenu(column),
     ...readAsMenu(column),
     ...typeMenu(column),
     {
@@ -970,6 +987,11 @@ export function App({ boot }: { boot: Bootstrap }) {
   const editCell = useCallback(
     async (row: number, column: string, value: Cell) => {
       if (!activeTab || !page) return;
+      // "=..." typed into a cell starts a formula column after it.
+      if (value?.trim().startsWith("=")) {
+        startFormula(column, formulaBody(value));
+        return;
+      }
       if (!page.editable) {
         status(t("status.read_only"), 4000);
         return;
@@ -983,8 +1005,58 @@ export function App({ boot }: { boot: Bootstrap }) {
         status(t("status.edit_rejected", { error: errorMessage(e) }), 8000);
       }
     },
+    // startFormula is a plain function of this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeTab, page, upsertTab, loadPage, status, t],
   );
+
+  // ------------------------------------------------------------ formulas
+  const formulas = activeTab?.formulas ?? [];
+  const formulaNames = formulas.map((f) => f.name);
+  /** Start a new formula column after `after` (default: the selected column). */
+  const startFormula = (after?: string | null, source = "") => {
+    const cols = page?.columns.map((c) => c.name) ?? [];
+    const at = after ?? (currentCell ? (cols[currentCell.col] ?? null) : null);
+    setFormulaEdit({ name: newFormulaName([...cols, ...formulaNames]), isNew: true, after: at, source, error: "" });
+  };
+  const editFormula = (name: string) => {
+    const f = formulas.find((x) => x.name === name);
+    if (f) setFormulaEdit({ name: f.name, isNew: false, after: f.after, source: f.source, error: "" });
+  };
+  const applyFormula = async () => {
+    const fe = formulaEdit;
+    if (!activeTab || !fe) return;
+    try {
+      const s = await api.setFormula(activeTab.id, fe.name.trim(), fe.source, fe.after);
+      setFormulaEdit(null);
+      upsertTab(s);
+      await loadPage(activeTab.id, page?.page ?? 1);
+      void refreshSchema();
+      const last = s.steps[s.steps.length - 1];
+      if (last) status(t("steps.applied", { step: stepText(t, last) }), 4000);
+    } catch (e) {
+      setFormulaEdit({ ...fe, error: errorMessage(e) });
+    }
+  };
+  const removeFormula = async (name: string) => {
+    if (!activeTab) return;
+    await mutate(activeTab.id, () => api.removeFormula(activeTab.id, name), t("error.operation_failed"));
+  };
+  // While writing a formula, its references are coloured in the grid too.
+  const darkTheme = useMemo(() => isDark(resolvedColor("var(--md-surface)", "#ffffff")), [themeKey]);
+  const formulaHighlights = useMemo(
+    () => (formulaEdit ? refColors(formulaRefs(formulaEdit.source), darkTheme) : undefined),
+    [formulaEdit, darkTheme],
+  );
+  // What the bar shows while not editing: the formula of a formula column,
+  // or the selected cell's value.
+  const barIdle = (() => {
+    if (!page || !currentCell) return { target: null as string | null, value: "" };
+    const name = page.columns[currentCell.col]?.name;
+    const f = formulas.find((x) => x.name === name);
+    if (f) return { target: f.name, value: f.source };
+    return { target: null, value: page.rows[currentCell.row]?.[currentCell.col] ?? "" };
+  })();
 
   const runReplace = useCallback(
     async (selected?: string) => {
@@ -1724,6 +1796,23 @@ export function App({ boot }: { boot: Bootstrap }) {
               onUndo={() => void undo()}
               busy={busy}
             />
+            <FormulaBar
+              ref={formulaBar}
+              t={t}
+              schema={schema}
+              dark={darkTheme}
+              editing={!!formulaEdit}
+              target={formulaEdit ? formulaEdit.name : barIdle.target}
+              isNew={!!formulaEdit?.isNew}
+              onNameChange={(name) => formulaEdit && setFormulaEdit({ ...formulaEdit, name })}
+              value={formulaEdit ? formulaEdit.source : barIdle.value}
+              error={formulaEdit?.error ?? ""}
+              onStart={() => (barIdle.target ? editFormula(barIdle.target) : startFormula())}
+              onNew={() => startFormula()}
+              onChange={(source) => formulaEdit && setFormulaEdit({ ...formulaEdit, source, error: "" })}
+              onApply={() => void applyFormula()}
+              onCancel={() => setFormulaEdit(null)}
+            />
             <section className="grid-panel">
               <DataGrid
                 ref={grid}
@@ -1732,7 +1821,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                 themeKey={themeKey}
                 nullText={t("grid.null")}
                 select={gridSelect}
-                onHeaderClick={(c) => void sortBy(c)}
+                onHeaderClick={(c) => (formulaEdit ? formulaBar.current?.insert(refFor(c)) : void sortBy(c))}
                 onHeaderMenu={(c, x, y) => setMenu({ x, y, items: headerMenu(c) })}
                 onCellMenu={(r, c, x, y) => setMenu({ x, y, items: cellMenu(r, c) })}
                 onEdit={(r, c, v) => void editCell(r, c, v)}
@@ -1742,6 +1831,10 @@ export function App({ boot }: { boot: Bootstrap }) {
                 formats={st?.formats ?? NO_FORMATS}
                 ranges={st?.ranges ?? NO_RANGES}
                 sourceColumns={sourceCols}
+                formulaColumns={formulaNames}
+                highlights={formulaHighlights}
+                onCurrentCell={(row, col) => setCurrentCell({ row, col })}
+                onFormulaCell={editFormula}
               />
               {busy && <div className="busy-bar" />}
             </section>

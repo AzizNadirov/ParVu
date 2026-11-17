@@ -122,8 +122,8 @@ All fills are **cell edits**: they need an editable tab (no transform applied, a
 
 | Phase | Content | Size |
 |---|---|---|
-| **F1. Formula layer** | `Formula`, the edits view split from the formula view, dependency order and cycle check, `StepKind::Formula`, read-only formula cells, values in save and export, `[col]` shorthand in the language; core and app commands; tests on Parquet and CSV (live recompute after a cell edit, undo, a step after a formula, a large file stays lazy). | M |
-| **F2. Formula bar** | The bar with CodeMirror highlighting and autocomplete, `=` to start, errors at their position, coloured references in editor and grid, click and Shift+click to insert references, *fx* icon, Edit / Convert to values / Remove in the column menu. | M |
+| **F1. Formula layer** (done, #44) | `Formula`, the edits view split from the formula view, dependency order and cycle check, `StepKind::Formula`, read-only formula cells, values in save and export, `[col]` shorthand in the language; core and app commands; tests on Parquet and CSV (live recompute after a cell edit, undo, a step after a formula, a large file stays lazy). | M |
+| **F2. Formula bar** (done) | The bar with CodeMirror highlighting and autocomplete, `=` in a cell or the *fx* button to start, errors under the bar, coloured references in editor and grid, click a header to insert a reference, *fx* icon, Edit / Remove / New formula column in the column menu. Moved to F4: Shift+click ranges (with `[a:c]`), Convert to values, formulas in Table Info, error positions underlined. | M |
 | **F3. Filling** | Fill handle with series rules, fill up / left / right, Ctrl+R; tests for every rule. | M |
 | **F4. More formula power** | Cached column totals, ranges `[a:c]`, `PREV` / `NEXT`, formulas for AI clients (an MCP operation with approval cards), formulas remembered per file, Series… dialog. | M |
 
