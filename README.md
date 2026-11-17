@@ -172,9 +172,9 @@ parvu mcp --allow-dir ~/data      # MCP server for AI clients, no window
 4. **Expression mode** - switch the editor to Expression and write, for example:
    - `sales[discount] = sales[price] * 0.1` to add a computed column
    - `DROP_DUPLICATES(sales[id], sales[name], 'first')` to deduplicate
-5. **Data and Reshape menus** - filter rows, fill missing values, sort by several columns, group by, pivot, unpivot, value counts, describe; Operations has running totals, ranks and rolling values
-6. **Column menu** - right-click a header to sort, filter, see value counts, a chart or statistics, fill missing values, transform (rename, change type, split, bin…), freeze columns or add conditional formatting
-7. **Cell menu** - right-click cells to copy them as TSV, CSV or Markdown, filter by a value or a condition, fill down, or set a value to NULL
+5. **Rows, Column and Table menus** - Rows: filter, sort, drop or mark duplicates; Column: formulas, types, text and date functions, replace, fill, set values on matching rows, split, bin, running totals; Table: group by, pivot, unpivot, value counts, describe, join, append - each table operation opens its result in a new tab
+6. **Header menu** - right-click a header for the same column groups plus sort, filter, new tables from the column, freeze and conditional formatting
+7. **Cell menu** - right-click cells to copy them (Copy As: CSV, Markdown), filter by a value or a condition, fill down, or set a value to NULL
 8. **Edit** - type into a cell; edits are highlighted and listed as steps
 9. **Undo** - `Ctrl+Z` or the Undo button in Applied Steps
 10. **Save** - `Ctrl+S` writes edits and transforms to the file; Applied Steps clears afterwards
