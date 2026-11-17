@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { jobResult } from "../lib/jobs";
+import { useEffect, useRef, useState } from "react";
 import type { Ui, Closer } from "../lib/ui";
 import { api, errorMessage } from "../lib/api";
 import type { JsonKey, Operation } from "../lib/api";
@@ -23,10 +24,14 @@ function ExpandJsonDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | 
   const [full, setFull] = useState(false);
   const [error, setError] = useState("");
 
+  const running = useRef<(() => void) | null>(null);
   const load = async (all: boolean) => {
     setScanning(true);
+    const job = api.jsonKeys(a.tabId, a.column, all, all ? { label: t("job.json_keys", { column: a.column }) } : undefined);
+    running.current = job.cancel;
     try {
-      const k = await api.jsonKeys(a.tabId, a.column, all);
+      const k = await jobResult(job);
+      if (k === null) return;
       setKeys(k);
       // Keep the user's choice for known keys; new keys start ticked.
       setChecked((prev) => new Set(k.map((x) => x.name).filter((n) => !keys || prev.has(n) || !keys.some((o) => o.name === n))));
@@ -35,11 +40,14 @@ function ExpandJsonDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | 
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      running.current = null;
       setScanning(false);
     }
   };
   useEffect(() => {
     void load(false);
+    // A scan still running when the dialog closes is stopped.
+    return () => running.current?.();
     // Once per dialog.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

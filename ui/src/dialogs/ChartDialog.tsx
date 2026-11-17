@@ -1,3 +1,5 @@
+import { JobProgress } from "../components/JobProgress";
+import { isCancelled } from "../lib/jobs";
 import { useMemo, useRef, useState } from "react";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type { Ui, Closer } from "../lib/ui";
@@ -85,7 +87,9 @@ function ChartDialog({ ui, close, a }: { ui: Ui; close: Closer<void>; a: Args })
   const [table, setTable] = useState(false);
   const [data, setData] = useState<ChartData | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  // The running chart query: progress, and Stop.
+  const [running, setRunning] = useState<{ percent: number | null; cancel(): void } | null>(null);
+  const loading = running !== null;
   const svg = useRef<SVGSVGElement>(null);
   const ink = useMemo(resolveInk, []);
   const dark = isDark(ink.surface);
@@ -109,18 +113,22 @@ function ChartDialog({ ui, close, a }: { ui: Ui; close: Closer<void>; a: Args })
       setData(null);
       return;
     }
-    setLoading(true);
-    api
-      .chartData(a.tabId, s)
+    // A newer spec replaces the running query (the backend cancels it too).
+    const job = api.chartData(a.tabId, s, {
+      onProgress: (p) => !cancelled && p.percent !== undefined && setRunning((r) => r && { ...r, percent: p.percent ?? null }),
+    });
+    setRunning({ percent: null, cancel: job.cancel });
+    job.result
       .then((d) => {
         if (cancelled) return;
         setData(d);
         setError("");
       })
-      .catch((e) => !cancelled && (setData(null), setError(errorMessage(e))))
-      .finally(() => !cancelled && setLoading(false));
+      .catch((e) => !cancelled && !isCancelled(e) && (setData(null), setError(errorMessage(e))))
+      .finally(() => !cancelled && setRunning(null));
     return () => {
       cancelled = true;
+      job.cancel();
     };
   });
 
@@ -291,6 +299,9 @@ function ChartDialog({ ui, close, a }: { ui: Ui; close: Closer<void>; a: Args })
           </>
         )}
       </div>
+      {running && (
+        <JobProgress t={t} label={t("job.chart")} percent={running.percent} onCancel={() => (running.cancel(), setRunning(null))} />
+      )}
       <div className={`pv-chart-box${loading && data ? " refreshing" : ""}`}>
         {error ? (
           <div className="pv-error-title">{error}</div>

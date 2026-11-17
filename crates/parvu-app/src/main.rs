@@ -5,6 +5,7 @@ mod ai_assistant;
 mod column_types;
 mod commands;
 mod error;
+mod jobs;
 mod mcp;
 mod mcp_attach;
 mod state;
@@ -109,7 +110,10 @@ fn main() {
         .on_window_event(|window, event| {
             let Some(state) = window.app_handle().try_state::<AppState>() else { return };
             match event {
-                tauri::WindowEvent::Destroyed => state.drop_workspace(window.label()),
+                tauri::WindowEvent::Destroyed => {
+                    state.jobs.cancel_window(window.label());
+                    state.drop_workspace(window.label())
+                }
                 tauri::WindowEvent::Focused(true) => state.attach.set_active_window(window.label()),
                 _ => {}
             }
@@ -149,14 +153,14 @@ fn main() {
             commands::remove_formula,
             commands::json_keys,
             commands::conversion_error_count,
-            commands::cancel_conversion_count,
+            jobs::cancel_job,
             commands::add_computed_column,
             commands::replace_values,
             commands::undo,
             commands::reset_tab,
             commands::edit_cell,
             commands::edit_cells,
-            commands::column_range,
+            commands::column_ranges,
             commands::chart_data,
             commands::save_chart_image,
             commands::save_tab,

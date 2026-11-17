@@ -17,6 +17,19 @@
   - anything else repeats the selected cells.
   - **Fill Down, Up, Right and Left** in the Data menu and the cell menu copy the selection's edge row or column; Ctrl+D fills down and Ctrl+R fills right. Every fill is one step that undo reverts. Formula columns are left as they are.
 
+### Fixed
+- **Show Unique Values no longer freezes on big files.** It used to compute every distinct value of the column at once, holding the window until it finished. The column is now read piece by piece:
+  - the dialog opens at once and fills as values are found, with progress and Stop;
+  - a column with many values answers after its first rows (the first 10,000 values found, with a note);
+  - memory stays small whatever the file's size.
+- **Long work keeps the window usable.** Column statistics, charts, colour-scale ranges, search, Copy as Tuple, the Convert dialog's full count and the JSON key scan now run beside the grid, not in front of it. Each shows its progress with a Stop button (in its dialog, or in the status bar), and a newer request replaces an older one instead of queueing behind it.
+- **Less memory on big tables:**
+  - Statistics estimate the distinct count (marked ≈) on tables over 2 million rows.
+  - Copy as Tuple → random samples without sorting the table, at most 100,000 values.
+  - Colour scales read all their columns in one pass.
+- Changing settings or the language no longer waits for a running query.
+- Stop in the Convert dialog's full count works again after changing the reading.
+
 ## [1.0.0-alpha.5]
 
 Column types are now detected in Parquet, JSON and Excel files too, not just CSV: text columns that hold dates, numbers or yes/no values get those types when the file opens.

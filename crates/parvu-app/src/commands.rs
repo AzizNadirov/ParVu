@@ -20,18 +20,19 @@ use parvu_core::export::{CAST_TYPES, ExportOptions, PARQUET_COMPRESSIONS};
 use parvu_core::ops::{Operation, StepLabel};
 use parvu_core::page::{Cell, ColumnMeta, Page};
 use parvu_core::search::{SearchHit, SearchOptions};
-use parvu_core::stats::{ColumnStats, SampleMode};
+use parvu_core::stats::{ColumnStats, SampleMode, UniqueValues};
 use parvu_core::{TabId, TabSummary, Workspace};
 use parvu_dsl::{Catalog, FunctionDef, FunctionRegistry, TranslationKind};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::error::{ApiError, ApiResult};
+use crate::jobs::run_job;
 use crate::state::{AppState, ExportJob, lock};
 
 type Ws = Arc<Mutex<Workspace>>;
 
-fn ws_of(state: &AppState, window: &WebviewWindow) -> ApiResult<Ws> {
+pub(crate) fn ws_of(state: &AppState, window: &WebviewWindow) -> ApiResult<Ws> {
     state.workspace(window.label())
 }
 
@@ -135,29 +136,47 @@ pub fn bootstrap(state: State<'_, AppState>, window: WebviewWindow) -> ApiResult
 
 // ---------------------------------------------------------------- settings, themes, language
 
+/// Run `f` on every window's workspace, off the main thread: a workspace
+/// busy with a long query must not freeze the window.
+async fn for_each_workspace(
+    state: &AppState,
+    f: impl Fn(&mut Workspace) -> ApiResult<()> + Send + 'static,
+) -> ApiResult<()> {
+    let all: Vec<Ws> = lock(&state.workspaces).values().cloned().collect();
+    tauri::async_runtime::spawn_blocking(move || {
+        for ws in all {
+            f(&mut lock(&ws))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| ApiError::new("app", e.to_string()))?
+}
+
 #[tauri::command(rename_all = "snake_case")]
-pub fn update_settings(
+pub async fn update_settings(
     state: State<'_, AppState>,
     values: serde_json::Map<String, serde_json::Value>,
 ) -> ApiResult<Settings> {
-    let mut cfg = lock(&state.config);
-    let rejected = cfg.settings.update(values)?;
-    if !rejected.is_empty() {
-        tracing::warn!("rejected settings: {rejected:?}");
-    }
-    let page_size = cfg.settings.settings().rows_per_page();
-    let memory_mb = cfg.settings.settings().query_memory_limit_mb.max(0) as u64;
-    let detect = crate::state::detect_options(cfg.settings.settings());
-    drop(cfg);
+    let (page_size, memory_mb, detect) = {
+        let mut cfg = lock(&state.config);
+        let rejected = cfg.settings.update(values)?;
+        if !rejected.is_empty() {
+            tracing::warn!("rejected settings: {rejected:?}");
+        }
+        let s = cfg.settings.settings();
+        (s.rows_per_page(), s.query_memory_limit_mb.max(0) as u64, crate::state::detect_options(s))
+    };
     let env_limit = std::env::var_os("PARVU_MEMORY_LIMIT_MB").is_some();
-    for ws in lock(&state.workspaces).values() {
-        let mut ws = lock(ws);
+    for_each_workspace(&state, move |ws| {
         ws.set_page_size(page_size);
         ws.set_detect_options(detect);
         if !env_limit {
             ws.set_memory_limit_mb(memory_mb)?;
         }
-    }
+        Ok(())
+    })
+    .await?;
     Ok(lock(&state.config).settings.settings().clone())
 }
 
@@ -177,21 +196,24 @@ pub struct LanguageChange {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn set_language(app: AppHandle, state: State<'_, AppState>, code: String) -> ApiResult<LanguageChange> {
-    let mut cfg = lock(&state.config);
-    if !cfg.i18n.set_language(&code) {
-        return Err(ApiError::new("config", format!("Unknown language: {code}")));
-    }
-    let mut values = serde_json::Map::new();
-    values.insert("current_language".into(), code.clone().into());
-    cfg.settings.update(values)?;
-    let change = LanguageChange { language: code.clone(), translations: I18n::catalog(&code).clone() };
-    // The automatic date order follows the language.
-    let detect = crate::state::detect_options(cfg.settings.settings());
-    drop(cfg);
-    for ws in lock(&state.workspaces).values() {
-        lock(ws).set_detect_options(detect);
-    }
+pub async fn set_language(app: AppHandle, state: State<'_, AppState>, code: String) -> ApiResult<LanguageChange> {
+    let (change, detect) = {
+        let mut cfg = lock(&state.config);
+        if !cfg.i18n.set_language(&code) {
+            return Err(ApiError::new("config", format!("Unknown language: {code}")));
+        }
+        let mut values = serde_json::Map::new();
+        values.insert("current_language".into(), code.clone().into());
+        cfg.settings.update(values)?;
+        let change = LanguageChange { language: code.clone(), translations: I18n::catalog(&code).clone() };
+        // The automatic date order follows the language.
+        (change, crate::state::detect_options(cfg.settings.settings()))
+    };
+    for_each_workspace(&state, move |ws| {
+        ws.set_detect_options(detect);
+        Ok(())
+    })
+    .await?;
     let _ = app.emit("language-changed", &code);
     Ok(change)
 }
@@ -333,6 +355,7 @@ pub async fn open_file(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn close_tab(state: State<'_, AppState>, window: WebviewWindow, id: TabId) -> ApiResult<()> {
+    state.jobs.cancel_tab(window.label(), id);
     with_ws(state, window, move |ws| Ok(ws.close(id)?)).await
 }
 
@@ -614,9 +637,19 @@ pub async fn json_keys(
     id: TabId,
     column: String,
     full: bool,
+    job: u64,
 ) -> ApiResult<Vec<JsonKey>> {
     let limit = (!full).then_some(JSON_KEY_SAMPLE_ROWS);
-    with_ws(state, window, move |ws| Ok(ws.json_keys(id, &column, limit)?)).await
+    run_job(
+        state,
+        window,
+        job,
+        "json_keys",
+        Some(id),
+        move |ws| ws.json_keys_query(id, &column, limit),
+        |ctx, sql| parvu_core::workspace::json_keys_from(ctx.conn, sql),
+    )
+    .await
 }
 
 /// Rows checked when counting errors without `full`.
@@ -631,8 +664,8 @@ pub struct ConversionCount {
 }
 
 /// Values of `column` that don't convert as `to`: on the first 100,000 rows,
-/// or, with `full`, on every row. A full count runs on its own connection
-/// (the window stays usable) and can be cancelled.
+/// or, with `full`, on every row. Runs as a job: the window stays usable and
+/// the count can be cancelled.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn conversion_error_count(
     state: State<'_, AppState>,
@@ -641,38 +674,20 @@ pub async fn conversion_error_count(
     column: String,
     to: Reading,
     full: bool,
+    job: u64,
 ) -> ApiResult<ConversionCount> {
-    let ws_arc = ws_of(&state, &window)?;
     let limit = (!full).then_some(ERROR_SAMPLE_ROWS);
-    let (conn, sql) = {
-        let ws = lock(&ws_arc);
-        (ws.clone_connection()?, ws.conversion_error_query(id, &column, &to, limit)?)
-    };
-    let label = window.label().to_string();
-    lock(&state.counts).insert(label.clone(), conn.interrupt_handle());
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let mut tries = 0;
-        loop {
-            match parvu_core::workspace::conversion_errors(&conn, &sql) {
-                // A CSV value that didn't parse: read that column as text and count again.
-                Err(e) if tries < 8 && lock(&ws_arc).heal(&e.to_string()) => tries += 1,
-                other => return other,
-            }
-        }
-    })
-    .await
-    .map_err(|e| ApiError::new("app", e.to_string()))?;
-    lock(&state.counts).remove(&label);
-    let (errors, checked) = result?;
+    let (errors, checked) = run_job(
+        state,
+        window,
+        job,
+        if full { "count_full" } else { "count" },
+        Some(id),
+        move |ws| ws.conversion_error_query(id, &column, &to, limit),
+        |ctx, sql| parvu_core::workspace::conversion_errors(ctx.conn, sql),
+    )
+    .await?;
     Ok(ConversionCount { errors, checked, complete: limit.is_none_or(|n| checked < n) })
-}
-
-/// Stop the window's running full error count.
-#[tauri::command(rename_all = "snake_case")]
-pub fn cancel_conversion_count(state: State<'_, AppState>, window: WebviewWindow) {
-    if let Some(h) = lock(&state.counts).get(window.label()) {
-        h.interrupt();
-    }
 }
 
 /// Math operation dialog: add column `name` computed by expression `text`.
@@ -782,8 +797,12 @@ pub async fn chart_data(
     window: WebviewWindow,
     id: TabId,
     spec: parvu_core::chart::ChartSpec,
+    job: u64,
 ) -> ApiResult<parvu_core::chart::ChartData> {
-    with_ws(state, window, move |ws| Ok(ws.chart(id, &spec)?)).await
+    run_job(state, window, job, "chart", Some(id), move |ws| ws.chart_input(id), move |ctx, (source, columns)| {
+        parvu_core::chart::chart_data(ctx.conn, source, columns, &spec)
+    })
+    .await
 }
 
 /// Save a chart image the UI rendered (PNG bytes or SVG text) to the path
@@ -797,15 +816,30 @@ pub fn save_chart_image(path: PathBuf, bytes: Vec<u8>) -> ApiResult<()> {
     std::fs::write(&path, bytes).map_err(|e| ApiError::new("export", format!("{}: {e}", path.display())))
 }
 
-/// Numeric minimum and maximum of a column, for colour scales.
+/// Numeric minimum and maximum of columns, for colour scales: one scan.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn column_range(
+pub async fn column_ranges(
     state: State<'_, AppState>,
     window: WebviewWindow,
     id: TabId,
-    column: String,
-) -> ApiResult<Option<(f64, f64)>> {
-    with_ws(state, window, move |ws| Ok(ws.numeric_range(id, &column)?)).await
+    columns: Vec<String>,
+    job: u64,
+) -> ApiResult<Vec<Option<(f64, f64)>>> {
+    run_job(
+        state,
+        window,
+        job,
+        "ranges",
+        Some(id),
+        move |ws| {
+            for c in &columns {
+                ws.column_type(id, c)?;
+            }
+            Ok((ws.unordered_query(id)?, columns))
+        },
+        |ctx, (source, columns)| parvu_core::stats::numeric_ranges(ctx.conn, source, columns),
+    )
+    .await
 }
 
 /// One cell of a batch edit: absolute row, column and new value.
@@ -855,8 +889,13 @@ pub async fn column_stats(
     window: WebviewWindow,
     id: TabId,
     column: String,
+    job: u64,
 ) -> ApiResult<ColumnStats> {
-    with_ws(state, window, move |ws| Ok(ws.column_stats(id, &column)?)).await
+    let name = column.clone();
+    run_job(state, window, job, "stats", Some(id), move |ws| ws.stats_input(id, &column), move |ctx, (source, dtype, approx)| {
+        parvu_core::stats::column_stats(ctx.conn, source, &name, dtype, *approx)
+    })
+    .await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -865,8 +904,27 @@ pub async fn unique_values(
     window: WebviewWindow,
     id: TabId,
     column: String,
-) -> ApiResult<Vec<Cell>> {
-    with_ws(state, window, move |ws| Ok(ws.unique_values(id, &column)?)).await
+    job: u64,
+) -> ApiResult<UniqueValues> {
+    let name = column.clone();
+    run_job(
+        state,
+        window,
+        job,
+        "unique",
+        Some(id),
+        move |ws| {
+            ws.column_type(id, &column)?;
+            ws.unordered_query(id)
+        },
+        move |ctx, source| {
+            // New values go to the dialog as they are found.
+            parvu_core::stats::unique_values(ctx.conn, source, &name, ctx.cancel, &mut |rows, fresh| {
+                ctx.progress(Some(rows), Some(serde_json::json!(fresh)))
+            })
+        },
+    )
+    .await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -877,8 +935,25 @@ pub async fn column_tuple(
     column: String,
     mode: SampleMode,
     n: u64,
+    job: u64,
 ) -> ApiResult<String> {
-    with_ws(state, window, move |ws| Ok(ws.column_tuple(id, &column, mode, n.max(1))?)).await
+    let name = column.clone();
+    run_job(
+        state,
+        window,
+        job,
+        "tuple",
+        Some(id),
+        move |ws| {
+            ws.column_type(id, &column)?;
+            ws.current_query(id)
+        },
+        move |ctx, source| {
+            let values = parvu_core::stats::column_sample(ctx.conn, source, &name, mode, n.max(1))?;
+            Ok(parvu_core::stats::python_tuple(&values))
+        },
+    )
+    .await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -887,8 +962,12 @@ pub async fn find(
     window: WebviewWindow,
     id: TabId,
     options: SearchOptions,
+    job: u64,
 ) -> ApiResult<Option<SearchHit>> {
-    with_ws(state, window, move |ws| Ok(ws.find(id, &options)?)).await
+    run_job(state, window, job, "find", Some(id), move |ws| ws.current_query(id), move |ctx, source| {
+        parvu_core::search::find_next(ctx.conn, source, &options)
+    })
+    .await
 }
 
 // ---------------------------------------------------------------- export (background, cancellable)
@@ -913,7 +992,7 @@ pub struct ExportFinished {
 /// Start exporting a tab. Progress arrives as `export-progress` events and
 /// the result as one `export-finished` event, both on the calling window.
 #[tauri::command(rename_all = "snake_case")]
-pub fn start_export(
+pub async fn start_export(
     state: State<'_, AppState>,
     window: WebviewWindow,
     id: TabId,
@@ -921,8 +1000,14 @@ pub fn start_export(
 ) -> ApiResult<u64> {
     let ws_arc = ws_of(&state, &window)?;
     let (conn, query) = {
-        let ws = lock(&ws_arc);
-        (ws.clone_connection()?, ws.current_query(id)?)
+        // Off the main thread: the workspace may be busy.
+        let ws_arc = ws_arc.clone();
+        tauri::async_runtime::spawn_blocking(move || -> ApiResult<_> {
+            let ws = lock(&ws_arc);
+            Ok((ws.clone_connection()?, ws.current_query(id)?))
+        })
+        .await
+        .map_err(|e| ApiError::new("app", e.to_string()))??
     };
     conn.set_query_progress_tracking(true).map_err(|e| ApiError::new("query", e.to_string()))?;
     let progress = conn.progress_handle();

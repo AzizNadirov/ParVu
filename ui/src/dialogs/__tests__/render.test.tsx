@@ -17,6 +17,8 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
       return { sql: "SELECT *, a + b AS \"c\" FROM t", kind: { type: "scalar" } };
     case "tab_summary":
       return { pending_edits: 2 };
+    case "unique_values":
+      return { values: ["b", null, "a"], complete: true, stopped: null, rows_scanned: 3 };
     case "find":
       return { row: 4, column_index: 1, column: "b", value: "hello" };
     case "ai_providers":
@@ -58,12 +60,14 @@ const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promi
   }
 });
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (cmd: string, args?: Record<string, unknown>) => invoke(cmd, args) }));
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ listen: async () => () => undefined }) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(), openPath: vi.fn() }));
 vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({ writeText: vi.fn(async () => undefined) }));
 
 import * as D from "../index";
+import { dispatchJobProgress } from "../../lib/jobs";
 
 const settings = {
   default_data_var_name: "data",
@@ -211,12 +215,34 @@ describe("dialogs render and resolve", () => {
 
   it("unique values returns the selection, NULL included", async () => {
     const ui = makeUi();
-    const p = D.openUniqueValues(ui, { column: "c", values: ["b", null, "a"] });
+    const p = D.openUniqueValues(ui, { tabId: 1, column: "c", total: 3 });
     await flush();
+    expect(invoke).toHaveBeenCalledWith("unique_values", expect.objectContaining({ id: 1, column: "c" }));
     fireEvent.click(screen.getByText("NULL"));
     fireEvent.click(screen.getByText("b"));
     fireEvent.click(screen.getByText("btn.apply_filter"));
     await expect(p).resolves.toEqual([null, "b"]);
+  });
+
+  it("unique values grow while the column is read, and closing stops the scan", async () => {
+    const ui = makeUi();
+    let job = 0;
+    invoke.mockImplementationOnce(async (_cmd, args) => {
+      job = (args as { job: number }).job;
+      return new Promise(() => undefined); // still reading
+    });
+    const p = D.openUniqueValues(ui, { tabId: 1, column: "c", total: 1000 });
+    await flush();
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+    await act(async () => dispatchJobProgress({ job, rows: 250, data: ["b", "10", "9"] }));
+    expect(screen.getByText(/job.rows/)).toBeTruthy();
+    const items = [...document.querySelectorAll(".list-box .item .ellipsis")].map((e) => e.textContent);
+    expect(items).toEqual(["9", "10", "b"]);
+    // A value picked while reading can be applied at once.
+    fireEvent.click(screen.getByText("10"));
+    fireEvent.click(screen.getByText("btn.apply_filter"));
+    await expect(p).resolves.toEqual(["10"]);
+    expect(invoke).toHaveBeenCalledWith("cancel_job", { job });
   });
 
   it("copy tuple, unsaved changes, confirm close", async () => {
@@ -317,6 +343,7 @@ describe("SearchPanel", () => {
     await flush();
     expect(invoke).toHaveBeenCalledWith("find", {
       id: 7,
+      job: expect.any(Number),
       options: expect.objectContaining({ query: "hel", direction: "next", after_row: 2, after_col: 0, column: null }),
     });
     expect(onJump).toHaveBeenCalledWith(4, "b");
@@ -324,6 +351,7 @@ describe("SearchPanel", () => {
     await flush();
     expect(invoke).toHaveBeenLastCalledWith("find", {
       id: 7,
+      job: expect.any(Number),
       options: expect.objectContaining({ after_row: 4, after_col: 1 }),
     });
   });
@@ -424,6 +452,7 @@ describe("spreadsheet dialogs", () => {
     await act(async () => new Promise((r) => setTimeout(r, 400)));
     expect(invoke).toHaveBeenCalledWith("chart_data", {
       id: 3,
+      job: expect.any(Number),
       spec: { kind: "bar", x: "region", y: "qty", agg: "sum", series: null, time_unit: "auto", sort: "auto", limit: 20, other: true, bins: 20 },
     });
     // The chart is drawn: one bar per category, the generated title, no
@@ -453,7 +482,7 @@ describe("Convert", () => {
     await act(async () => new Promise((r) => setTimeout(r, 300))); // then the debounced preview
     expect(invoke).toHaveBeenCalledWith("suggest_reading", { id: 2, column: "amount" });
     expect(invoke).toHaveBeenCalledWith("preview_conversion", { id: 2, column: "amount", to: eu, n: 50 });
-    expect(invoke).toHaveBeenCalledWith("conversion_error_count", { id: 2, column: "amount", to: eu, full: false });
+    expect(invoke).toHaveBeenCalledWith("conversion_error_count", { id: 2, column: "amount", to: eu, full: false, job: expect.any(Number) });
     expect(document.querySelector(".pv-convert-failed")?.textContent).toContain("n/a");
     expect(screen.getByText(/dialog\.convert\.errors_all/)).toBeTruthy();
     fireEvent.click(screen.getByText("dialog.convert.keep_original", { exact: false }));
@@ -513,10 +542,10 @@ describe("column functions", () => {
     const ui = makeUi();
     const p = D.openExpandJson(ui, { tabId: 5, table: "t", column: "payload" });
     await flush();
-    expect(invoke).toHaveBeenCalledWith("json_keys", { id: 5, column: "payload", full: false });
+    expect(invoke).toHaveBeenCalledWith("json_keys", { id: 5, column: "payload", full: false, job: expect.any(Number) });
     fireEvent.click(screen.getByText("json.expand.scan_all"));
     await flush();
-    expect(invoke).toHaveBeenCalledWith("json_keys", { id: 5, column: "payload", full: true });
+    expect(invoke).toHaveBeenCalledWith("json_keys", { id: 5, column: "payload", full: true, job: expect.any(Number) });
     fireEvent.click(screen.getByText("age"));
     fireEvent.click(screen.getByText("btn.apply"));
     await expect(p).resolves.toEqual({

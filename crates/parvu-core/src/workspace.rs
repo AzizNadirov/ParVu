@@ -27,7 +27,7 @@ use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
 use crate::search::{SearchHit, SearchOptions, find_next};
 use crate::sql::{quote_ident, quote_literal, slugify_name};
-use crate::stats::{ColumnStats, SampleMode, column_sample, column_stats, unique_values};
+use crate::stats::{ColumnStats, SampleMode, column_sample, column_stats};
 
 pub type TabId = u64;
 
@@ -718,7 +718,12 @@ impl Workspace {
     /// The keys of the JSON objects in `column` and their types, from the
     /// first `limit` rows (or all), for "Expand into columns".
     pub fn json_keys(&self, id: TabId, column: &str, limit: Option<u64>) -> Result<Vec<JsonKey>> {
-        let sql = self.with_ctx(id, |ctx| {
+        json_keys_from(&self.conn, &self.json_keys_query(id, column, limit)?)
+    }
+
+    /// SQL for [`Workspace::json_keys`]; run it with [`json_keys_from`].
+    pub fn json_keys_query(&self, id: TabId, column: &str, limit: Option<u64>) -> Result<String> {
+        self.with_ctx(id, |ctx| {
             ctx.require(column)?;
             let c = quote_ident(column);
             let source = match limit {
@@ -726,9 +731,7 @@ impl Workspace {
                 None => format!("SELECT {c} FROM ({})", ctx.current_query),
             };
             Ok(format!("SELECT CAST(json_group_structure(TRY_CAST({c} AS JSON)) AS VARCHAR) FROM ({source})"))
-        })?;
-        let structure: Option<String> = self.conn.query_row(&sql, [], |r| r.get(0))?;
-        Ok(structure.map(|s| JsonKey::from_structure(&s)).unwrap_or_default())
+        })
     }
 
     /// SQL counting the values of `column` that don't convert as `to`:
@@ -1021,7 +1024,7 @@ impl Workspace {
         export(&self.conn, self.tab(id)?.engine.current_query(), options)
     }
 
-    fn column_type(&self, id: TabId, column: &str) -> Result<String> {
+    pub fn column_type(&self, id: TabId, column: &str) -> Result<String> {
         self.columns(id)?
             .into_iter()
             .find(|c| c.name == column)
@@ -1030,36 +1033,58 @@ impl Workspace {
     }
 
     pub fn column_stats(&self, id: TabId, column: &str) -> Result<ColumnStats> {
+        let (source, dtype, approx) = self.stats_input(id, column)?;
+        column_stats(&self.conn, &source, column, &dtype, approx)
+    }
+
+    /// What [`crate::stats::column_stats`] needs: the unordered query, the
+    /// column's type, and whether to estimate the distinct count.
+    pub fn stats_input(&self, id: TabId, column: &str) -> Result<(String, String, bool)> {
         let dtype = self.column_type(id, column)?;
-        column_stats(&self.conn, self.tab(id)?.engine.current_query(), column, &dtype)
+        let approx = self.tab(id)?.engine.total_rows() > crate::stats::EXACT_DISTINCT_ROWS;
+        Ok((self.unordered_query(id)?, dtype, approx))
+    }
+
+    /// The tab's current query and columns, for chart data on any connection.
+    pub fn chart_input(&self, id: TabId) -> Result<(String, Vec<ColumnMeta>)> {
+        let t = self.tab(id)?;
+        Ok((t.engine.current_query().to_string(), t.engine.columns(&self.conn)?))
     }
 
     /// Chart data for the tab's current result.
     pub fn chart(&self, id: TabId, spec: &crate::chart::ChartSpec) -> Result<crate::chart::ChartData> {
+        let (source, columns) = self.chart_input(id)?;
+        crate::chart::chart_data(&self.conn, &source, &columns, spec)
+    }
+
+    /// Minimum and maximum of columns read as numbers (for colour scales),
+    /// `None` for a column without numeric values; one scan for all.
+    pub fn numeric_ranges(&self, id: TabId, columns: &[String]) -> Result<Vec<Option<(f64, f64)>>> {
+        for c in columns {
+            self.column_type(id, c)?;
+        }
+        crate::stats::numeric_ranges(&self.conn, &self.unordered_query(id)?, columns)
+    }
+
+    /// The tab's query without a sort at the end, for work that doesn't
+    /// depend on row order (unique values, statistics, ranges): sorting a
+    /// big table first would only make it slower.
+    pub fn unordered_query(&self, id: TabId) -> Result<String> {
         let t = self.tab(id)?;
-        let columns = t.engine.columns(&self.conn)?;
-        crate::chart::chart_data(&self.conn, t.engine.current_query(), &columns, spec)
+        let last_is_sort = t.steps.last().is_some_and(|s| {
+            s.kind == StepKind::Sql && (s.label.key == "step.sort" || s.label.key == "step.sort_by")
+        });
+        Ok(match (last_is_sort, t.engine.previous_query()) {
+            (true, Some(before)) => before.to_string(),
+            _ => t.engine.current_query().to_string(),
+        })
     }
 
-    /// Minimum and maximum of a column read as numbers (for colour scales),
-    /// or `None` when it has no numeric values.
-    pub fn numeric_range(&self, id: TabId, column: &str) -> Result<Option<(f64, f64)>> {
+    /// Unique values of a column (see [`crate::stats::unique_values`]), on
+    /// this workspace's connection. The app runs it on a cloned connection.
+    pub fn unique_values(&self, id: TabId, column: &str) -> Result<crate::stats::UniqueValues> {
         self.column_type(id, column)?;
-        let c = quote_ident(column);
-        let (lo, hi): (Option<f64>, Option<f64>) = self.conn.query_row(
-            &format!(
-                "SELECT MIN(TRY_CAST({c} AS DOUBLE)), MAX(TRY_CAST({c} AS DOUBLE)) FROM ({})",
-                self.tab(id)?.engine.current_query()
-            ),
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )?;
-        Ok(lo.zip(hi))
-    }
-
-    pub fn unique_values(&self, id: TabId, column: &str) -> Result<Vec<Cell>> {
-        self.column_type(id, column)?;
-        unique_values(&self.conn, self.tab(id)?.engine.current_query(), column)
+        crate::stats::unique_values(&self.conn, &self.unordered_query(id)?, column, &crate::job::Cancel::new(), &mut |_, _| {})
     }
 
     /// Column values formatted as a Python-style tuple, for "copy as tuple".
@@ -1078,6 +1103,12 @@ impl Workspace {
 fn rebuild_overlay(conn: &Connection, tab: &mut Tab) -> Result<()> {
     create_views(conn, &tab.name, tab.edits.all(), &tab.formulas)?;
     tab.engine.refresh(conn)
+}
+
+/// Run a [`Workspace::json_keys_query`].
+pub fn json_keys_from(conn: &Connection, sql: &str) -> Result<Vec<JsonKey>> {
+    let structure: Option<String> = conn.query_row(sql, [], |r| r.get(0))?;
+    Ok(structure.map(|s| JsonKey::from_structure(&s)).unwrap_or_default())
 }
 
 /// Run a [`Workspace::conversion_error_query`]: `(errors, checked)`.

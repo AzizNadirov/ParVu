@@ -373,12 +373,16 @@ fn stats_unique_tuple_and_search() {
 
     ws.edit_cell(id, 0, "name", None).unwrap();
     let u = ws.unique_values(id, "name").unwrap();
+    assert!(u.complete);
+    let u = u.values;
     assert_eq!(u.len(), 8);
     assert_eq!(u[0], None);
     assert_eq!(u[1].as_deref(), Some("name_0"));
 
     assert_eq!(ws.column_tuple(id, "id", SampleMode::First, 3).unwrap(), "(0, 1, 2)");
     assert_eq!(ws.column_tuple(id, "name", SampleMode::First, 2).unwrap(), "(None, 'name_1')");
+    let random = ws.column_tuple(id, "id", SampleMode::Random, 5).unwrap();
+    assert_eq!(random.matches(", ").count(), 4, "{random}");
 
     let mut o = SearchOptions { query: "NAME_3".into(), ..Default::default() };
     let h = ws.find(id, &o).unwrap().unwrap();

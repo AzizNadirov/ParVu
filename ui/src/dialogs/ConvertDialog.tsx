@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Ui, Closer } from "../lib/ui";
 import { api, errorMessage } from "../lib/api";
 import type { Cell, Operation, Reading } from "../lib/api";
@@ -71,26 +71,29 @@ function ConvertDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nul
       .previewConversion(a.tabId, a.column, r, PREVIEW_ROWS)
       .then((rows) => live && (setPreview(rows), setPreviewError("")))
       .catch((e) => live && (setPreview([]), setPreviewError(errorMessage(e))));
-    api
-      .conversionErrorCount(a.tabId, a.column, r, false)
-      .then((c) => live && setCount(c))
-      .catch(() => undefined);
+    const sample = api.conversionErrorCount(a.tabId, a.column, r, false);
+    sample.result.then((c) => live && setCount(c)).catch(() => undefined);
     return () => {
       live = false;
+      sample.cancel();
     };
   });
 
+  const fullCount = useRef<(() => void) | null>(null);
   const countAll = async () => {
     setCounting(true);
+    const job = api.conversionErrorCount(a.tabId, a.column, reading, true);
+    fullCount.current = job.cancel;
     try {
-      setCount(await api.conversionErrorCount(a.tabId, a.column, reading, true));
+      setCount(await job.result);
     } catch {
       // Stopped, or failed: keep the sampled count.
     } finally {
+      fullCount.current = null;
       setCounting(false);
     }
   };
-  const stop = () => void api.cancelConversionCount();
+  const stop = () => fullCount.current?.();
   const finish = (op: Operation | null) => {
     if (counting) stop();
     close(op);
