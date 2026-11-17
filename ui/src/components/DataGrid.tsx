@@ -18,7 +18,7 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import type { Cell, ColumnMeta, Page, SourceColumn } from "../lib/api";
 import { cssVar, resolvedColor } from "../lib/theme";
 import { headerIconName, headerIcons } from "../lib/types";
-import { cellBackground, type FormatColor, type FormatRule } from "../lib/format";
+import { cellBackground, withAlpha, type FormatColor, type FormatRule } from "../lib/format";
 
 const NUMERIC = /^(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|UTINYINT|USMALLINT|UINTEGER|UBIGINT|UHUGEINT|FLOAT|DOUBLE|REAL|DECIMAL)(\(|$)/i;
 export const isNumericType = (dtype: string) => NUMERIC.test(dtype.trim());
@@ -58,6 +58,14 @@ export interface DataGridProps {
   ranges: Record<string, { min: number; max: number }>;
   /** How each column of a CSV file is read (marks guessed date orders). */
   sourceColumns?: SourceColumn[];
+  /** Formula columns: read-only, with an fx icon. */
+  formulaColumns?: string[];
+  /** Columns a formula being written refers to, with their colours. */
+  highlights?: Map<string, string>;
+  /** The selected cell changed (page row, column index). */
+  onCurrentCell?(row: number, col: number): void;
+  /** A formula column's cell was opened (Enter or double-click). */
+  onFormulaCell?(column: string): void;
 }
 
 /** Type icons for the column headers (built once). */
@@ -153,14 +161,23 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
     return page.columns.map((c, i) => {
       const arrow = sort && sort.column === c.name ? (sort.ascending ? " ▲" : " ▼") : "";
       const source = props.sourceColumns?.find((s) => s.name === c.name);
+      const isFormula = props.formulaColumns?.includes(c.name);
+      // A column the formula being written refers to: tinted in its colour.
+      const ref = props.highlights?.get(c.name);
       return {
         id: c.name,
         title: c.name + arrow,
-        icon: headerIconName(c, source),
+        icon: isFormula ? "pv-formula" : headerIconName(c, source),
         width: widths[c.name] ?? estimateWidth(c, page.rows, i, charPx),
+        themeOverride: ref ? { bgHeader: withAlpha(ref, 0.3), bgCell: withAlpha(ref, 0.1), accentColor: ref } : undefined,
       };
     });
-  }, [page, sort, widths, props.sourceColumns]);
+  }, [page, sort, widths, props.sourceColumns, props.formulaColumns, props.highlights]);
+
+  const formulaCol = useMemo(
+    () => (page?.columns ?? []).map((c) => !!props.formulaColumns?.includes(c.name)),
+    [page, props.formulaColumns],
+  );
 
   const numeric = useMemo(() => (page?.columns ?? []).map((c) => isNumericType(c.dtype)), [page]);
 
@@ -189,12 +206,12 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         data: v ?? "",
         displayData: isNull ? nullText : v,
         allowOverlay: true,
-        readonly: !page?.editable,
+        readonly: !page?.editable || formulaCol[col],
         contentAlign: numeric[col] ? "right" : "left",
         themeOverride: override,
       };
     },
-    [page, editedSet, numeric, nullText, styling, rulesByCol, ranges],
+    [page, editedSet, numeric, nullText, styling, rulesByCol, ranges, formulaCol],
   );
 
   const getRowThemeOverride = useCallback(
@@ -292,7 +309,15 @@ const DataGridInner = forwardRef<GridHandle, DataGridProps>(function DataGrid(pr
         onCellEdited={onCellEdited}
         getCellsForSelection={true}
         gridSelection={selection}
-        onGridSelectionChange={setSelection}
+        onGridSelectionChange={(s) => {
+          setSelection(s);
+          const c = s.current?.cell;
+          if (c) handlers.current.onCurrentCell?.(c[1], c[0]);
+        }}
+        onCellActivated={([col]) => {
+          const name = page.columns[col]?.name;
+          if (name && props.formulaColumns?.includes(name)) handlers.current.onFormulaCell?.(name);
+        }}
         rowMarkers="number"
         rowMarkerStartIndex={page.offset + 1}
         rowMarkerWidth={Math.max(44, String(page.offset + page.rows.length).length * 8 + 18)}
@@ -345,5 +370,14 @@ export const DataGrid = memo(
     a.frozen === b.frozen &&
     a.widths === b.widths &&
     a.formats === b.formats &&
-    a.ranges === b.ranges,
+    a.ranges === b.ranges &&
+    a.sourceColumns === b.sourceColumns &&
+    (a.formulaColumns ?? []).join("\u0001") === (b.formulaColumns ?? []).join("\u0001") &&
+    // By content: starting or ending a formula, or a change of its
+    // references, re-renders (and refreshes the callbacks the grid holds).
+    highlightKey(a.highlights) === highlightKey(b.highlights),
 );
+
+function highlightKey(m?: Map<string, string>): string {
+  return m ? JSON.stringify([...m]) : "";
+}
