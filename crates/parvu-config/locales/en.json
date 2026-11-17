@@ -1465,5 +1465,19 @@
   "dialog.mark_duplicates.all": "Every duplicated row, first included",
   "dialog.mark_duplicates.name": "New column:",
   "step.drop_duplicates_all": "Drop every duplicated row on {columns}",
-  "step.mark_duplicates": "Mark duplicates on {columns} as {name}"
+  "step.mark_duplicates": "Mark duplicates on {columns} as {name}",
+  "cond.true": "yes",
+  "cond.false": "no",
+  "step.where": "where {conditions}",
+  "step.set_value": "Set {column} to {value}",
+  "set_value.menu": "Set Value…",
+  "set_value.title": "Set Value",
+  "set_value.set": "Set",
+  "set_value.to": "to",
+  "set_value.empty": "Empty",
+  "where.title": "In rows where",
+  "where.only": "Only rows where…",
+  "where.match": "Rows that match",
+  "where.hint": "Other rows keep their value; a new column is empty there.",
+  "where.hint_set": "Only these rows change; the others keep their value."
 }

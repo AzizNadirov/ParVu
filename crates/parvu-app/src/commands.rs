@@ -822,6 +822,9 @@ pub struct ReplaceRequest {
     pub output_column: String,
     pub case_sensitive: bool,
     pub regex: bool,
+    /// Only replace in these rows.
+    #[serde(default, rename = "where")]
+    pub filter: Option<parvu_core::clean::RowFilter>,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -838,7 +841,7 @@ pub async fn replace_values(
             parvu_dsl::compile_replace(&table, &r.column, &r.pattern, &r.replacement, r.case_sensitive, r.regex);
         ws.apply(
             id,
-            &Operation::Replace { column: r.column, pattern: r.pattern, output_column: r.output_column, expression },
+            &Operation::Replace { column: r.column, pattern: r.pattern, output_column: r.output_column, expression, filter: r.filter },
         )?;
         Ok(ws.summary(id)?)
     })
@@ -1004,6 +1007,21 @@ pub async fn column_stats(
     let name = column.clone();
     run_job(state, window, job, "stats", Some(id), move |ws| ws.stats_input(id, &column), move |ctx, (source, dtype, approx)| {
         parvu_core::stats::column_stats(ctx.conn, source, &name, dtype, *approx)
+    })
+    .await
+}
+
+/// Values to suggest in a filter's value box (a quick job).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn value_suggestions(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    column: String,
+    job: u64,
+) -> ApiResult<Vec<String>> {
+    run_job(state, window, job, "suggest", Some(id), move |ws| ws.unordered_query(id), move |ctx, source| {
+        parvu_core::stats::value_suggestions(ctx.conn, source, &column, 200)
     })
     .await
 }

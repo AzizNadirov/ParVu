@@ -5,12 +5,15 @@ import type { ColumnMeta, FillMethod, Operation } from "../lib/api";
 import { Dialog } from "../components/Dialog";
 import { ColumnChecklist, RichText, SubmitOnEnter } from "./common";
 import { buildFillNullOp } from "./logic";
+import { WhereSection, initialWhere, whereFilter, type Suggest } from "./ConditionRows";
 import "./dialogs.css";
 
 interface Args {
   table: string;
   columns: ColumnMeta[];
   selected?: string;
+  /** Frequent values of a column, for the "Only rows where…" value boxes. */
+  suggest?: Suggest;
 }
 
 function FillNullDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | null>; a: Args }) {
@@ -19,11 +22,14 @@ function FillNullDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nu
   const [checked, setChecked] = useState<Set<string>>(() => new Set(a.selected ? [a.selected] : []));
   const [method, setMethod] = useState<FillMethod>("value");
   const [value, setValue] = useState("");
-  const op = buildFillNullOp(
+  const [where, setWhere] = useState(() => initialWhere(a.selected ?? names[0] ?? ""));
+  const filter = whereFilter(where, a.columns);
+  const base = buildFillNullOp(
     names.filter((n) => checked.has(n)),
     method,
     value,
   );
+  const op = base && filter !== null ? (filter ? { ...base, where: filter } : base) : null;
   const submit = () => op && close(op);
 
   return (
@@ -64,6 +70,7 @@ function FillNullDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nu
           </label>
         )}
         <div className="pv-hint">{t(`fill.${method}.hint`)}</div>
+        <WhereSection t={t} columns={a.columns} value={where} onChange={setWhere} suggest={a.suggest} />
       </SubmitOnEnter>
     </Dialog>
   );

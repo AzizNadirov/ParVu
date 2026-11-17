@@ -12,7 +12,9 @@ export function stepText(t: Translate, label: StepLabel): string {
   if (label.key === "step.slice" && args.mode) args.mode = t(`step.slice_mode.${args.mode}`);
   if (label.key === "step.window" && args.func) args.func = t(`window.${args.func}`);
   if (label.key === "step.fill_null" && args.method && !args.method.startsWith("'")) args.method = t(`fill.${args.method}`);
-  return t(label.key, args);
+  const text = t(label.key, args);
+  // Operations limited to some rows say which.
+  return args.where ? `${text} ${t("step.where", { conditions: args.where })}` : text;
 }
 
 export function StepsPanel(props: {

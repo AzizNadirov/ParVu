@@ -38,6 +38,7 @@ import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
 import { columnHighlights, errorOffset, formulaRefs, newFormulaName, refFor } from "./lib/formula";
 import { jobResult } from "./lib/jobs";
+import { openSetValue } from "./dialogs/SetValueDialog";
 import { sheetMenu, sheetsToOpen, type SheetActions } from "./lib/sheets";
 import { StatusJobs } from "./components/JobProgress";
 import { fillEdge, fillFromHandle, fillSeries, type FillCell, type FillDirection, type Rect } from "./lib/fill";
@@ -756,6 +757,21 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
 
   const columnNames = page?.columns.map((c) => c.name) ?? [];
+  /** Frequent values of a column, suggested in condition value boxes;
+   * fetched once per column and query. */
+  const suggestCache = useRef(new Map<string, Promise<string[]>>());
+  const suggestValues = (column: string): Promise<string[]> => {
+    if (!activeTab) return Promise.resolve([]);
+    const key = `${activeTab.id}\u0000${activeTab.current_query}\u0000${activeTab.pending_edits}\u0000${column}`;
+    let p = suggestCache.current.get(key);
+    if (!p) {
+      p = jobResult(api.valueSuggestions(activeTab.id, column))
+        .then((v) => v ?? [])
+        .catch(() => []);
+      suggestCache.current.set(key, p);
+    }
+    return p;
+  };
 
   const runConvert = async (column: string) => {
     if (!activeTab) return;
@@ -767,7 +783,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     if (!activeTab || !page) return;
     const i = page.columns.findIndex((c) => c.name === column);
     const values = i >= 0 ? previewValues(page.rows, i) : [];
-    const op = await openColumnFn(ui, { tabId: activeTab.id, table: activeTab.name, column, name, values });
+    const op = await openColumnFn(ui, { tabId: activeTab.id, table: activeTab.name, column, name, values, columns: page.columns, suggest: suggestValues });
     if (op) await applyOp(op);
   };
 
@@ -1063,6 +1079,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         label: t("menu.group.clean"),
         icon: "clean",
         submenu: [
+          { label: t("set_value.menu"), icon: "edit", onSelect: () => void runOpDialog(openSetValue, column) },
           { label: t("context.replace_values"), icon: "replace", onSelect: () => void runReplace(column) },
           { label: t("context.fill_null"), icon: "fill", onSelect: () => void runOpDialog(openFillNull, column) },
           { type: "separator" },
@@ -1313,10 +1330,10 @@ export function App({ boot }: { boot: Bootstrap }) {
   const runReplace = useCallback(
     async (selected?: string) => {
       if (!activeTab) return;
-      const req = await openReplace(ui, { table: activeTab.name, columns: columnNames, selected });
+      const req = await openReplace(ui, { table: activeTab.name, columns: columnNames, selected, meta: page?.columns, suggest: suggestValues });
       if (req) await mutate(activeTab.id, () => api.replaceValues(activeTab.id, req), t("error.operation_failed"));
     },
-    [activeTab, ui, columnNames, mutate, t],
+    [activeTab, ui, columnNames, mutate, t, page],
   );
 
   const runDropNull = useCallback(
@@ -1365,12 +1382,12 @@ export function App({ boot }: { boot: Bootstrap }) {
   /** Open an operation dialog for the active tab and apply its result. */
   type OpDialog = (
     ui: Ui,
-    a: { table: string; columns: ColumnMeta[]; selected?: string },
+    a: { table: string; columns: ColumnMeta[]; selected?: string; suggest?: (column: string) => Promise<string[]> },
   ) => Promise<Operation | null>;
   const runOpDialog = async (open: OpDialog, selected?: string, expensive = false) =>
     withTab(async (tab) => {
       if (expensive && !(await confirmLargeDataset())) return;
-      const op = await open(ui, { table: tab.name, columns: page?.columns ?? [], selected });
+      const op = await open(ui, { table: tab.name, columns: page?.columns ?? [], selected, suggest: suggestValues });
       if (!op) return;
       const s = await applyOp(op);
       // A multi-column sort replaces the header sort indicator.
@@ -1402,6 +1419,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         columns: page?.columns ?? [],
         selected: column,
         initial: value === null ? { op: "is_null" } : { op: "eq", value },
+        suggest: suggestValues,
       });
       if (op) await applyOp(op);
     });

@@ -1465,5 +1465,19 @@
   "dialog.mark_duplicates.all": "Все повторяющиеся строки, включая первую",
   "dialog.mark_duplicates.name": "Новый столбец:",
   "step.drop_duplicates_all": "Удалены все повторяющиеся строки по {columns}",
-  "step.mark_duplicates": "Дубликаты по {columns} отмечены в {name}"
+  "step.mark_duplicates": "Дубликаты по {columns} отмечены в {name}",
+  "cond.true": "да",
+  "cond.false": "нет",
+  "step.where": "где {conditions}",
+  "step.set_value": "{column} = {value}",
+  "set_value.menu": "Задать значение…",
+  "set_value.title": "Задать значение",
+  "set_value.set": "Задать",
+  "set_value.to": "значение",
+  "set_value.empty": "Пусто",
+  "where.title": "В строках, где",
+  "where.only": "Только строки, где…",
+  "where.match": "Строки, которые подходят под",
+  "where.hint": "Остальные строки сохраняют своё значение; в новом столбце они пустые.",
+  "where.hint_set": "Меняются только эти строки; остальные сохраняют значение."
 }

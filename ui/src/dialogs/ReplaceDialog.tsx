@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Ui, Closer } from "../lib/ui";
-import type { ReplaceRequest } from "../lib/api";
+import type { ColumnMeta, ReplaceRequest } from "../lib/api";
+import { WhereSection, initialWhere, whereFilter, type Suggest } from "./ConditionRows";
 import { Dialog } from "../components/Dialog";
 import { RichText, SubmitOnEnter, useAutoFocus } from "./common";
 import { buildReplaceRequest, defaultReplaceOutput } from "./logic";
@@ -10,6 +11,9 @@ interface Args {
   table: string;
   columns: string[];
   selected?: string;
+  /** Column types, for "Only rows where…". */
+  meta?: ColumnMeta[];
+  suggest?: Suggest;
 }
 
 function ReplaceDialog({ ui, close, a }: { ui: Ui; close: Closer<ReplaceRequest | null>; a: Args }) {
@@ -23,7 +27,10 @@ function ReplaceDialog({ ui, close, a }: { ui: Ui; close: Closer<ReplaceRequest 
   const [regex, setRegex] = useState(false);
   const patternRef = useAutoFocus<HTMLInputElement>();
 
-  const req = buildReplaceRequest({ column, pattern, replacement, output, caseSensitive, regex });
+  const [where, setWhere] = useState(() => initialWhere(column));
+  const filter = a.meta ? whereFilter(where, a.meta) : undefined;
+  const base = buildReplaceRequest({ column, pattern, replacement, output, caseSensitive, regex });
+  const req = base && filter !== null ? (filter ? { ...base, where: filter } : base) : null;
   const submit = () => req && close(req);
   const problem = !pattern ? t("dialog.replace.need_pattern") : !output.trim() ? t("dialog.replace.need_output") : null;
 
@@ -92,6 +99,7 @@ function ReplaceDialog({ ui, close, a }: { ui: Ui; close: Closer<ReplaceRequest 
           <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
           {t("dialog.replace.regex")}
         </label>
+        {a.meta && <WhereSection t={t} columns={a.meta} value={where} onChange={setWhere} suggest={a.suggest} />}
       </SubmitOnEnter>
     </Dialog>
   );
