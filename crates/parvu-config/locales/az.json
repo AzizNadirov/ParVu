@@ -442,7 +442,7 @@
   "dialog.export.progress": "İxrac edilir… {percent}%",
   "dialog.export.quoting": "Dırnaqlar:",
   "dialog.export.quoting.all": "Bütün dəyərlər",
-  "dialog.export.quoting.needed": "Mətn dəyərləri",
+  "dialog.export.quoting.needed": "Yalnız lazım olanda (vergül, dırnaq, sətir keçidi)",
   "dialog.export.quoting.none": "Heç vaxt (dəyərdə ayırıcı olduqda xəta verir)",
   "dialog.export.running": "İxrac edilir…",
   "dialog.export.select_none": "Heç birini seçmə",
@@ -1479,5 +1479,6 @@
   "where.only": "Yalnız bu sətirlər…",
   "where.match": "Uyğun gələn sətirlər:",
   "where.hint": "Digər sətirlər dəyərini saxlayır; yeni sütunda onlar boş qalır.",
-  "where.hint_set": "Yalnız bu sətirlər dəyişir; digərləri dəyərini saxlayır."
+  "where.hint_set": "Yalnız bu sətirlər dəyişir; digərləri dəyərini saxlayır.",
+  "pagination.rows_one": "1 sətir"
 }

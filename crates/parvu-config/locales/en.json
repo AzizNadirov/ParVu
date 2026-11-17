@@ -442,7 +442,7 @@
   "dialog.export.progress": "Exporting… {percent}%",
   "dialog.export.quoting": "Quoting:",
   "dialog.export.quoting.all": "Every value",
-  "dialog.export.quoting.needed": "Text values",
+  "dialog.export.quoting.needed": "Only when needed (commas, quotes, line breaks)",
   "dialog.export.quoting.none": "Never (fails on embedded delimiters)",
   "dialog.export.running": "Exporting…",
   "dialog.export.select_none": "Select None",
@@ -1479,5 +1479,6 @@
   "where.only": "Only rows where…",
   "where.match": "Rows that match",
   "where.hint": "Other rows keep their value; a new column is empty there.",
-  "where.hint_set": "Only these rows change; the others keep their value."
+  "where.hint_set": "Only these rows change; the others keep their value.",
+  "pagination.rows_one": "1 row"
 }

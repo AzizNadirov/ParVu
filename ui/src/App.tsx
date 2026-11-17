@@ -978,9 +978,11 @@ export function App({ boot }: { boot: Bootstrap }) {
     const entries: MenuEntry[] = [];
     const r = src.reading;
     if (r.kind === "date_format" || r.kind === "timestamp_format") {
-      // Dates such as 03/04/2024: flip day and month in one click.
+      // Dates such as 03/04/2024: flip day and month in one click. Only
+      // when the file's dates allow both orders (no day above 12): the
+      // other order would turn the rest into empty cells.
       const other = swapDayMonth(r.format);
-      if (other !== r.format)
+      if (other !== r.format && src.ambiguous)
         entries.push({
           label: t(dayFirst(r.format) ? "types.month_first" : "types.day_first"),
           onSelect: () => read({ ...r, format: other }),
@@ -2369,7 +2371,7 @@ export function App({ boot }: { boot: Bootstrap }) {
             </button>
           )}
           <StatusJobs t={t} />
-          {activeTab && <span className="nowrap">{t("pagination.rows", { total_rows: activeTab.total_rows })}</span>}
+          {activeTab && <span className="nowrap">{activeTab.total_rows === 1 ? t("pagination.rows_one") : t("pagination.rows", { total_rows: activeTab.total_rows })}</span>}
         </footer>
       </div>
       {search && activeTab && (
