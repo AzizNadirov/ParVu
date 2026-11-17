@@ -145,6 +145,8 @@ fn main() {
             commands::preview_conversion,
             commands::suggest_reading,
             commands::preview_column_fn,
+            commands::set_formula,
+            commands::remove_formula,
             commands::json_keys,
             commands::conversion_error_count,
             commands::cancel_conversion_count,

@@ -6,6 +6,7 @@
 
 use crate::column_types::ColumnTypes;
 use parvu_core::colfn::{ColumnFn, JsonKey};
+use parvu_core::formula::Formula;
 use parvu_core::types::{CsvOptions, Reading, SourceColumn};
 use parvu_core::workspace::CsvPreview;
 use std::collections::BTreeMap;
@@ -434,6 +435,46 @@ fn check_target_table(text: &str, catalog: &Catalog, active: &str, i18n: &I18n) 
 pub struct ExpressionPreview {
     pub sql: String,
     pub kind: Option<TranslationKind>,
+}
+
+/// Add or change (by `name`) a column formula written in the expression
+/// language, e.g. `= [qty] * [price]`. Live: the column recomputes when
+/// cells change, and cell editing stays allowed.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_formula(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    name: String,
+    source: String,
+    after: Option<String>,
+) -> ApiResult<TabSummary> {
+    with_ws(state, window, move |ws| {
+        let table = ws.tab_name(id)?.to_string();
+        // Formulas see the file's columns and the formulas', not the steps'.
+        let mut catalog = catalog_of(ws);
+        catalog.register_table(&table, ws.formula_columns(id)?.into_iter().map(|c| (c.name, c.dtype)));
+        let sql = parvu_dsl::compile_formula(&source, &catalog, &FunctionRegistry::default(), &table)?;
+        let source = source.trim().trim_start_matches('=').trim().to_string();
+        ws.set_formula(id, Formula { name, source, sql, after })?;
+        Ok(ws.summary(id)?)
+    })
+    .await
+}
+
+/// Remove a formula column (undoable).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn remove_formula(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    name: String,
+) -> ApiResult<TabSummary> {
+    with_ws(state, window, move |ws| {
+        ws.remove_formula(id, &name)?;
+        Ok(ws.summary(id)?)
+    })
+    .await
 }
 
 /// Live SQL preview of an expression, without running it.

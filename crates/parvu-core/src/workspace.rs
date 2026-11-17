@@ -22,6 +22,7 @@ use crate::export::{ExportOptions, export};
 use crate::format::{FileFormat, register_source};
 use crate::types::{CsvOptions, DetectOptions, Reading, SourceColumn};
 use crate::colfn::{ColumnFn, JsonKey};
+use crate::formula::{Formula, formula_sql};
 use crate::ops::{BuiltOp, OpContext, Operation, StepLabel};
 use crate::page::{Cell, ColumnMeta, Page};
 use crate::search::{SearchHit, SearchOptions, find_next};
@@ -40,6 +41,9 @@ enum StepKind {
     /// A column of the CSV file is read another way; keeps the previous
     /// reading for undo. The query is unchanged, so cell edits stay allowed.
     SourceReading { previous: SourceColumn },
+    /// The tab's formulas changed; keeps the previous list for undo. The
+    /// query is unchanged, so cell edits stay allowed.
+    Formulas { previous: Vec<Formula> },
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +65,8 @@ struct Tab {
     source: Vec<SourceColumn>,
     /// How the CSV file is parsed ("Open with options").
     csv: CsvOptions,
+    /// Column formulas, in order (live: between the cell edits and the steps).
+    formulas: Vec<Formula>,
 }
 
 impl Tab {
@@ -71,6 +77,24 @@ impl Tab {
 
 fn source_view(name: &str) -> String {
     format!("__pv_src_{name}")
+}
+
+/// The file plus pending cell edits; formulas are added on top of it.
+fn edits_view(name: &str) -> String {
+    format!("__pv_edits_{name}")
+}
+
+/// Create the edits view (`src` + `edits`) and the table's view (edits +
+/// `formulas`) of the tab called `name`.
+fn create_views(conn: &Connection, name: &str, edits: &[CellEdit], formulas: &[Formula]) -> Result<()> {
+    let src = source_view(name);
+    let src_columns = describe(conn, &format!("SELECT * FROM {}", quote_ident(&src)))?;
+    let overlay = overlay_sql(&src, &src_columns, edits)?;
+    let base = edits_view(name);
+    conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {overlay}", quote_ident(&base)))?;
+    let table = formula_sql(&base, name, &src_columns, formulas);
+    conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {table}", quote_ident(name)))?;
+    Ok(())
 }
 
 
@@ -105,6 +129,8 @@ pub struct TabSummary {
     pub current_query: String,
     pub steps: Vec<StepLabel>,
     pub pending_edits: usize,
+    /// Column formulas of the table.
+    pub formulas: Vec<Formula>,
 }
 
 /// What "Open with options" shows before opening.
@@ -311,6 +337,79 @@ impl Workspace {
         Ok(())
     }
 
+    /// The columns formulas can use: the file's (with cell edits) and the
+    /// formulas', in table order. Steps don't change them.
+    pub fn formula_columns(&self, id: TabId) -> Result<Vec<ColumnMeta>> {
+        let t = self.tab(id)?;
+        describe(&self.conn, &format!("SELECT * FROM {}", quote_ident(&t.name)))
+    }
+
+    /// Add or change (by name) a column formula. Undoable; the query is
+    /// unchanged, so cell edits stay allowed. Fails, changing nothing, when
+    /// the formula doesn't run or a later step can't use the new column.
+    pub fn set_formula(&mut self, id: TabId, formula: Formula) -> Result<StepLabel> {
+        let name = formula.name.trim().to_string();
+        if name.is_empty() {
+            return Err(CoreError::invalid("Enter a name for the formula column"));
+        }
+        let t = self.tab(id)?;
+        let previous = t.formulas.clone();
+        let existing = previous.iter().position(|f| f.name == name);
+        if existing.is_none() {
+            let src_columns = describe(&self.conn, &format!("SELECT * FROM {}", quote_ident(&edits_view(&t.name))))?;
+            if src_columns.iter().any(|c| c.name == name) {
+                return Err(CoreError::invalid(format!("\"{name}\" is already a column of the file")));
+            }
+        }
+        let mut next = previous.clone();
+        let formula = Formula { name: name.clone(), ..formula };
+        match existing {
+            Some(i) => next[i] = formula,
+            None => next.push(formula),
+        }
+        self.replace_formulas(id, next)?;
+        let key = if existing.is_some() { "step.formula_edit" } else { "step.formula_add" };
+        let label = StepLabel::new(key, &[("column", &name)]);
+        self.tab_mut(id)?.steps.push(Step { label: label.clone(), kind: StepKind::Formulas { previous } });
+        Ok(label)
+    }
+
+    /// Remove a formula column. Undoable; refused while other formulas or
+    /// steps use it.
+    pub fn remove_formula(&mut self, id: TabId, name: &str) -> Result<StepLabel> {
+        let previous = self.tab(id)?.formulas.clone();
+        if !previous.iter().any(|f| f.name == name) {
+            return Err(CoreError::invalid(format!("\"{name}\" is not a formula column")));
+        }
+        let next: Vec<Formula> = previous.iter().filter(|f| f.name != name).cloned().collect();
+        self.replace_formulas(id, next).map_err(|e| {
+            CoreError::invalid(format!("\"{name}\" is used by another formula or a later step ({e})"))
+        })?;
+        let label = StepLabel::new("step.formula_remove", &[("column", name)]);
+        self.tab_mut(id)?.steps.push(Step { label: label.clone(), kind: StepKind::Formulas { previous } });
+        Ok(label)
+    }
+
+    /// Swap in `formulas`, rebuild the views and check the current query
+    /// still runs; restore everything otherwise.
+    fn replace_formulas(&mut self, id: TabId, formulas: Vec<Formula>) -> Result<()> {
+        let conn = &self.conn;
+        let tab = self.tabs.iter_mut().find(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
+        let before = std::mem::replace(&mut tab.formulas, formulas);
+        let rebuild = |tab: &mut Tab| -> Result<()> {
+            rebuild_overlay(conn, tab)?;
+            crate::engine::validate(conn, tab.engine.current_query())
+        };
+        if let Err(e) = rebuild(tab) {
+            tab.formulas = before;
+            if let Err(e2) = rebuild(tab) {
+                tracing::warn!("could not restore the formulas: {e2}");
+            }
+            return Err(e);
+        }
+        Ok(())
+    }
+
     /// Run `f`, healing and retrying when it fails on an unparsable CSV
     /// value (see [`Workspace::heal`]).
     pub fn healing<T>(&mut self, mut f: impl FnMut(&mut Self) -> Result<T>) -> Result<T> {
@@ -400,11 +499,7 @@ impl Workspace {
             }
         };
         let result = (|| {
-            self.conn.execute_batch(&format!(
-                "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
-                quote_ident(&name),
-                quote_ident(&src)
-            ))?;
+            create_views(&self.conn, &name, &[], &[])?;
             QueryEngine::new(&self.conn, &name, self.page_size)
         })();
         let engine = match result {
@@ -417,14 +512,15 @@ impl Workspace {
         let id = self.next_id;
         self.next_id += 1;
         tracing::info!("opened {} as {name} ({} rows)", path.display(), engine.total_rows());
-        self.tabs.push(Tab { id, name, path, format, engine, edits: EditQueue::new(), steps: Vec::new(), source, csv: csv.clone() });
+        self.tabs.push(Tab { id, name, path, format, engine, edits: EditQueue::new(), steps: Vec::new(), source, csv: csv.clone(), formulas: Vec::new() });
         Ok(id)
     }
 
     fn drop_relations(&self, name: &str) {
         let _ = self.conn.execute_batch(&format!(
-            "DROP VIEW IF EXISTS {}; DROP VIEW IF EXISTS {}; DROP TABLE IF EXISTS {};",
+            "DROP VIEW IF EXISTS {}; DROP VIEW IF EXISTS {}; DROP VIEW IF EXISTS {}; DROP TABLE IF EXISTS {};",
             quote_ident(name),
+            quote_ident(&edits_view(name)),
             quote_ident(&source_view(name)),
             quote_ident(&excel_table(name))
         ));
@@ -453,6 +549,7 @@ impl Workspace {
             current_query: t.engine.current_query().to_string(),
             steps: t.steps.iter().map(|s| s.label.clone()).collect(),
             pending_edits: t.edits.len(),
+            formulas: t.formulas.clone(),
         })
     }
 
@@ -738,6 +835,9 @@ impl Workspace {
             StepKind::SourceReading { previous } => {
                 self.replace_source_columns(id, std::slice::from_ref(previous))?;
             }
+            StepKind::Formulas { previous } => {
+                self.replace_formulas(id, previous.clone())?;
+            }
         }
         let tab = self.tab_mut(id)?;
         tab.steps.pop();
@@ -763,6 +863,9 @@ impl Workspace {
         }
         if row >= tab.engine.total_rows() {
             return Err(CoreError::invalid(format!("Row {row} is out of range")));
+        }
+        if tab.formulas.iter().any(|f| f.name == column) {
+            return Err(CoreError::invalid(format!("\"{column}\" is a formula column: change its formula instead")));
         }
         let columns = describe(conn, &format!("SELECT * FROM {}", quote_ident(&tab.source_view())))?;
         let col = columns.iter().find(|c| c.name == column).ok_or_else(|| CoreError::UnknownColumn(column.into()))?;
@@ -823,6 +926,10 @@ impl Workspace {
             if *row >= total {
                 tab.edits = before;
                 return Err(CoreError::invalid(format!("Row {row} is out of range")));
+            }
+            if tab.formulas.iter().any(|f| &f.name == column) {
+                tab.edits = before;
+                return Err(CoreError::invalid(format!("\"{column}\" is a formula column: change its formula instead")));
             }
             let Some(col) = columns.iter().find(|c| &c.name == column) else {
                 tab.edits = before;
@@ -892,11 +999,8 @@ impl Workspace {
         let src = source_view(name);
         // ParVu writes standard files, so the parsing options no longer apply.
         let source = register_source(&self.conn, &src, &excel_table(name), path, self.detect, &CsvOptions::default())?;
-        self.conn.execute_batch(&format!(
-            "CREATE OR REPLACE VIEW {} AS SELECT * FROM {}",
-            quote_ident(name),
-            quote_ident(&src)
-        ))?;
+        // The saved file holds the formulas' values as ordinary columns.
+        create_views(&self.conn, name, &[], &[])?;
         let engine = QueryEngine::new(&self.conn, name, self.page_size)?;
         let tab = self.tab_mut(id)?;
         tab.engine = engine;
@@ -906,6 +1010,7 @@ impl Workspace {
         tab.steps.clear();
         tab.source = source;
         tab.csv = CsvOptions::default();
+        tab.formulas.clear();
         Ok(())
     }
 
@@ -971,10 +1076,7 @@ impl Workspace {
 
 /// Recreate the tab's user-facing view from its source plus pending edits.
 fn rebuild_overlay(conn: &Connection, tab: &mut Tab) -> Result<()> {
-    let src = tab.source_view();
-    let columns = describe(conn, &format!("SELECT * FROM {}", quote_ident(&src)))?;
-    let sql = overlay_sql(&src, &columns, tab.edits.all())?;
-    conn.execute_batch(&format!("CREATE OR REPLACE VIEW {} AS {sql}", quote_ident(&tab.name)))?;
+    create_views(conn, &tab.name, tab.edits.all(), &tab.formulas)?;
     tab.engine.refresh(conn)
 }
 

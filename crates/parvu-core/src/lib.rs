@@ -11,6 +11,7 @@ pub mod engine;
 pub mod error;
 pub mod export;
 pub mod format;
+pub mod formula;
 pub mod ops;
 pub mod page;
 pub mod pagination;

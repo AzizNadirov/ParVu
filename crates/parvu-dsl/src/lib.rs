@@ -20,7 +20,7 @@ pub use compiler::compile;
 pub use ir::{Expr, LiteralValue};
 pub use parser::{Ast, BinOp, UnOp, parse, parse_partial};
 pub use registry::{FunctionDef, FunctionRegistry, ParamDef};
-pub use resolver::resolve;
+pub use resolver::{resolve, resolve_in};
 pub use types::{LogicalType, duckdb_type_to_logical, methods_for_type};
 
 /// Errors from any stage of the pipeline.
@@ -116,6 +116,52 @@ pub fn translate(
             })
         }
     }
+}
+
+/// Aggregate functions: a formula is computed per row, so these (column
+/// totals) are not allowed in formulas yet.
+const AGGREGATES: &[&str] = &["SUM", "AVG", "COUNT", "COUNTD", "MIN", "MAX"];
+
+fn has_aggregate(e: &Expr) -> bool {
+    match e {
+        Expr::Call { func_name, args, .. } => {
+            AGGREGATES.contains(&func_name.to_uppercase().as_str()) || args.iter().any(has_aggregate)
+        }
+        Expr::BinaryOp { left, right, .. } => has_aggregate(left) || has_aggregate(right),
+        Expr::UnaryOp { operand, .. } => has_aggregate(operand),
+        Expr::MethodCall { receiver, method_name, args, .. } => {
+            AGGREGATES.contains(&method_name.to_uppercase().as_str()) || has_aggregate(receiver) || args.iter().any(has_aggregate)
+        }
+        Expr::Replace { text, pattern, with_value, .. } => {
+            has_aggregate(text) || has_aggregate(pattern) || has_aggregate(with_value)
+        }
+        _ => false,
+    }
+}
+
+/// Compile a column formula: an expression of one row of `table`, such as
+/// `[qty] * [price]` (a leading `=` is allowed, and `[column]` means a
+/// column of `table`). Returns the SQL expression; its column references
+/// are qualified with `table`.
+pub fn compile_formula(src: &str, catalog: &Catalog, registry: &FunctionRegistry, table: &str) -> Result<String, DslError> {
+    let text = src.trim();
+    let text = text.strip_prefix('=').unwrap_or(text).trim();
+    if text.is_empty() {
+        return Err(DslError::Resolve { message: "Enter a formula, e.g. = [qty] * [price]".into() });
+    }
+    let ast = parse(text)?;
+    let expr = resolve_in(&ast, catalog, registry, table)?;
+    if matches!(expr, Expr::Assignment { .. }) || expr.is_table_level() {
+        return Err(DslError::Resolve {
+            message: "A formula is an expression of one row, e.g. = [qty] * [price]".into(),
+        });
+    }
+    if has_aggregate(&expr) {
+        return Err(DslError::Resolve {
+            message: "Totals such as SUM([x]) are not available in formulas yet; use Group by for totals".into(),
+        });
+    }
+    compile(&expr, registry)
 }
 
 /// `SELECT` that overwrites `column` in place when it exists in `all_cols`,
@@ -278,5 +324,34 @@ mod tests {
         };
         let v = serde_json::to_value(&e).unwrap();
         assert_eq!(v["kind"], "resolve");
+    }
+}
+
+#[cfg(test)]
+mod formula_tests {
+    use super::*;
+
+    fn catalog() -> Catalog {
+        let mut c = Catalog::new();
+        c.register_table("sales", [("qty".to_string(), "BIGINT".to_string()), ("unit price".to_string(), "DOUBLE".to_string())]);
+        c.register_table("other", [("qty".to_string(), "BIGINT".to_string())]);
+        c
+    }
+
+    #[test]
+    fn formulas() {
+        let reg = FunctionRegistry::default();
+        let f = |s: &str| compile_formula(s, &catalog(), &reg, "sales");
+        assert_eq!(f("= [qty] * [\"unit price\"]").unwrap(), f("sales[qty] * sales[\"unit price\"]").unwrap());
+        assert!(f("= ROUND([qty] / 3, 1)").unwrap().contains("ROUND"));
+        assert!(f("= [nope] + 1").is_err());
+        assert!(f("sales[x] = 1").is_err(), "assignment");
+        assert!(f("= SUM([qty])").is_err(), "aggregate");
+        assert!(f("= ").is_err());
+        // A bare reference outside formulas: the only table, else an error.
+        let mut one = Catalog::new();
+        one.register_table("t", [("a".to_string(), "BIGINT".to_string())]);
+        assert!(resolve(&parse("[a] + 1").unwrap(), &one, &reg).is_ok());
+        assert!(resolve(&parse("[qty] + 1").unwrap(), &catalog(), &reg).is_err());
     }
 }
