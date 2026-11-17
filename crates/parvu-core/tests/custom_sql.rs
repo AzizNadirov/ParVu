@@ -62,7 +62,7 @@ fn a_row_function_in_select_and_where() {
     // The step keeps the expanded SQL, so it doesn't depend on the definition.
     let step = ws.current_query(id).unwrap();
     assert!(!step.to_lowercase().contains("clean_phone(") && step.contains("regexp_replace"), "{step}");
-    assert!(label.args["sql"].contains("regexp_replace"), "{label:?}");
+    assert!(label.args["sql"].contains("clean_phone(") && !label.args["sql"].contains("regexp_replace"), "the label shows what was typed: {label:?}");
     ws.set_custom(Arc::new(Library::default()));
     assert_eq!(rows(&ws, id).len(), 2);
     ws.undo(id).unwrap();

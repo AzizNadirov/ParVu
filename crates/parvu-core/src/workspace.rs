@@ -891,6 +891,8 @@ impl Workspace {
     /// doesn't change when a definition does.
     pub fn run_sql(&mut self, id: TabId, sql: &str, label: Option<StepLabel>) -> Result<StepLabel> {
         let x = self.expand_custom(sql)?;
+        // The label shows what the user typed, not the expansion.
+        let label = label.or_else(|| Some(query_label(sql)));
         self.push_query(id, &x.sql, label, None, None).map_err(|e| x.explain(e))
     }
 
@@ -909,15 +911,7 @@ impl Workspace {
         source: Option<String>,
         op: Option<Operation>,
     ) -> Result<StepLabel> {
-        let label = label.unwrap_or_else(|| {
-            let short: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
-            let short = if short.chars().count() > 60 {
-                format!("{}…", short.chars().take(60).collect::<String>())
-            } else {
-                short
-            };
-            StepLabel::new("step.query", &[("sql", &short)])
-        });
+        let label = label.unwrap_or_else(|| query_label(sql));
         let conn = &self.conn;
         let tab = self.tabs.iter_mut().find(|t| t.id == id).ok_or(CoreError::NoSuchTab(id))?;
         tab.engine.set_query(conn, sql)?;
@@ -1782,4 +1776,15 @@ pub fn json_keys_from(conn: &Connection, sql: &str) -> Result<Vec<JsonKey>> {
 /// Run a [`Workspace::conversion_error_query`]: `(errors, checked)`.
 pub fn conversion_errors(conn: &Connection, sql: &str) -> Result<(u64, u64)> {
     Ok(conn.query_row(sql, [], |r| Ok((r.get::<_, i64>(0)?.max(0) as u64, r.get::<_, i64>(1)?.max(0) as u64)))?)
+}
+
+/// "Query: <first 60 characters of `sql`>" for the steps panel.
+fn query_label(sql: &str) -> StepLabel {
+    let short: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    let short = if short.chars().count() > 60 {
+        format!("{}…", short.chars().take(60).collect::<String>())
+    } else {
+        short
+    };
+    StepLabel::new("step.query", &[("sql", &short)])
 }
