@@ -23,12 +23,14 @@ pub fn resolve(
     catalog: &Catalog,
     registry: &FunctionRegistry,
 ) -> Result<Expr, DslError> {
-    Resolver { catalog, registry }.node(ast)
+    Resolver { catalog, registry, current: None }.node(ast)
 }
 
 struct Resolver<'a> {
     catalog: &'a Catalog,
     registry: &'a FunctionRegistry,
+    /// The table of a bare `[column]` reference.
+    current: Option<&'a str>,
 }
 
 /// Strip surrounding double quotes from a bracketed column name. Single
@@ -43,6 +45,11 @@ fn column_name(raw: &str) -> String {
 
 /// Table-level operations produce a full SELECT and cannot be nested inside
 /// a scalar expression.
+/// Like [`resolve`], with bare `[column]` references taken from `table`.
+pub fn resolve_in(ast: &Ast, catalog: &Catalog, registry: &FunctionRegistry, table: &str) -> Result<Expr, DslError> {
+    Resolver { catalog, registry, current: Some(table) }.node(ast)
+}
+
 fn ensure_scalar(e: &Expr) -> Result<(), DslError> {
     match e {
         Expr::DropDuplicates { .. } => err(
@@ -151,6 +158,14 @@ impl Resolver<'_> {
 
     fn column_ref(&self, table: &str, raw_column: &str) -> Result<Expr, DslError> {
         let column = column_name(raw_column);
+        // A bare `[column]`: the current table, or the only one open.
+        let only = self.catalog.tables();
+        let table = match (table.is_empty(), self.current) {
+            (false, _) => table,
+            (true, Some(t)) => t,
+            (true, None) if only.len() == 1 => only[0].as_str(),
+            (true, None) => return err(format!("Write the table name: table[{column}]")),
+        };
         if !self.catalog.has_table(table) {
             return err(format!("Unknown table: '{table}'"));
         }

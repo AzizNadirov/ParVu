@@ -57,6 +57,13 @@ data["column name"]    # quoted for names with spaces
 
 The table name is optional if there's only one table loaded — the editor infers it.
 
+A bare `[column]` means a column of the current table. Column formulas use it:
+
+```python
+[qty] * [price]            # same as data[qty] * data[price]
+["unit price"] * 1.18
+```
+
 ### Assignment
 
 Add a new column (or overwrite an existing one):

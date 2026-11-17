@@ -214,6 +214,11 @@ fn build(pair: Pair<'_, Rule>) -> Ast {
             let (table, column) = column_parts(pair);
             Ast::ColumnRef { table, column }
         }
+        // The table is filled in by the resolver (the current table).
+        Rule::bare_ref => {
+            let column = pair.into_inner().next().unwrap().as_str().to_string();
+            Ast::ColumnRef { table: String::new(), column }
+        }
         Rule::number => Ast::Number(pair.as_str().to_string()),
         Rule::string => Ast::String(pair.as_str().to_string()),
         Rule::boolean => Ast::Boolean(pair.as_str() == "TRUE"),

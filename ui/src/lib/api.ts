@@ -165,6 +165,16 @@ export interface TabSummary {
   current_query: string;
   steps: StepLabel[];
   pending_edits: number;
+  /** Column formulas of the table (live computed columns). */
+  formulas: Formula[];
+}
+
+/** A column formula: the column it makes, what the user typed, and where it sits. */
+export interface Formula {
+  name: string;
+  source: string;
+  sql: string;
+  after: string | null;
 }
 
 export type Keep = "first" | "last";
@@ -653,6 +663,9 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 export const api = {
   sourceColumns: (id: number) => call<SourceColumn[]>("source_columns", { id }),
+  setFormula: (id: number, name: string, source: string, after?: string | null) =>
+    call<TabSummary>("set_formula", { id, name, source, after: after ?? null }),
+  removeFormula: (id: number, name: string) => call<TabSummary>("remove_formula", { id, name }),
   previewConversion: (id: number, column: string, to: Reading, n?: number) =>
     call<{ before: Cell; after: Cell; failed: boolean }[]>("preview_conversion", { id, column, to, n }),
   previewColumnFn: (id: number, column: string, func: ColumnFn, values: Cell[]) =>
