@@ -23,6 +23,7 @@ pub mod sql;
 pub mod stats;
 pub mod types;
 pub mod window;
+pub mod workbook;
 pub mod workspace;
 
 pub use duckdb;

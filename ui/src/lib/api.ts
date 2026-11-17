@@ -168,9 +168,36 @@ export interface TabSummary {
   pending_edits: number;
   /** Column formulas of the table (live computed columns). */
   formulas: Formula[];
+  /** The worksheet shown, for Excel workbooks (its name after saving). */
+  sheet: string | null;
+  /** Sheets were renamed, hidden, deleted… and not saved yet. */
+  sheets_changed: boolean;
 }
 
 /** A column formula: the column it makes, what the user typed, and where it sits. */
+/** A sheet of a workbook as it will be saved. */
+export interface PlanSheet {
+  name: string;
+  /** Its name in the file now. */
+  source: string;
+  hidden: boolean;
+  deleted: boolean;
+}
+
+export interface SheetsView {
+  /** The sheet this tab shows. */
+  current: string;
+  sheets: PlanSheet[];
+  /** Sheets (stored names) open in a tab of this window. */
+  open: string[];
+  changed: boolean;
+}
+
+export type SheetOp =
+  | { op: "rename"; sheet: string; name: string }
+  | { op: "hide" | "show" | "delete" | "restore" | "duplicate"; sheet: string }
+  | { op: "move"; sheet: string; by: number };
+
 export interface Formula {
   name: string;
   source: string;
@@ -708,7 +735,13 @@ export const api = {
   clearRecents: () => call<void>("clear_recents"),
   newWindow: () => call<string>("new_window"),
 
-  openFile: (path: string, options?: CsvOptions) => call<TabSummary>("open_file", { path, options: options ?? null }),
+  openFile: (path: string, options?: CsvOptions, sheet?: string) =>
+    call<TabSummary>("open_file", { path, options: options ?? null, sheet: sheet ?? null }),
+  /** The sheets of the workbook a tab shows, with unsaved sheet changes. */
+  excelSheets: (id: number) => call<SheetsView>("excel_sheets", { id }),
+  sheetOp: (id: number, op: SheetOp) => call<SheetsView>("sheet_op", { id, op }),
+  /** Show another sheet in the tab (by its stored name); the tab starts afresh. */
+  setSheet: (id: number, sheet: string) => call<TabSummary>("set_sheet", { id, sheet }),
   previewCsv: (path: string, options: CsvOptions) => call<CsvPreview>("preview_csv", { path, options }),
   closeTab: (id: number) => call<void>("close_tab", { id }),
   tabs: () => call<TabSummary[]>("tabs"),

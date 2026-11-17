@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- **Excel workbooks with several sheets.** A workbook opens on its first visible sheet, and a **Sheet: … ▾** button next to the table name lists every sheet (it lives in the table's header, so sheets never look like the tabs at the bottom):
+  - **Show in This Tab** switches the tab to another sheet; **Open in New Tab** and **Open All Sheets as Tabs** show sheets side by side (as tables `book_q2_2024`…, ready to join).
+  - **Rename, Hide / Unhide, Duplicate, Move Left / Right, Delete** change the workbook's sheets. Like cell edits, they are saved with the workbook (`Ctrl+S`); until then a deleted sheet can be restored, and the tab shows the unsaved dot.
+  - "Read as" choices and formulas are remembered per sheet.
+  - AI clients can open a given sheet (`open_file` takes `sheet` and lists the sheets).
 - **Column formulas and the formula bar.** A formula column computes every row from an expression such as `= [qty] * [price]`.
   - **Starting a formula:** type `=` in a cell, use the *fx* button of the new formula bar above the grid, or choose **New Formula Column After This** in the column menu.
   - **Writing it:** the bar has the expression language's highlighting and autocomplete. Each column the formula refers to gets its own colour, both in the bar and as a tinted column in the grid, and clicking a column header inserts it.
@@ -25,6 +30,8 @@
   - **Fill Down, Up, Right and Left** in the Data menu and the cell menu copy the selection's edge row or column; Ctrl+D fills down and Ctrl+R fills right. Every fill is one step that undo reverts. Formula columns are left as they are.
 
 ### Fixed
+- **Saving an Excel workbook kept only one sheet.** `Ctrl+S` on a workbook rewrote it with the sheet shown and silently dropped the others. Now every sheet is written, with its name and hidden state. ParVu writes values, so cell formatting, Excel formulas and charts are not kept; it says so before overwriting a workbook and offers **Save As a Copy…**.
+- **Saving an old `.xls` file overwrote it with CSV text.** ParVu can't write `.xls`, so Save now refuses and points to Save As `.xlsx`.
 - **ParVu no longer opens whenever Claude Code (or VS Code with Claude) starts.** MCP clients start their servers when a session opens, and `parvu mcp --attach` used to open ParVu right then. Now it answers the client's startup itself and opens ParVu only when the AI first uses a tool.
 - **Show Unique Values no longer freezes on big files.** It used to compute every distinct value of the column at once, holding the window until it finished. The column is now read piece by piece:
   - the dialog opens at once and fills as values are found, with progress and Stop;

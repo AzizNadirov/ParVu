@@ -28,12 +28,14 @@ import {
   type Reading,
   type Settings,
   type SourceColumn,
+  type SheetsView,
   type TabSummary,
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
 import { columnHighlights, errorOffset, formulaBody, formulaRefs, newFormulaName, refFor } from "./lib/formula";
 import { jobResult } from "./lib/jobs";
+import { sheetMenu, sheetsToOpen, type SheetActions } from "./lib/sheets";
 import { StatusJobs } from "./components/JobProgress";
 import { fillEdge, fillFromHandle, fillSeries, type FillCell, type FillDirection, type Rect } from "./lib/fill";
 import { FormulaBar, type FormulaBarHandle } from "./components/FormulaBar";
@@ -190,6 +192,9 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [formulaEdit, setFormulaEdit] = useState<{ name: string; isNew: boolean; after: string | null; source: string; error: string; errorAt?: number | null } | null>(null);
   const [currentCell, setCurrentCell] = useState<{ row: number; col: number } | null>(null);
   const formulaBar = useRef<FormulaBarHandle>(null);
+  // Workbooks the user agreed to overwrite with values this session.
+  const workbookConfirmed = useRef(new Set<string>());
+  const saveAsRef = useRef<(tab: TabSummary) => Promise<boolean>>(async () => false);
   // How each column of the active tab's CSV file is read ("Read as").
   const [sourceCols, setSourceCols] = useState<SourceColumn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -442,11 +447,11 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
 
   const openPath = useCallback(
-    async (path: string, options?: CsvOptions) => {
+    async (path: string, options?: CsvOptions, sheet?: string) => {
       setBusy(true);
       status(t("status.loading"));
       try {
-        const s = await api.openFile(path, options);
+        const s = await api.openFile(path, options, sheet);
         tabUi.current.set(s.id, newTabUi(s.name));
         upsertTab(s);
         switchTo(s.id);
@@ -1064,6 +1069,64 @@ export function App({ boot }: { boot: Bootstrap }) {
       setFormulaEdit({ ...fe, error: errorMessage(e), errorAt });
     }
   };
+  // ------------------------------------------------------------ Excel sheets
+  /** The sheet menu of the active workbook tab, under `anchor`. */
+  const showSheetMenu = async (anchor: HTMLElement) => {
+    if (!activeTab) return;
+    const tab = activeTab;
+    let view: SheetsView;
+    try {
+      view = await api.excelSheets(tab.id);
+    } catch (e) {
+      await showError(t("sheets.error"), e);
+      return;
+    }
+    const refreshTabs = async () => (await api.tabs()).forEach(upsertTab);
+    const run = async (fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+        await refreshTabs();
+      } catch (e) {
+        await showError(t("sheets.error"), e);
+      }
+    };
+    const actions: SheetActions = {
+      show: (s) =>
+        void run(async () => {
+          // The tab starts afresh on another sheet: offer a new tab instead
+          // when it holds work.
+          if (tab.steps.length || tab.pending_edits || tab.formulas.length) {
+            const choice = await ui.ask(t("sheets.switch_title"), t("sheets.switch_msg", { sheet: s.name }), [
+              { id: "cancel", label: t("btn.cancel") },
+              { id: "switch", label: t("sheets.switch_anyway"), danger: true },
+              { id: "new_tab", label: t("sheets.open_in_tab"), primary: true },
+            ]);
+            if (choice === "new_tab") return openPath(tab.path, undefined, s.source);
+            if (choice !== "switch") return;
+          }
+          const summary = await api.setSheet(tab.id, s.source);
+          tabUi.current.set(tab.id, newTabUi(summary.name));
+          upsertTab(summary);
+          await loadPage(tab.id, 1);
+          void refreshSchema();
+          status(t("sheets.switched", { sheet: s.name }), 4000);
+        }),
+      openInTab: (s) => void openPath(tab.path, undefined, s.source),
+      openAll: () =>
+        void (async () => {
+          for (const s of sheetsToOpen(view)) await openPath(tab.path, undefined, s.source);
+        })(),
+      rename: (s) =>
+        void run(async () => {
+          const name = await ui.prompt(t("sheets.rename_title"), t("sheets.rename_label"), s.name);
+          if (name !== null && name.trim() !== s.name) await api.sheetOp(tab.id, { op: "rename", sheet: s.name, name });
+        }),
+      op: (op) => void run(() => api.sheetOp(tab.id, op)),
+    };
+    const r = anchor.getBoundingClientRect();
+    setMenu({ x: r.left, y: r.bottom + 4, items: sheetMenu(t, view, actions) });
+  };
+
   const removeFormula = async (name: string) => {
     if (!activeTab) return;
     await mutate(activeTab.id, () => api.removeFormula(activeTab.id, name), t("error.operation_failed"));
@@ -1287,11 +1350,25 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   const saveTab = useCallback(
     async (tab: TabSummary, path: string | null): Promise<boolean> => {
+      // Writing a workbook over itself: values only, once per file a session.
+      if (tab.sheet !== null && (path === null || path === tab.path) && !workbookConfirmed.current.has(tab.path)) {
+        const name = tab.path.split(/[\\/]/).pop() ?? tab.path;
+        const choice = await ui.ask(t("sheets.save_title"), t("sheets.save_msg", { file: name }), [
+          { id: "cancel", label: t("btn.cancel") },
+          { id: "save_as", label: t("sheets.save_as_copy") },
+          { id: "save", label: t("btn.save"), primary: true },
+        ]);
+        if (choice === "save_as") return saveAsRef.current(tab);
+        if (choice !== "save") return false;
+        workbookConfirmed.current.add(tab.path);
+      }
       setBusy(true);
       status(t("status.saving"));
       try {
         const s = await api.saveTab(tab.id, path);
         upsertTab(s);
+        // Other tabs of a workbook show its sheets under their saved names.
+        if (tab.sheet !== null) (await api.tabs()).forEach(upsertTab);
         const st = tabUi.current.get(tab.id);
         if (st) st.sort = null;
         if (tab.id === active) await loadPage(tab.id, 1);
@@ -1309,7 +1386,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
 
   const saveAs = useCallback(
-    async (tab: TabSummary) => {
+    async (tab: TabSummary): Promise<boolean> => {
       const path = await saveDialog({
         title: t("dialog.save_as"),
         defaultPath: tab.path,
@@ -1324,16 +1401,29 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     [saveTab, t],
   );
+  saveAsRef.current = saveAs;
 
   const save = useCallback(async () => {
     if (!activeTab) return;
-    if (!activeTab.steps.length && !activeTab.pending_edits) return;
+    if (!activeTab.steps.length && !activeTab.pending_edits && !activeTab.sheets_changed) return;
     await saveTab(activeTab, null);
   }, [activeTab, saveTab]);
 
   /** Ask about unsaved edits of `tab`. True when it may be closed. */
   const resolveUnsaved = useCallback(
     async (tab: TabSummary): Promise<boolean> => {
+      // Sheet changes belong to the workbook: they go with its last tab.
+      const lastOfBook = tab.sheets_changed && !tabs.some((x) => x.id !== tab.id && x.path === tab.path);
+      if (lastOfBook) {
+        if (tab.id !== active) switchTo(tab.id);
+        const choice = await ui.ask(t("warning.unsaved_changes"), t("sheets.unsaved_close", { count: tab.pending_edits }), [
+          { id: "discard", label: t("dialog.unsaved.discard"), danger: true },
+          { id: "cancel", label: t("btn.cancel") },
+          { id: "save", label: t("btn.save"), primary: true },
+        ]);
+        if (choice === "save") return saveTab(tab, null);
+        return choice === "discard";
+      }
       if (!tab.pending_edits) return true;
       if (tab.id !== active) switchTo(tab.id);
       const choice = await openUnsavedChanges(ui, { count: tab.pending_edits });
@@ -1341,7 +1431,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       if (choice === "save") return saveTab(tab, null);
       return true;
     },
-    [active, switchTo, ui, saveTab],
+    [active, switchTo, ui, saveTab, tabs, t],
   );
 
   const closeTab = useCallback(
@@ -1782,6 +1872,17 @@ export function App({ boot }: { boot: Bootstrap }) {
               <section className="editor-panel" style={{ height: editorHeight }}>
                 <div className="editor-toolbar row">
                   <strong className="ellipsis">{headerLabel}</strong>
+                  {activeTab.sheet !== null && (
+                    <button
+                      className={`text small-btn sheet-chip${activeTab.sheets_changed ? " changed" : ""}`}
+                      aria-label={t("sheets.menu_title")}
+                      aria-haspopup="menu"
+                      onClick={(e) => void showSheetMenu(e.currentTarget)}
+                    >
+                      {t("sheets.chip", { sheet: activeTab.sheet })}
+                      <Icon name="chevronDown" size={16} />
+                    </button>
+                  )}
                   <span className="spacer" />
                   <span className="muted">{t("editor.mode")}</span>
                   <div className="segmented">
@@ -1967,6 +2068,7 @@ export function App({ boot }: { boot: Bootstrap }) {
           {activeTab && activeTab.pending_edits > 0 && (
             <span className="warn-text">{t("status.unsaved_edits", { count: activeTab.pending_edits })}</span>
           )}
+          {activeTab?.sheets_changed && <span className="warn-text">{t("sheets.status_unsaved")}</span>}
           {aiClients > 0 && (
             <button className="text small-btn pv-ai-chip" title={t("menu.ai.connect")} onClick={() => void openConnectAi(ui)}>
               <Icon name="ai" size={16} />

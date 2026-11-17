@@ -141,7 +141,7 @@ export function TabBar(props: {
           onClick={() => props.onSelect(tab.id)}
         >
           <span className="tab-name">{tab.name}</span>
-          {(tab.pending_edits > 0 || tab.steps.length > 0) && (
+          {(tab.pending_edits > 0 || tab.steps.length > 0 || tab.sheets_changed) && (
             <span className="dirty" title={t("tabs.unsaved")} />
           )}
           <button

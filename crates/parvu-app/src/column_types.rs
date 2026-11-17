@@ -56,8 +56,13 @@ fn stamp(path: &Path) -> Option<(u64, u64)> {
     Some((meta.len(), modified))
 }
 
-fn key(path: &Path) -> String {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned()
+/// The entry of a file, or of one sheet of a workbook.
+fn key(path: &Path, sheet: Option<&str>) -> String {
+    let file = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned();
+    match sheet {
+        Some(s) => format!("{file}#sheet={s}"),
+        None => file,
+    }
 }
 
 fn now() -> u64 {
@@ -82,8 +87,8 @@ impl ColumnTypes {
     }
 
     /// Readings chosen for `path`, if the file is unchanged since.
-    pub fn for_file(&self, path: &Path) -> Vec<(String, Reading)> {
-        let Some(entry) = self.files.get(&key(path)) else { return Vec::new() };
+    pub fn for_file(&self, path: &Path, sheet: Option<&str>) -> Vec<(String, Reading)> {
+        let Some(entry) = self.files.get(&key(path, sheet)) else { return Vec::new() };
         if stamp(path) != Some((entry.size, entry.modified)) {
             return Vec::new();
         }
@@ -92,39 +97,39 @@ impl ColumnTypes {
 
     /// Parsing options chosen for `path`, if the file is unchanged since.
     pub fn csv_for(&self, path: &Path) -> Option<CsvOptions> {
-        let entry = self.files.get(&key(path))?;
+        let entry = self.files.get(&key(path, None))?;
         (stamp(path) == Some((entry.size, entry.modified))).then(|| entry.csv.clone()).flatten()
     }
 
     /// Formulas made for `path`, if the file is unchanged since.
-    pub fn formulas_for(&self, path: &Path) -> Vec<SavedFormula> {
-        match self.files.get(&key(path)) {
+    pub fn formulas_for(&self, path: &Path, sheet: Option<&str>) -> Vec<SavedFormula> {
+        match self.files.get(&key(path, sheet)) {
             Some(e) if stamp(path) == Some((e.size, e.modified)) => e.formulas.clone(),
             _ => Vec::new(),
         }
     }
 
     /// Remember the formulas of `path` (all of them; none forgets them).
-    pub fn remember_formulas(&mut self, path: &Path, formulas: Vec<SavedFormula>) {
+    pub fn remember_formulas(&mut self, path: &Path, sheet: Option<&str>, formulas: Vec<SavedFormula>) {
         if formulas.is_empty() {
-            if let Some(e) = self.files.get_mut(&key(path)) {
+            if let Some(e) = self.files.get_mut(&key(path, sheet)) {
                 e.formulas.clear();
                 if e.is_empty() {
-                    self.files.remove(&key(path));
+                    self.files.remove(&key(path, sheet));
                 }
             }
             return;
         }
-        if let Some(entry) = self.entry(path) {
+        if let Some(entry) = self.entry(path, sheet) {
             entry.formulas = formulas;
         }
         self.trim();
     }
 
     /// The entry of `path`, emptied when the file changed since.
-    fn entry(&mut self, path: &Path) -> Option<&mut Entry> {
+    fn entry(&mut self, path: &Path, sheet: Option<&str>) -> Option<&mut Entry> {
         let (size, modified) = stamp(path)?;
-        let entry = self.files.entry(key(path)).or_insert_with(|| Entry {
+        let entry = self.files.entry(key(path, sheet)).or_insert_with(|| Entry {
             size,
             modified,
             saved: 0,
@@ -144,15 +149,15 @@ impl ColumnTypes {
 
     /// Remember how to parse `path`.
     pub fn remember_csv(&mut self, path: &Path, csv: CsvOptions) {
-        if let Some(entry) = self.entry(path) {
+        if let Some(entry) = self.entry(path, None) {
             entry.csv = Some(csv);
         }
         self.trim();
     }
 
     /// Remember that `column` of `path` is read as `reading`.
-    pub fn remember(&mut self, path: &Path, column: &str, reading: Reading) {
-        let Some(entry) = self.entry(path) else { return };
+    pub fn remember(&mut self, path: &Path, sheet: Option<&str>, column: &str, reading: Reading) {
+        let Some(entry) = self.entry(path, sheet) else { return };
         entry.columns.insert(column.to_string(), reading);
         self.trim();
     }
@@ -169,11 +174,11 @@ impl ColumnTypes {
     }
 
     /// Forget a choice (the column is read as detected again).
-    pub fn forget(&mut self, path: &Path, column: &str) {
-        if let Some(entry) = self.files.get_mut(&key(path)) {
+    pub fn forget(&mut self, path: &Path, sheet: Option<&str>, column: &str) {
+        if let Some(entry) = self.files.get_mut(&key(path, sheet)) {
             entry.columns.remove(column);
             if entry.is_empty() {
-                self.files.remove(&key(path));
+                self.files.remove(&key(path, sheet));
             }
         }
     }
@@ -191,14 +196,14 @@ mod tests {
         let store_file = dir.path().join("column_types.json");
 
         let mut store = ColumnTypes::default();
-        store.remember(&data, "x", Reading::Text);
+        store.remember(&data, None, "x", Reading::Text);
         store.save(&store_file).unwrap();
         let store = ColumnTypes::load(&store_file);
-        assert_eq!(store.for_file(&data), vec![("x".to_string(), Reading::Text)]);
+        assert_eq!(store.for_file(&data, None), vec![("x".to_string(), Reading::Text)]);
 
         // Another size: the file changed, the choice no longer applies.
         std::fs::write(&data, "x\n1\n2\n").unwrap();
-        assert!(store.for_file(&data).is_empty());
+        assert!(store.for_file(&data, None).is_empty());
     }
 
     #[test]
@@ -207,9 +212,9 @@ mod tests {
         let data = dir.path().join("a.csv");
         std::fs::write(&data, "x\n1\n").unwrap();
         let mut store = ColumnTypes::default();
-        store.remember(&data, "x", Reading::Integer);
-        store.forget(&data, "x");
-        assert!(store.for_file(&data).is_empty());
+        store.remember(&data, None, "x", Reading::Integer);
+        store.forget(&data, None, "x");
+        assert!(store.for_file(&data, None).is_empty());
         assert!(store.files.is_empty());
     }
 
@@ -221,9 +226,9 @@ mod tests {
         let mut store = ColumnTypes::default();
         let csv = CsvOptions { delimiter: Some(";".into()), ..Default::default() };
         store.remember_csv(&data, csv.clone());
-        store.remember(&data, "x", Reading::Text);
+        store.remember(&data, None, "x", Reading::Text);
         assert_eq!(store.csv_for(&data), Some(csv));
-        store.forget(&data, "x");
+        store.forget(&data, None, "x");
         assert!(store.csv_for(&data).is_some(), "forgetting a column keeps the options");
         std::fs::write(&data, "x;y\n1;2\n3;4\n").unwrap();
         assert_eq!(store.csv_for(&data), None);
@@ -236,13 +241,13 @@ mod tests {
         std::fs::write(&data, "x\n1\n").unwrap();
         let f = |n: &str| SavedFormula { name: n.into(), source: "[x] * 2".into(), after: None };
         let mut store = ColumnTypes::default();
-        store.remember_formulas(&data, vec![f("double"), f("again")]);
-        assert_eq!(store.formulas_for(&data), vec![f("double"), f("again")]);
+        store.remember_formulas(&data, None, vec![f("double"), f("again")]);
+        assert_eq!(store.formulas_for(&data, None), vec![f("double"), f("again")]);
         // None left: the entry goes.
-        store.remember_formulas(&data, Vec::new());
+        store.remember_formulas(&data, None, Vec::new());
         assert!(store.files.is_empty());
-        store.remember_formulas(&data, vec![f("double")]);
+        store.remember_formulas(&data, None, vec![f("double")]);
         std::fs::write(&data, "x\n1\n2\n").unwrap();
-        assert!(store.formulas_for(&data).is_empty());
+        assert!(store.formulas_for(&data, None).is_empty());
     }
 }
