@@ -35,6 +35,7 @@ export const openDropNull = deferred("openDropNull");
 export const openReplace = deferred("openReplace");
 export const openMathDialog = deferred("openMathDialog");
 export const openCopyTuple = deferred("openCopyTuple");
+export const openSeries = deferred("openSeries");
 export const openExportDialog = deferred("openExportDialog");
 export const openUnsavedChanges = deferred("openUnsavedChanges");
 export const openConfirmClose = deferred("openConfirmClose");

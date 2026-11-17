@@ -16,6 +16,7 @@ export { openDropNull } from "./DropNullDialog";
 export { openReplace } from "./ReplaceDialog";
 export { openMathDialog } from "./MathDialog";
 export { openCopyTuple } from "./CopyTupleDialog";
+export { openSeries } from "./SeriesDialog";
 export { openExportDialog } from "./ExportDialog";
 export { openUnsavedChanges } from "./UnsavedChangesDialog";
 export { openConfirmClose } from "./ConfirmCloseDialog";

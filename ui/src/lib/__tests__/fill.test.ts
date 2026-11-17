@@ -28,6 +28,9 @@ describe("continueSeries", () => {
   });
 
   it("month steps clamp to the month's length", () => {
+    // Landing on 29 February of a leap year (the drag fill had rolled it to 1 March).
+    expect(continueSeries(["2024-04-29", "2024-03-29"], 1)).toEqual(["2024-02-29"]);
+    expect(continueSeries(["2023-12-31", "2024-01-31"], 1)).toEqual(["2024-02-29"]);
     expect(continueSeries(["2024-01-31", "2024-03-31"], 1)).toEqual(["2024-05-31"]);
     expect(continueSeries(["2024-10-31", "2024-12-31"], 1)).toEqual(["2025-02-28"]);
   });
@@ -134,5 +137,52 @@ describe("fillEdge", () => {
   it("needs two rows or columns", () => {
     expect(fillEdge(at, { x: 0, y: 0, width: 2, height: 1 }, "down")).toEqual([]);
     expect(fillEdge(at, { x: 0, y: 0, width: 1, height: 3 }, "right")).toEqual([]);
+  });
+});
+
+describe("series with an explicit step", () => {
+  const spec = (s: Partial<import("../fill").SeriesSpec>): import("../fill").SeriesSpec => ({
+    direction: "down", type: "linear", unit: "day", step: 1, stop: "", ...s,
+  });
+
+  it("linear and growth, with a stop value", async () => {
+    const { seriesValues } = await import("../fill");
+    expect(seriesValues("1", 4, spec({ step: 2 }))).toEqual(["3", "5", "7", "9"]);
+    expect(seriesValues("1", 10, spec({ step: 2, stop: "6" }))).toEqual(["3", "5"]);
+    expect(seriesValues("10", 10, spec({ step: -3, stop: "2" }))).toEqual(["7", "4"]);
+    expect(seriesValues("0.5", 3, spec({ step: 0.25 }))).toEqual(["0.75", "1.00", "1.25"]);
+    expect(seriesValues("2", 4, spec({ type: "growth", step: 3 }))).toEqual(["6", "18", "54", "162"]);
+    expect(seriesValues("2", 10, spec({ type: "growth", step: 2, stop: "20" }))).toEqual(["4", "8", "16"]);
+    expect(seriesValues("100", 2, spec({ type: "growth", step: 0.5 }))).toEqual(["50", "25"]);
+    expect(seriesValues("x", 2, spec({}))).toBeNull();
+    expect(seriesValues(null, 2, spec({}))).toBeNull();
+    expect(seriesValues("1", 2, spec({ stop: "soon" }))).toBeNull();
+  });
+
+  it("dates by day, week, month and year", async () => {
+    const { seriesValues } = await import("../fill");
+    const d = (s: Partial<import("../fill").SeriesSpec>) => spec({ type: "date", ...s });
+    expect(seriesValues("2024-01-30", 3, d({}))).toEqual(["2024-01-31", "2024-02-01", "2024-02-02"]);
+    expect(seriesValues("2024-01-01", 2, d({ unit: "week", step: 2 }))).toEqual(["2024-01-15", "2024-01-29"]);
+    expect(seriesValues("2024-01-31", 2, d({ unit: "month" }))).toEqual(["2024-02-29", "2024-03-31"]);
+    expect(seriesValues("2024-02-29", 1, d({ unit: "year" }))).toEqual(["2025-02-28"]);
+    expect(seriesValues("2024-01-01 08:00:00", 1, d({}))).toEqual(["2024-01-02 08:00:00"]);
+    expect(seriesValues("2024-01-01", 10, d({ stop: "2024-01-03" }))).toEqual(["2024-01-02", "2024-01-03"]);
+    expect(seriesValues("2024-01-01", 1, d({ step: 1.5 }))).toBeNull();
+    expect(seriesValues("Jan", 1, d({}))).toBeNull();
+  });
+
+  it("fills each column (or row) from its first cell", async () => {
+    const { fillSeries } = await import("../fill");
+    const g: (string | null)[][] = [["1", "10"], [null, null], [null, null]];
+    const cells = fillSeries((r, c) => g[r][c], { x: 0, y: 0, width: 2, height: 3 }, spec({ step: 5 }));
+    expect(cells).toEqual([
+      { row: 1, col: 0, value: "6" },
+      { row: 2, col: 0, value: "11" },
+      { row: 1, col: 1, value: "15" },
+      { row: 2, col: 1, value: "20" },
+    ]);
+    const right = fillSeries((r, c) => [["2024-01-01", null, null]][r][c], { x: 0, y: 0, width: 3, height: 1 }, spec({ direction: "right", type: "date", unit: "month" }));
+    expect(right.map((c) => c.value)).toEqual(["2024-02-01", "2024-03-01"]);
   });
 });

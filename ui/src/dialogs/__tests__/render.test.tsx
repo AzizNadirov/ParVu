@@ -185,6 +185,33 @@ describe("dialogs render and resolve", () => {
     await p;
   });
 
+  it("series: step, stop value and preview", async () => {
+    const ui = makeUi();
+    let p = D.openSeries(ui, { seed: "1", rows: 6, cols: 1 });
+    await flush();
+    fireEvent.change(screen.getByLabelText("dialog.series.step"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("dialog.series.stop"), { target: { value: "6" } });
+    expect(screen.getByText(/dialog.series.preview/)).toBeTruthy();
+    fireEvent.click(screen.getByText("btn.ok"));
+    await expect(p).resolves.toEqual({ direction: "down", type: "linear", unit: "day", step: 2, stop: "6" });
+    cleanup();
+
+    // A date seed starts as a date series; a text seed can't be filled.
+    p = D.openSeries(ui, { seed: "2024-01-31", rows: 1, cols: 4 });
+    await flush();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "month" } });
+    fireEvent.click(screen.getByText("btn.ok"));
+    await expect(p).resolves.toMatchObject({ direction: "right", type: "date", unit: "month" });
+    cleanup();
+
+    p = D.openSeries(ui, { seed: "abc", rows: 3, cols: 1 });
+    await flush();
+    expect(screen.getByText("dialog.series.bad_number")).toBeTruthy();
+    expect((screen.getByText("btn.ok") as HTMLButtonElement).disabled).toBe(true);
+    escape();
+    await expect(p).resolves.toBeNull();
+  });
+
   it("drop null submits with Enter", async () => {
     const ui = makeUi();
     const p = D.openDropNull(ui, { table: "t", columns: ["a", "b"], selected: "b" });

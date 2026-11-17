@@ -129,7 +129,7 @@ function formatDate(ms: number, like: ParsedDate): string {
 }
 
 function monthLength(y: number, m: number): number {
-  const d = new Date(Date.UTC(2000, m + 1, 0));
+  const d = new Date(0);
   d.setUTCFullYear(y, m + 1, 0);
   return d.getUTCDate();
 }
@@ -140,8 +140,10 @@ function addMonths(p: ParsedDate, months: number): number {
   const y = Math.floor(total / 12);
   const m = total - y * 12;
   const days = monthLength(y, m);
-  const date = new Date(Date.UTC(0, m, Math.min(p.d, days)));
-  date.setUTCFullYear(y);
+  // Year, month and day at once: building the date in another year first
+  // (Date.UTC treats years 0–99 as 1900–1999) would roll 29 Feb into March.
+  const date = new Date(0);
+  date.setUTCFullYear(y, m, Math.min(p.d, days));
   return date.getTime() + p.time;
 }
 
@@ -308,3 +310,81 @@ export function fillEdge(get: Get, range: Rect, direction: FillDirection): FillC
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Series… dialog: an explicit step instead of one guessed from the seeds.
+
+export interface SeriesSpec {
+  /** Down each column, or right along each row. */
+  direction: "down" | "right";
+  /** Add the step, multiply by it, or step a date. */
+  type: "linear" | "growth" | "date";
+  unit: "day" | "week" | "month" | "year";
+  step: number;
+  /** Stop before passing this value; "" for no stop. */
+  stop: string;
+}
+
+/**
+ * The `count` values after `seed` for a series, nearest first; fewer when
+ * the stop value is reached. Null when the seed doesn't fit the type (not a
+ * number, or not a date) or the stop value can't be read.
+ */
+export function seriesValues(seed: Cell, count: number, spec: SeriesSpec): Cell[] | null {
+  if (seed === null) return null;
+  const out: Cell[] = [];
+  if (spec.type === "date") {
+    const p = parseDate(seed);
+    if (!p || !Number.isInteger(spec.step)) return null;
+    const stop = spec.stop.trim() ? parseDate(spec.stop) : null;
+    if (spec.stop.trim() && !stop) return null;
+    for (let i = 1; i <= count; i++) {
+      const n = spec.step * i;
+      const ms =
+        spec.unit === "day"
+          ? p.ms + n * DAY_MS
+          : spec.unit === "week"
+            ? p.ms + n * 7 * DAY_MS
+            : addMonths(p, spec.unit === "month" ? n : n * 12);
+      if (stop && (spec.step > 0 ? ms > stop.ms : ms < stop.ms)) break;
+      out.push(formatDate(ms, p));
+    }
+    return out;
+  }
+  const text = seed.trim();
+  if (!NUMBER.test(text)) return null;
+  const start = Number(text);
+  const stop = spec.stop.trim() === "" ? null : Number(spec.stop);
+  if (stop !== null && !Number.isFinite(stop)) return null;
+  const places = Math.max(decimals(text), decimals(String(spec.step)));
+  let v = start;
+  for (let i = 1; i <= count; i++) {
+    v = spec.type === "growth" ? start * Math.pow(spec.step, i) : start + spec.step * i;
+    if (stop !== null) {
+      const rising = spec.type === "growth" ? Math.abs(spec.step) >= 1 === start >= 0 : spec.step > 0;
+      if (rising ? v > stop : v < stop) break;
+    }
+    out.push(formatNumber(v, spec.type === "linear" && places > 0 && decimals(text) > 0 ? places : 0));
+  }
+  return out;
+}
+
+/** The cells a Series… fill writes: from the first cell of each column (or row) of `range`. */
+export function fillSeries(get: Get, range: Rect, spec: SeriesSpec): FillCell[] {
+  const out: FillCell[] = [];
+  if (spec.direction === "down") {
+    for (let c = range.x; c < range.x + range.width; c++) {
+      const vals = seriesValues(get(range.y, c), range.height - 1, spec) ?? [];
+      vals.forEach((value, i) => out.push({ row: range.y + 1 + i, col: c, value }));
+    }
+  } else {
+    for (let r = range.y; r < range.y + range.height; r++) {
+      const vals = seriesValues(get(r, range.x), range.width - 1, spec) ?? [];
+      vals.forEach((value, i) => out.push({ row: r, col: range.x + 1 + i, value }));
+    }
+  }
+  return out;
+}
+
+/** Whether `value` reads as a date or timestamp (the dialog's default type). */
+export const isDateValue = (value: Cell) => value !== null && parseDate(value) !== null;

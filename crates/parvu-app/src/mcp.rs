@@ -162,6 +162,8 @@ pub trait AttachHost: Send + Sync + 'static {
     fn propose(&self, proposal: Proposal) -> Pin<Box<dyn Future<Output = Decision> + Send>>;
     /// A tab of `window` changed; the window reloads it.
     fn changed(&self, window: &str, tab_id: u64);
+    /// A formula was set on a tab: remember the formulas for its file.
+    fn formulas_changed(&self, _summary: &parvu_core::TabSummary) {}
 }
 
 /// A change an attached client asks for, shown as an approval card.
@@ -268,6 +270,24 @@ pub struct ApplyArgs {
     pub table: String,
     /// The operation, e.g. {"op": "filter", "conditions": [{"column": "price", "op": "gt", "value": "10"}]}.
     pub operation: Operation,
+    /// One short sentence for the user saying why (shown when they are asked to approve).
+    #[serde(default)]
+    pub rationale: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SetFormulaArgs {
+    /// Table to change.
+    pub table: String,
+    /// Name of the formula column; an existing formula column of that name is changed.
+    pub name: String,
+    /// The formula in ParVu's expression language, e.g. "[qty] * [price]", "[price] / SUM([price])"
+    /// (SUM of one column is its total), "SUM([q1:q4])" (across the columns q1..q4 of each row),
+    /// "[total] - PREV([total])", "IF([qty] > 10, 'bulk', 'single')". [column] means a column of this table.
+    pub formula: String,
+    /// Show the column right after this one (default: at the end).
+    #[serde(default)]
+    pub after: Option<String>,
     /// One short sentence for the user saying why (shown when they are asked to approve).
     #[serde(default)]
     pub rationale: Option<String>,
@@ -469,8 +489,9 @@ impl ParvuMcp {
                     Inspect before answering: list_tables, describe_table, sample_rows, value_counts, column_stats.\n\
                     query runs one DuckDB SELECT over the open tables by name; file functions such as read_csv \
                     are refused. Quote identifiers with spaces in double quotes.\n\
-                    apply_operation and undo change the user's table only after they approve a card in ParVu, \
-                    so give a short rationale. If they reject it, don't retry the same change; ask them instead.\n\
+                    apply_operation, set_formula and undo change the user's table only after they approve a card \
+                    in ParVu, so give a short rationale. set_formula adds a live formula column, e.g. \
+                    [price] / SUM([price]). If they reject it, don't retry the same change; ask them instead.\n\
                     Files are opened and saved by the user in ParVu."
                 .into();
         }
@@ -502,6 +523,25 @@ impl ParvuMcp {
             "columns": columns_json(&page.columns),
             "first_rows": first,
         }))
+    }
+
+    /// Compile and set a formula; the first rows show the result.
+    fn formula_now(ws: &Mutex<Workspace>, id: u64, args: &SetFormulaArgs) -> Result<(serde_json::Value, parvu_core::TabSummary), String> {
+        let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
+        let f = crate::commands::compile_tab_formula(&ws, id, args.name.clone(), &args.formula, args.after.clone())
+            .map_err(|e| e.message)?;
+        let label = ws.set_formula(id, f).map_err(|e| e.to_string())?;
+        let s = ws.summary(id).map_err(|e| e.to_string())?;
+        let page = ws.page(id, 1).map_err(|e| e.to_string())?;
+        let first: Vec<_> = page.rows.into_iter().take(10).collect();
+        let out = json!({
+            "table": s.name,
+            "step": { "step": label.key, "args": label.args },
+            "rows": s.total_rows,
+            "columns": columns_json(&page.columns),
+            "first_rows": first,
+        });
+        Ok((out, s))
     }
 
     fn undo_now(ws: &Mutex<Workspace>, id: u64) -> Result<serde_json::Value, String> {
@@ -563,6 +603,63 @@ impl ParvuMcp {
                     Self::tab_id(&ws, &args.table)?
                 };
                 Self::apply_now(&ws, id, &args.operation)
+            })
+            .await
+        );
+        ok(out)
+    }
+
+    async fn formula_impl(&self, args: SetFormulaArgs, client: String) -> Result<CallToolResult, ErrorData> {
+        let ws = try_tool!(self.workspace());
+        if let Source::Attached(host) = &self.source {
+            let (window, _) = try_tool!(host.workspace());
+            let ws2 = ws.clone();
+            let (table, name, source, after, rationale) =
+                (args.table.clone(), args.name.clone(), args.formula.clone(), args.after.clone(), args.rationale.clone());
+            let proposal = try_tool!(
+                Self::blocking(move || {
+                    let ws = ws2.lock().unwrap_or_else(|p| p.into_inner());
+                    let id = Self::tab_id(&ws, &table)?;
+                    let f = crate::commands::compile_tab_formula(&ws, id, name.clone(), &source, after).map_err(|e| e.message)?;
+                    let s = ws.summary(id).map_err(|e| e.to_string())?;
+                    let exists = s.formulas.iter().any(|x| x.name == name);
+                    let (columns, rows) = ws.preview_formula(id, &f, 20).map_err(|e| e.to_string())?;
+                    Ok(Proposal {
+                        id: 0,
+                        window,
+                        client,
+                        tab_id: id,
+                        table: s.name,
+                        kind: "formula",
+                        label: StepLabel::new(if exists { "step.formula_edit" } else { "step.formula_add" }, &[("column", &name)]),
+                        rationale,
+                        sql: Some(format!("= {}", f.source)),
+                        rows_before: s.total_rows,
+                        rows_after: Some(s.total_rows),
+                        columns,
+                        rows,
+                    })
+                })
+                .await
+            );
+            let (window, tab_id) = (proposal.window.clone(), proposal.tab_id);
+            match host.propose(proposal).await {
+                Decision::Approved => {}
+                Decision::Rejected => return tool_error("The user rejected this formula in ParVu. Ask them what they want instead of retrying it."),
+                Decision::TimedOut => return tool_error("The user did not answer the approval request in ParVu."),
+            }
+            let (out, summary) = try_tool!(Self::blocking(move || Self::formula_now(&ws, tab_id, &args)).await);
+            host.formulas_changed(&summary);
+            host.changed(&window, tab_id);
+            return ok(out);
+        }
+        let out = try_tool!(
+            Self::blocking(move || {
+                let id = {
+                    let ws = ws.lock().unwrap_or_else(|p| p.into_inner());
+                    Self::tab_id(&ws, &args.table)?
+                };
+                Self::formula_now(&ws, id, &args).map(|(out, _)| out)
             })
             .await
         );
@@ -727,6 +824,16 @@ impl ParvuMcp {
         client: Peer<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         self.apply_impl(args, client_name(&meta, &client)).await
+    }
+
+    #[tool(description = "Add or change a formula column: a live column computed from each row by an expression in ParVu's language, which updates when cells change (unlike apply_operation's add column, cells stay editable). Use [column] for this table's columns; SUM([x]) alone is the column's total, SUM([a:c]) adds across columns a..c of the row, PREV([x]) / NEXT([x]) read neighbouring rows. When connected to the ParVu window, the user approves it first.")]
+    async fn set_formula(
+        &self,
+        Parameters(args): Parameters<SetFormulaArgs>,
+        meta: RequestMetaObject,
+        client: Peer<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.formula_impl(args, client_name(&meta, &client)).await
     }
 
     #[tool(description = "Undo the last applied operation on a table. When connected to the ParVu window, the user approves it first.")]
@@ -1174,6 +1281,23 @@ mod tool_tests {
     }
 
     #[tokio::test]
+    async fn headless_formulas() {
+        let (dir, s) = server(false);
+        let p = dir.path().join("sales.csv").display().to_string();
+        s.open_file(Parameters(OpenFileArgs { path: p })).await.unwrap();
+        let args = SetFormulaArgs {
+            table: "sales".into(),
+            name: "double".into(),
+            formula: "= [qty] * 2".into(),
+            after: Some("id".into()),
+            rationale: None,
+        };
+        let r = s.formula_impl(args, "test".into()).await.unwrap();
+        assert_ne!(r.is_error, Some(true), "{}", text(&r));
+        assert!(text(&r).contains("[\"1\",\"6\",\"north\",\"3\"]"), "{}", text(&r));
+    }
+
+    #[tokio::test]
     async fn files_stay_inside_allowed_folders() {
         let (dir, s) = server(false);
         let outside = tempfile::tempdir().unwrap();
@@ -1350,6 +1474,37 @@ mod attach_tests {
         assert!(err && text.contains("rejected"), "{text}");
         assert!(h2.ws.lock().unwrap().summary(1).unwrap().steps.is_empty(), "nothing applied");
         assert!(h2.changed.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn formulas_are_proposed_with_a_preview() {
+        let (_d, h) = host(Decision::Approved);
+        let (port, token) = listen(h.clone()).await;
+        let mut c = Client::connect(port, &token).await;
+        let args = json!({"table": "sales", "name": "share", "formula": "[qty] / SUM([qty])", "rationale": "Each row's share"});
+        let (err, text) = c.tool("set_formula", args).await;
+        assert!(!err && text.contains("\"step\":\"step.formula_add\""), "{text}");
+        {
+            let seen = h.seen.lock().unwrap();
+            let p = &seen[0];
+            assert_eq!((p.kind, p.label.key.as_str()), ("formula", "step.formula_add"));
+            assert_eq!(p.sql.as_deref(), Some("= [qty] / SUM([qty])"));
+            assert_eq!(p.columns.last().unwrap().name, "share", "the preview shows the new column");
+            assert_eq!(p.rows[0].last().unwrap().as_deref(), Some("0.2"));
+        }
+        let source = h.ws.lock().unwrap().summary(1).unwrap().formulas[0].source.clone();
+        assert_eq!(source, "[qty] / SUM([qty])");
+        // A formula that doesn't compile is an error before any card.
+        let (err, text) = c.tool("set_formula", json!({"table": "sales", "name": "x", "formula": "[nope] + 1"})).await;
+        assert!(err && text.contains("nope"), "{text}");
+        assert_eq!(h.seen.lock().unwrap().len(), 1);
+
+        let (_d2, h2) = host(Decision::Rejected);
+        let (port, token) = listen(h2.clone()).await;
+        let mut c = Client::connect(port, &token).await;
+        let (err, text) = c.tool("set_formula", json!({"table": "sales", "name": "d", "formula": "[qty] * 2"})).await;
+        assert!(err && text.contains("rejected"), "{text}");
+        assert!(h2.ws.lock().unwrap().summary(1).unwrap().formulas.is_empty());
     }
 
     #[tokio::test]

@@ -17,7 +17,7 @@ Both use the same tools and the same safety rules. The AI can read the tables op
    - **OpenAI, Gemini, OpenRouter, Groq:** enter the model id your account offers.
    - **Ollama / LM Studio:** start the local server, enter a model you've pulled (for example `llama3.1`). No key is needed and nothing leaves your computer. Small local models may not handle tool calls well.
 2. **Open the panel:** **AI → AI assistant** (`Ctrl+Shift+A`).
-3. **Ask:** for example "Which region sold the most last quarter?", "Are there duplicate customer ids?" or "Group by month and sum revenue." `Enter` sends, `Shift+Enter` starts a new line, **Stop** cancels.
+3. **Ask:** for example "Which region sold the most last quarter?", "Are there duplicate customer ids?", "Group by month and sum revenue." or "Add a column with each order's share of total revenue." (a live formula column, see [DSL.md](DSL.md#column-formulas)) `Enter` sends, `Shift+Enter` starts a new line, **Stop** cancels.
 
 Each tab has its own conversation. The ↺ button starts a new one. The panel shows the tokens used and, for Claude models, the estimated cost.
 

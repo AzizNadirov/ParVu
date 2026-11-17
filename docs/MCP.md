@@ -20,11 +20,11 @@ ParVu works with AI clients that speak the [Model Context Protocol](https://mode
      ```
 3. Ask about your tables, for example "Which region had the most sales in my sales tab?" or "Keep only 2024 orders and group them by month."
 
-The client can list, describe, sample and query the open tables freely. When it wants to change a table (`apply_operation`, `undo`), ParVu shows a card with:
+The client can list, describe, sample and query the open tables freely. When it wants to change a table (`apply_operation`, `set_formula`, `undo`), ParVu shows a card with:
 - the step;
 - the client's reason;
 - the row count before and after;
-- a preview of the result and the SQL.
+- a preview of the result and the SQL (for a formula, the formula itself).
 
 **Apply** adds a normal step to Applied Steps, which `Ctrl+Z` undoes. **Reject** tells the client no. Opening and saving files stays with you: in this mode the client has no `open_file` or `export` tool.
 
@@ -95,6 +95,7 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 | `value_counts` | Most frequent values of a column |
 | `query` | One DuckDB `SELECT` over the open tables, by table name (up to 1,000 rows, 30-second limit) |
 | `apply_operation` | Any ParVu table operation (filter, sort, group by, pivot, melt, add column, fill missing values, window functions…) as a step |
+| `set_formula` | Add or change a formula column: a live column computed from each row, e.g. `[qty] * [price]`, `[price] / SUM([price])` (share of the column's total) or `SUM([q1:q4])` (across a row). Cells stay editable and the column updates when they change. Formulas approved in your window are remembered for the file, like your own. |
 | `undo` | Revert the last step on a table |
 | `export` | Write a table to a file (needs `--allow-write`) |
 

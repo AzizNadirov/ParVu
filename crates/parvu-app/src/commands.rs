@@ -4,7 +4,7 @@
 //! never waits on DuckDB. Each window has its own workspace, found by the
 //! calling window's label.
 
-use crate::column_types::ColumnTypes;
+use crate::column_types::{ColumnTypes, SavedFormula};
 use parvu_core::colfn::{ColumnFn, JsonKey};
 use parvu_core::formula::Formula;
 use parvu_core::types::{CsvOptions, Reading, SourceColumn};
@@ -338,6 +338,11 @@ pub async fn open_file(
         if let Err(e) = ws.apply_source_readings(id, &chosen) {
             tracing::warn!("could not apply the column types chosen for {}: {e}", p.display());
         }
+        // And the formulas made for it.
+        let formulas = ColumnTypes::load(&ColumnTypes::file()).formulas_for(&p);
+        if !formulas.is_empty() {
+            restore_formulas(ws, id, formulas);
+        }
         Ok(ws.summary(id)?)
     })
     .await?;
@@ -473,24 +478,71 @@ pub async fn set_formula(
     after: Option<String>,
 ) -> ApiResult<TabSummary> {
     with_ws(state, window, move |ws| {
-        let table = ws.tab_name(id)?.to_string();
-        // Formulas see the file's columns and the formulas', not the steps'.
-        let mut catalog = catalog_of(ws);
-        catalog.register_table(&table, ws.formula_columns(id)?.into_iter().map(|c| (c.name, c.dtype)));
-        let compiled = parvu_dsl::compile_formula(&source, &catalog, &FunctionRegistry::default(), &table)?;
-        // PREV / NEXT read the whole table in order for every page: on a
-        // big table that is slow and needs the table in memory.
-        if compiled.reads_neighbours && ws.table_rows(id)? > NEIGHBOUR_MAX_ROWS {
-            return Err(ApiError::new(
-                "expression",
-                "PREV and NEXT work on tables up to 2,000,000 rows: they read the whole table, in order, for every page.",
-            ));
-        }
-        let source = source.trim().trim_start_matches('=').trim().to_string();
-        ws.set_formula(id, Formula { name, source, sql: compiled.sql, after, totals: compiled.totals })?;
-        Ok(ws.summary(id)?)
+        let formula = compile_tab_formula(ws, id, name, &source, after)?;
+        ws.set_formula(id, formula)?;
+        let summary = ws.summary(id)?;
+        remember_formulas(&summary);
+        Ok(summary)
     })
     .await
+}
+
+/// Compile a formula of tab `id` written in the expression language.
+pub(crate) fn compile_tab_formula(ws: &Workspace, id: TabId, name: String, source: &str, after: Option<String>) -> ApiResult<Formula> {
+    let table = ws.tab_name(id)?.to_string();
+    // Formulas see the file's columns and the formulas', not the steps'.
+    let mut catalog = catalog_of(ws);
+    catalog.register_table(&table, ws.formula_columns(id)?.into_iter().map(|c| (c.name, c.dtype)));
+    let compiled = parvu_dsl::compile_formula(source, &catalog, &FunctionRegistry::default(), &table)?;
+    // PREV / NEXT read the whole table in order for every page: on a big
+    // table that is slow and needs the table in memory.
+    if compiled.reads_neighbours && ws.table_rows(id)? > NEIGHBOUR_MAX_ROWS {
+        return Err(ApiError::new(
+            "expression",
+            "PREV and NEXT work on tables up to 2,000,000 rows: they read the whole table, in order, for every page.",
+        ));
+    }
+    let source = source.trim().trim_start_matches('=').trim().to_string();
+    Ok(Formula { name, source, sql: compiled.sql, after, totals: compiled.totals })
+}
+
+/// Remember a tab's formulas for its file, to restore them when it opens again.
+pub(crate) fn remember_formulas(summary: &TabSummary) {
+    if summary.path.as_os_str().is_empty() {
+        return;
+    }
+    let saved = summary
+        .formulas
+        .iter()
+        .map(|f| SavedFormula { name: f.name.clone(), source: f.source.clone(), after: f.after.clone() })
+        .collect();
+    let file = ColumnTypes::file();
+    let mut store = ColumnTypes::load(&file);
+    store.remember_formulas(&summary.path, saved);
+    if let Err(e) = store.save(&file) {
+        tracing::warn!("could not save {}: {e}", file.display());
+    }
+}
+
+/// Put back the formulas remembered for the file of tab `id`, one by one;
+/// one that no longer compiles or runs is skipped.
+fn restore_formulas(ws: &mut Workspace, id: TabId, saved: Vec<SavedFormula>) {
+    let mut restored: Vec<Formula> = Vec::new();
+    for f in saved {
+        let compiled = compile_tab_formula(ws, id, f.name.clone(), &f.source, f.after.clone());
+        let mut next = restored.clone();
+        match compiled {
+            Ok(formula) => next.push(formula),
+            Err(e) => {
+                tracing::warn!("formula {} not restored: {e}", f.name);
+                continue;
+            }
+        }
+        match ws.restore_formulas(id, next.clone()) {
+            Ok(()) => restored = next,
+            Err(e) => tracing::warn!("formula {} not restored: {e}", f.name),
+        }
+    }
 }
 
 /// Largest table a formula with PREV / NEXT may run on.
@@ -506,7 +558,9 @@ pub async fn remove_formula(
 ) -> ApiResult<TabSummary> {
     with_ws(state, window, move |ws| {
         ws.remove_formula(id, &name)?;
-        Ok(ws.summary(id)?)
+        let summary = ws.summary(id)?;
+        remember_formulas(&summary);
+        Ok(summary)
     })
     .await
 }
@@ -760,6 +814,9 @@ pub async fn undo(state: State<'_, AppState>, window: WebviewWindow, id: TabId) 
     with_ws(state, window, move |ws| {
         let label = ws.undo(id)?;
         let summary = ws.summary(id)?;
+        if label.key.starts_with("step.formula") {
+            remember_formulas(&summary);
+        }
         // Undoing "Read as" also forgets the choice for this file.
         if label.key == "step.source_type"
             && let Some(column) = label.args.get("column")
@@ -1107,5 +1164,28 @@ mod tests {
         let page = ws.page(id, 1).unwrap();
         let shares: Vec<_> = page.rows.iter().map(|r| r[1].clone().unwrap()).collect();
         assert_eq!(shares, ["0.25", "0.75"]);
+    }
+
+    /// Formulas come back in order (a later one may use an earlier one);
+    /// one that no longer compiles is skipped.
+    #[test]
+    fn restores_remembered_formulas() {
+        use crate::column_types::SavedFormula;
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("t.csv");
+        std::fs::write(&path, "qty,price\n2,10\n3,1\n").unwrap();
+        let mut ws = parvu_core::Workspace::new(100, None).unwrap();
+        let id = ws.open(&path).unwrap();
+        let f = |n: &str, s: &str| SavedFormula { name: n.into(), source: s.into(), after: None };
+        super::restore_formulas(
+            &mut ws,
+            id,
+            vec![f("total", "[qty] * [price]"), f("gone", "[nope] + 1"), f("share", "[total] / SUM([total])")],
+        );
+        let names: Vec<_> = ws.summary(id).unwrap().formulas.iter().map(|f| f.name.clone()).collect();
+        assert_eq!(names, ["total", "share"]);
+        assert!(ws.summary(id).unwrap().steps.is_empty(), "restoring adds no undo step");
+        let page = ws.page(id, 1).unwrap();
+        assert_eq!(page.rows[0][3].as_deref(), Some("0.8695652173913043"));
     }
 }
