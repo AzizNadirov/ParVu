@@ -360,6 +360,9 @@ pub fn typed_literal(raw: &str, dtype: &str) -> Result<String> {
     }
 }
 
+/// Values a type change checks before it applies.
+const CHANGE_TYPE_SAMPLE: u64 = 10_000;
+
 /// What an operation needs to know about the tab it runs on.
 pub struct OpContext<'a> {
     pub table: &'a str,
@@ -784,6 +787,22 @@ impl Operation {
                 ctx.require(column)?;
                 if !is_safe_type_name(new_type) {
                     return Err(CoreError::invalid(format!("Invalid type: {new_type}")));
+                }
+                // Values that don't fit would silently become empty (a text
+                // column read as INTEGER became all NULL). Check the first
+                // rows and send the user to Convert…, which shows them.
+                let c = q(column);
+                let check = (ctx.query)(&format!(
+                    "SELECT count(*) FILTER (WHERE {c} IS NOT NULL AND TRY_CAST({c} AS {new_type}) IS NULL), count({c}) \
+                     FROM (SELECT {c} FROM ({cur}) LIMIT {CHANGE_TYPE_SAMPLE})"
+                ))?;
+                let bad = check.first().and_then(|r| r[0].as_deref()).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+                let seen = check.first().and_then(|r| r[1].as_deref()).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+                if bad > 0 {
+                    return Err(CoreError::invalid(format!(
+                        "{bad} of the first {seen} values of \"{column}\" can't be read as {new_type} and would become empty. \
+                         Use Type → Convert… to see them, or to convert anyway."
+                    )));
                 }
                 (
                     // TRY_CAST: a value that doesn't convert becomes NULL. A plain

@@ -1169,8 +1169,11 @@ export function App({ boot }: { boot: Bootstrap }) {
   };
 
   const cellMenu = (row: number, col: number): MenuEntry[] => {
-    const sel = grid.current?.selection();
     const copy = (format: "tsv" | "csv" | "markdown", headers = false) => {
+      // Read the selection when the item is chosen: a right-click outside
+      // the selection selects the clicked cell, and that state isn't in
+      // place yet while the menu is being built.
+      const sel = grid.current?.selection();
       if (!sel) return;
       void copyText(
         formatRows(sel.rows, format, headers || format === "markdown" ? sel.columns : undefined),

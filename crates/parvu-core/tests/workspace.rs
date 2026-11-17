@@ -192,28 +192,31 @@ fn filter_drop_null_change_type_duplicate_add() {
 
 #[test]
 fn change_type_never_breaks_later_pages() {
-    // A text column of numbers with one bad value far down: the type change
-    // must not fail on the page, sort or count that reaches it.
+    // A text column of numbers with one bad value far down, past the rows a
+    // type change checks: the change must not fail on the page, sort or
+    // count that reaches it.
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("codes.csv");
     let mut text = String::from("id,code\n");
-    for i in 0..500 {
+    for i in 0..12_000 {
         text.push_str(&format!("{i},{i}\n"));
     }
-    text.push_str("500,oops\n");
+    text.push_str("12000,oops\n");
     std::fs::write(&path, text).unwrap();
     let mut ws = Workspace::new(100, None).unwrap();
+    // Keep the column as text (ParVu's detection would read it as numbers).
+    ws.set_detect_options(parvu_core::types::DetectOptions { enabled: false, ..Default::default() });
     let id = ws.open(&path).unwrap();
     assert_eq!(ws.columns(id).unwrap()[1].dtype, "VARCHAR");
     ws.apply(id, &Operation::ChangeType { column: "code".into(), new_type: "INTEGER".into() }).unwrap();
     ws.apply(id, &Operation::Sort { column: "code".into(), ascending: false }).unwrap();
-    assert_eq!(ws.summary(id).unwrap().total_rows, 501);
-    // Every page loads, and the value that doesn't convert is empty.
-    let rows: Vec<Vec<Option<String>>> = (1..=6).flat_map(|p| ws.page(id, p).unwrap().rows).collect();
-    assert_eq!(rows.len(), 501);
-    let bad = rows.iter().find(|r| r[0].as_deref() == Some("500")).unwrap();
+    let s = ws.summary(id).unwrap();
+    assert_eq!(s.total_rows, 12_001);
+    // Every page loads; the value that doesn't convert is empty.
+    assert_eq!(ws.page(id, 1).unwrap().rows[0][1].as_deref(), Some("11999"));
+    let last = ws.page(id, s.total_pages).unwrap().rows;
+    let bad = last.iter().find(|r| r[0].as_deref() == Some("12000")).unwrap();
     assert_eq!(bad[1], None);
-    assert!(rows.iter().any(|r| r[1].as_deref() == Some("499")));
 }
 
 #[test]

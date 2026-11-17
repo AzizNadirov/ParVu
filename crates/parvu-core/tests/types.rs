@@ -136,7 +136,10 @@ fn try_cast_over_csv_text_never_fails() {
     std::fs::write(&path, text).unwrap();
     let mut ws = Workspace::new(100, None).unwrap();
     let id = ws.open(&path).unwrap();
-    ws.apply(id, &Operation::ChangeType { column: "code".into(), new_type: "INTEGER".into() }).unwrap();
+    // A type change that would empty a value is refused (use Convert…).
+    let err = ws.apply(id, &Operation::ChangeType { column: "code".into(), new_type: "INTEGER".into() }).unwrap_err();
+    assert!(err.to_string().contains("1 of the first 501 values"), "{err}");
+    ws.run_sql(id, "SELECT TRY_CAST(code AS INTEGER) AS code, id FROM codes", None).unwrap();
     let through_tab = format!("SELECT max(code), count(code) FROM ({})", ws.current_query(id).unwrap());
     // The shape that triggered the rule: a TRY_CAST in a subquery over read_csv.
     let direct = format!(
