@@ -219,7 +219,7 @@ fn filter_conditions() {
 fn fill_null_methods() {
     let (_d, mut ws, id) = setup();
     let mut check = |columns: &[&str], method: FillMethod, value: &str, column: &str, expected: &[&str]| {
-        ws.apply(id, &Operation::FillNull { columns: s(columns), method, value: value.into() }).unwrap();
+        ws.apply(id, &Operation::FillNull { columns: s(columns), method, value: value.into(), filter: None }).unwrap();
         assert_eq!(col(&ws, id, column), s(expected), "{method:?}");
         assert_eq!(col(&ws, id, "id"), s(&["1", "2", "3", "4", "5", "6"]), "row order is kept");
         ws.undo(id).unwrap();
@@ -245,7 +245,7 @@ fn whole_table_aggregates_on_an_empty_table() {
     assert!(rows(&ws, id).is_empty());
     let stats = ws.column_stats(id, "qty").unwrap();
     assert_eq!((stats.row_count, stats.distinct), (0, 0));
-    ws.apply(id, &Operation::FillNull { columns: s(&["qty"]), method: FillMethod::Mode, value: "".into() }).unwrap();
+    ws.apply(id, &Operation::FillNull { columns: s(&["qty"]), method: FillMethod::Mode, value: "".into(), filter: None }).unwrap();
     assert!(rows(&ws, id).is_empty());
     ws.apply(
         id,
@@ -559,4 +559,52 @@ fn charts_fold_the_rest_into_other_and_split_into_series() {
     assert_eq!(sc.series.iter().map(|s| s.xs.len()).sum::<usize>(), 6);
     assert_eq!(sc.series[0].name, "north");
     assert!(sc.series.iter().all(|s| !s.other), "three regions fit");
+}
+
+fn north() -> parvu_core::clean::RowFilter {
+    parvu_core::clean::RowFilter { conditions: vec![cond("region", CondOp::Eq, "north")], combine: Combine::And }
+}
+
+#[test]
+fn set_value_changes_only_the_matching_rows() {
+    let (_d, mut ws, id) = setup();
+    ws.apply(id, &Operation::SetValue { column: "qty".into(), value: Some("0".into()), filter: north() }).unwrap();
+    assert_eq!(col(&ws, id, "qty"), s(&["0", "∅", "0", "2", "0", "∅"]));
+    assert!(ws.summary(id).unwrap().steps[0].args["where"].contains("region = north"));
+    ws.undo(id).unwrap();
+    // Empty (None) value; the type is kept.
+    let dtype = |ws: &Workspace| ws.columns(id).unwrap().into_iter().find(|c| c.name == "price").unwrap().dtype;
+    let before = dtype(&ws);
+    ws.apply(id, &Operation::SetValue { column: "price".into(), value: None, filter: north() }).unwrap();
+    assert_eq!(col(&ws, id, "price"), s(&["∅", "2.0", "∅", "3.0", "∅", "∅"]));
+    assert_eq!(dtype(&ws), before);
+    ws.undo(id).unwrap();
+    // A value that doesn't fit the column is refused.
+    assert!(ws.apply(id, &Operation::SetValue { column: "qty".into(), value: Some("many".into()), filter: north() }).is_err());
+}
+
+#[test]
+fn fill_and_transforms_can_be_limited_to_some_rows() {
+    use parvu_core::colfn::{ColumnFn, Output};
+    let (_d, mut ws, id) = setup();
+    let fill = Operation::FillNull { columns: s(&["qty"]), method: FillMethod::Value, value: "9".into(), filter: Some(north()) };
+    ws.apply(id, &fill).unwrap();
+    // Row 2 (south) and row 6 (east) stay empty.
+    assert_eq!(col(&ws, id, "qty"), s(&["3", "∅", "5", "2", "7", "∅"]));
+    ws.undo(id).unwrap();
+
+    let upper = |output| Operation::ColumnTransform { column: "product".into(), func: ColumnFn::Upper, output, filter: Some(north()) };
+    ws.apply(id, &upper(Output::InPlace)).unwrap();
+    assert_eq!(col(&ws, id, "product"), s(&["APPLE", "apple", "PEAR", "pear", "APPLE", "plum"]));
+    ws.undo(id).unwrap();
+    ws.apply(id, &upper(Output::New { name: "big".into() })).unwrap();
+    assert_eq!(col(&ws, id, "big"), s(&["APPLE", "∅", "PEAR", "∅", "APPLE", "∅"]));
+}
+
+#[test]
+fn suggestions_are_the_most_frequent_values() {
+    let (_d, ws, id) = setup();
+    let source = ws.unordered_query(id).unwrap();
+    let v = parvu_core::stats::value_suggestions(ws.connection(), &source, "region", 2).unwrap();
+    assert_eq!(v, s(&["north", "south"]));
 }

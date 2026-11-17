@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- **Conditions follow the column's type.**
+  - In **Filter Rows** (and everywhere conditions are written), the operators fit the column: no "contains" for numbers, and yes/no columns get = / ≠ / empty.
+  - The value box fits too: a number field, a date picker, date and time, time, or a yes/no choice.
+  - Text columns suggest their most frequent values, read from the first 200,000 rows so it stays quick on big files.
+- **Change only some rows.** Replace, Fill missing values and the column functions with options (prefix, extract, date formats…) have an **Only rows where…** section. Other rows keep their value; a new column is empty there. The step says which rows it touched, for example "… where region = north".
+- **Set Value…** (column menu → Clean) writes one value, or empty, into a column on the rows that match conditions, like pandas `df.loc[condition, column] = value`.
 - **Duplicates:**
   - **Drop Duplicates** can also keep **none**: every row that has a duplicate goes, as pandas `keep=False` does.
   - The new **Mark Duplicates** adds a yes/no column instead of dropping rows, like pandas `duplicated()`: every repeat after the first, before the last, or every duplicated row.

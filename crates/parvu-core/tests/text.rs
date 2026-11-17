@@ -32,7 +32,7 @@ fn names(ws: &Workspace, id: u64) -> Vec<String> {
 }
 
 fn apply(ws: &mut Workspace, id: u64, column: &str, func: ColumnFn, output: Output) {
-    ws.apply(id, &Operation::ColumnTransform { column: column.into(), func, output }).unwrap();
+    ws.apply(id, &Operation::ColumnTransform { column: column.into(), func, output, filter: None }).unwrap();
 }
 
 fn s(v: &[Option<&str>]) -> Vec<Option<String>> {
@@ -85,7 +85,7 @@ fn yes_no_and_merging() {
     let (_d, mut ws, id) = open();
     apply(&mut ws, id, "paid", ColumnFn::Invert, Output::InPlace);
     assert_eq!(column(&ws, id, "paid"), s(&[Some("false"), Some("true"), None]));
-    let invert_text = Operation::ColumnTransform { column: "city".into(), func: ColumnFn::Invert, output: Output::InPlace };
+    let invert_text = Operation::ColumnTransform { column: "city".into(), func: ColumnFn::Invert, output: Output::InPlace, filter: None };
     assert!(ws.apply(id, &invert_text).is_err());
 
     let merge = |keep| Operation::MergeColumns {
@@ -109,6 +109,7 @@ fn bad_input_is_refused_and_text_stays_text() {
         column: "email".into(),
         func: ColumnFn::RegexExtract { pattern: "(".into(), group: 0 },
         output: Output::InPlace,
+        filter: None,
     };
     assert!(ws.apply(id, &bad_regex).is_err());
     apply(&mut ws, id, "city", ColumnFn::AddPrefix { text: "x'); DROP TABLE t; --".into() }, Output::InPlace);

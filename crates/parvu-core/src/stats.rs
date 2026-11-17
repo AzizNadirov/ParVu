@@ -283,6 +283,23 @@ pub fn parse_sample_size(n: i64) -> Result<u64> {
     if n <= 0 { Err(CoreError::invalid("Sample size must be positive")) } else { Ok(n as u64) }
 }
 
+/// Rows read for value suggestions: the first ones only, so suggesting is
+/// quick on any file.
+pub const SUGGESTION_ROWS: u64 = 200_000;
+
+/// Values to suggest for `column` (a filter's value box): its most frequent
+/// values among the first [`SUGGESTION_ROWS`] rows of `source`, as text.
+pub fn value_suggestions(conn: &Connection, source: &str, column: &str, limit: u64) -> Result<Vec<String>> {
+    let c = quote_ident(column);
+    let sql = format!(
+        "SELECT CAST({c} AS VARCHAR) AS v, COUNT(*) AS n FROM (SELECT {c} FROM ({source}) LIMIT {SUGGESTION_ROWS}) \
+         WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY n DESC, v LIMIT {limit}"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+    Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

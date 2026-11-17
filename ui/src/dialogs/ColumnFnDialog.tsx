@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type { Ui, Closer } from "../lib/ui";
 import { api } from "../lib/api";
-import type { Cell, Operation, Side } from "../lib/api";
+import type { Cell, ColumnMeta, Operation, Side } from "../lib/api";
 import { Dialog } from "../components/Dialog";
 import { RichText, SubmitOnEnter, useDebounced } from "./common";
 import { ADD_UNITS, buildFn, DATE_FORMATS, FN_DIALOGS, initialValues, MATCH_HOWS, type FieldValues, type FnName } from "../lib/colfn";
+import { WhereSection, initialWhere, whereFilter, type Suggest } from "./ConditionRows";
 import "./dialogs.css";
 
 interface Args {
@@ -14,6 +15,9 @@ interface Args {
   name: FnName;
   /** A few values of the column from the page, for the preview. */
   values: Cell[];
+  /** The table's columns, for "Only rows where…". */
+  columns?: ColumnMeta[];
+  suggest?: Suggest;
 }
 
 /** One column function with parameters (prefix, first N characters, text
@@ -45,9 +49,18 @@ function ColumnFnDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nu
     };
   });
 
-  const op: Operation | null = func
-    ? { op: "column_transform", column: a.column, func, output: toNew ? { to: "new", name: newName.trim() } : { to: "in_place" } }
-    : null;
+  const [where, setWhere] = useState(() => initialWhere(a.column));
+  const filter = a.columns ? whereFilter(where, a.columns) : undefined;
+  const op: Operation | null =
+    func && filter !== null
+      ? {
+          op: "column_transform",
+          column: a.column,
+          func,
+          output: toNew ? { to: "new", name: newName.trim() } : { to: "in_place" },
+          ...(filter ? { where: filter } : {}),
+        }
+      : null;
   const submit = () => op && close(op);
 
   return (
@@ -179,6 +192,7 @@ function ColumnFnDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nu
           </div>
         )}
         {error && <div className="error-text small">{error}</div>}
+        {a.columns && <WhereSection t={t} columns={a.columns} value={where} onChange={setWhere} suggest={a.suggest} />}
       </SubmitOnEnter>
     </Dialog>
   );

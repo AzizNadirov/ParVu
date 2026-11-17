@@ -171,29 +171,91 @@ fn condition_sql(ctx: &OpContext, c: &Condition) -> Result<String> {
     })
 }
 
+/// Which rows an operation changes: conditions combined with AND or OR
+/// (pandas `df.loc[condition, column] = …`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct RowFilter {
+    pub conditions: Vec<Condition>,
+    #[serde(default)]
+    pub combine: Combine,
+}
+
+impl RowFilter {
+    /// The conditions as one SQL boolean expression over the current row.
+    pub(crate) fn sql(&self, ctx: &OpContext) -> Result<String> {
+        if self.conditions.is_empty() {
+            return Err(CoreError::invalid("Add at least one condition"));
+        }
+        let parts = self.conditions.iter().map(|c| condition_sql(ctx, c)).collect::<Result<Vec<_>>>()?;
+        Ok(format!("(({}))", parts.join(&format!("){}(", self.joiner()))))
+    }
+
+    fn joiner(&self) -> &'static str {
+        match self.combine {
+            Combine::And => " AND ",
+            Combine::Or => " OR ",
+        }
+    }
+
+    /// The conditions as people read them: `region = North and qty > 5`.
+    pub fn text(&self) -> String {
+        let text: Vec<String> = self
+            .conditions
+            .iter()
+            .map(|c| match c.op {
+                CondOp::IsNull | CondOp::NotNull | CondOp::IsEmpty | CondOp::NotEmpty => format!("{} {}", c.column, c.op.name()),
+                CondOp::Between => format!("{} between {} and {}", c.column, c.value, c.value2),
+                _ => format!("{} {} {}", c.column, c.op.name(), c.value),
+            })
+            .collect();
+        let label = text.join(self.joiner().to_lowercase().as_str());
+        if label.chars().count() > 80 { format!("{}…", label.chars().take(80).collect::<String>()) } else { label }
+    }
+}
+
+/// `new` on the rows `filter` selects, `old` on the others (no filter:
+/// every row gets `new`). Rows where the condition is NULL count as not
+/// selected.
+pub(crate) fn only_where(ctx: &OpContext, filter: Option<&RowFilter>, new: &str, old: &str) -> Result<String> {
+    Ok(match filter {
+        Some(f) => format!("CASE WHEN {} THEN {new} ELSE {old} END", f.sql(ctx)?),
+        None => new.to_string(),
+    })
+}
+
+/// Add "where …" to a step label when the operation was limited to some rows.
+pub(crate) fn label_where(label: StepLabel, filter: Option<&RowFilter>) -> StepLabel {
+    match filter {
+        Some(f) => {
+            let mut l = label;
+            l.args.insert("where".into(), f.text());
+            l
+        }
+        None => label,
+    }
+}
+
 pub(crate) fn filter(ctx: &OpContext, conditions: &[Condition], combine: Combine) -> Result<(String, StepLabel)> {
-    if conditions.is_empty() {
-        return Err(CoreError::invalid("Add at least one condition"));
-    }
-    let parts = conditions.iter().map(|c| condition_sql(ctx, c)).collect::<Result<Vec<_>>>()?;
-    let joiner = match combine {
-        Combine::And => " AND ",
-        Combine::Or => " OR ",
+    let f = RowFilter { conditions: conditions.to_vec(), combine };
+    let sql = format!("SELECT * FROM ({}) WHERE {}", ctx.current_query, f.sql(ctx)?);
+    Ok((sql, StepLabel::new("step.filter_rows", &[("conditions", &f.text())])))
+}
+
+/// Set `column` to `value` (NULL when `None`) on the rows `filter` selects.
+pub(crate) fn set_value(ctx: &OpContext, column: &str, value: Option<&str>, filter: &RowFilter) -> Result<(String, StepLabel)> {
+    let meta = ctx.column(column)?;
+    let c = q(column);
+    let new = match value {
+        None => format!("CAST(NULL AS {})", safe_type(meta)),
+        Some(v) if is_text(meta) => quote_literal(v),
+        Some(v) => typed_literal(v, &meta.dtype)?,
     };
-    let sql = format!("SELECT * FROM ({}) WHERE ({})", ctx.current_query, parts.join(&format!("){joiner}(")));
-    let text: Vec<String> = conditions
-        .iter()
-        .map(|c| match c.op {
-            CondOp::IsNull | CondOp::NotNull | CondOp::IsEmpty | CondOp::NotEmpty => format!("{} {}", c.column, c.op.name()),
-            CondOp::Between => format!("{} between {} and {}", c.column, c.value, c.value2),
-            _ => format!("{} {} {}", c.column, c.op.name(), c.value),
-        })
-        .collect();
-    let mut label = text.join(joiner.to_lowercase().as_str());
-    if label.chars().count() > 80 {
-        label = format!("{}…", label.chars().take(80).collect::<String>());
-    }
-    Ok((sql, StepLabel::new("step.filter_rows", &[("conditions", &label)])))
+    let expr = only_where(ctx, Some(filter), &new, &c)?;
+    let sql = format!("SELECT * REPLACE ({expr} AS {c}) FROM ({})", ctx.current_query);
+    let shown = value.unwrap_or("NULL");
+    let label = label_where(StepLabel::new("step.set_value", &[("column", column), ("value", shown)]), Some(filter));
+    Ok((sql, label))
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +292,13 @@ fn whole_value(item: &str, source: &str) -> String {
     format!("({})", crate::sql::whole_table_view(item, source, "__pv_t"))
 }
 
-pub(crate) fn fill_null(ctx: &OpContext, columns: &[String], method: FillMethod, value: &str) -> Result<(String, StepLabel)> {
+pub(crate) fn fill_null(
+    ctx: &OpContext,
+    columns: &[String],
+    method: FillMethod,
+    value: &str,
+    filter: Option<&RowFilter>,
+) -> Result<(String, StepLabel)> {
     let columns: Vec<String> = if columns.is_empty() { ctx.columns.iter().map(|c| c.name.clone()).collect() } else { columns.to_vec() };
     let rn = q(ROW_NUMBER);
     let mut replaced = Vec::new();
@@ -267,6 +335,7 @@ pub(crate) fn fill_null(ctx: &OpContext, columns: &[String], method: FillMethod,
         };
         // Keep the column's type where the fill value allows it (mean of integers stays fractional).
         let expr = if method == FillMethod::Mean { format!("COALESCE({c}, {fill})") } else { format!("COALESCE({c}, CAST({fill} AS {}))", safe_type(meta)) };
+        let expr = only_where(ctx, filter, &expr, &c)?;
         replaced.push(format!("{expr} AS {c}"));
     }
     if replaced.is_empty() {
@@ -279,7 +348,7 @@ pub(crate) fn fill_null(ctx: &OpContext, columns: &[String], method: FillMethod,
     );
     let cols_text = if columns.len() == ctx.columns.len() { "*".to_string() } else { columns.join(", ") };
     let how = if method == FillMethod::Value { format!("'{value}'") } else { method.name().to_string() };
-    Ok((sql, StepLabel::new("step.fill_null", &[("columns", &cols_text), ("method", &how)])))
+    Ok((sql, label_where(StepLabel::new("step.fill_null", &[("columns", &cols_text), ("method", &how)]), filter)))
 }
 
 /// The column's type for a CAST, or VARCHAR when its spelling is not safe to embed.

@@ -237,7 +237,7 @@ export type Operation =
   | { op: "remove"; column: string }
   | { op: "change_type"; column: string; new_type: string }
   | { op: "convert"; column: string; to: Reading; on_error: string | null; keep_original: boolean }
-  | { op: "column_transform"; column: string; func: ColumnFn; output: FnOutput }
+  | { op: "column_transform"; column: string; func: ColumnFn; output: FnOutput; where?: RowFilter }
   | { op: "merge_columns"; columns: string[]; separator: string; name: string; keep_columns: boolean }
   | { op: "date_diff"; start: string; end: string; unit: TimeUnitName; name: string }
   | { op: "expand_json"; column: string; keys: JsonKey[]; keep_original: boolean }
@@ -263,7 +263,8 @@ export type Operation =
   | { op: "describe" }
   // filtering and cleaning
   | { op: "filter"; conditions: Condition[]; combine: Combine }
-  | { op: "fill_null"; columns: string[]; method: FillMethod; value: string }
+  | { op: "fill_null"; columns: string[]; method: FillMethod; value: string; where?: RowFilter }
+  | { op: "set_value"; column: string; value: string | null; where: RowFilter }
   | { op: "sort_by"; keys: SortKey[] }
   | { op: "select_columns"; columns: string[] }
   | { op: "slice"; mode: SliceMode; n: number; seed: number | null }
@@ -419,6 +420,14 @@ export interface ReplaceRequest {
   output_column: string;
   case_sensitive: boolean;
   regex: boolean;
+  /** Only replace in these rows. */
+  where?: RowFilter;
+}
+
+/** Which rows an operation changes (pandas `df.loc[condition, column]`). */
+export interface RowFilter {
+  conditions: Condition[];
+  combine: Combine;
 }
 
 /** Unique values of a column; `complete` when every row was read. */
@@ -822,6 +831,8 @@ export const api = {
     call<TabSummary>("edit_cells", { id, cells }),
   saveTab: (id: number, path: string | null) => call<TabSummary>("save_tab", { id, path }),
 
+  /** Values to suggest for a filter's value box (most frequent in the first rows). */
+  valueSuggestions: (id: number, column: string) => startJob((job) => call<string[]>("value_suggestions", { id, column, job })),
   columnStats: (id: number, column: string, options?: JobOptions) =>
     startJob((job) => call<ColumnStats>("column_stats", { id, column, job }), options),
   chartData: (id: number, spec: ChartSpec, options?: JobOptions) =>

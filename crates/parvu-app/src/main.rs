@@ -154,6 +154,7 @@ fn main() {
             commands::new_window,
             commands::open_file,
             commands::make_table,
+            commands::value_suggestions,
             commands::refresh_table,
             commands::table_to_file,
             commands::excel_sheets,

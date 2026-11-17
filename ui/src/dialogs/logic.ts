@@ -10,6 +10,8 @@ import type {
   CondOp,
   Condition,
   FillMethod,
+  RowFilter,
+  TypeFamily,
   SliceMode,
   SortKey,
   WindowFunc,
@@ -601,6 +603,69 @@ export function condArity(op: CondOp): 0 | 1 | 2 {
 /** Whether the case-sensitivity option applies to this condition. */
 export function condIsTextual(op: CondOp): boolean {
   return ["eq", "ne", "contains", "not_contains", "starts_with", "ends_with", "matches", "in", "not_in"].includes(op);
+}
+
+/** How a condition's value is typed: it follows the column's type. */
+export type ValueKind = "number" | "date" | "datetime" | "time" | "boolean" | "text";
+
+export function valueKind(family: TypeFamily | undefined, dtype = ""): ValueKind {
+  switch (family) {
+    case "integer":
+    case "decimal":
+    case "float":
+      return "number";
+    case "date":
+      return "date";
+    case "timestamp":
+    case "timestamp_tz":
+      return "datetime";
+    case "time":
+      return "time";
+    case "boolean":
+      return "boolean";
+    case undefined:
+      return isNumericType(dtype) ? "number" : "text";
+    default:
+      return "text";
+  }
+}
+
+const ORDERED_OPS: CondOp[] = ["eq", "ne", "gt", "ge", "lt", "le", "between", "in", "not_in", "is_null", "not_null"];
+const TEXT_OPS: CondOp[] = [
+  "eq",
+  "ne",
+  "contains",
+  "not_contains",
+  "starts_with",
+  "ends_with",
+  "matches",
+  "in",
+  "not_in",
+  "is_null",
+  "not_null",
+  "is_empty",
+  "not_empty",
+];
+
+/** The operators that make sense for a kind of value. */
+export function opsFor(kind: ValueKind): CondOp[] {
+  if (kind === "text") return TEXT_OPS;
+  if (kind === "boolean") return ["eq", "ne", "is_null", "not_null"];
+  return ORDERED_OPS;
+}
+
+/** The conditions as a row filter, or null while one is incomplete. */
+export function buildRowFilter(conditions: Condition[], combine: Combine, isText: (column: string) => boolean): RowFilter | null {
+  const op = buildFilterOp(conditions, combine, isText);
+  return op && op.op === "filter" ? { conditions: op.conditions, combine: op.combine } : null;
+}
+
+/** Set Value: a value (null: empty) on the rows `filter` selects. Text
+ * columns may be set to an empty string; other columns need a value. */
+export function buildSetValueOp(column: string, value: string | null, isText: boolean, filter: RowFilter | null): Operation | null {
+  if (!column || !filter) return null;
+  if (value !== null && !isText && !value.trim()) return null;
+  return { op: "set_value", column, value, where: filter };
 }
 
 export function emptyCondition(column: string): Condition {

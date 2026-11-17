@@ -60,18 +60,18 @@ fn keys_are_sampled_and_expanded_with_types() {
 fn paths_lengths_and_rows() {
     let (_d, mut ws, id) = open_csv();
     let path = |p: &str, text| ColumnFn::JsonPath { path: p.into(), text };
-    ws.apply(id, &Operation::ColumnTransform { column: "payload".into(), func: path("$.addr.city", true), output: Output::New { name: "city".into() } })
+    ws.apply(id, &Operation::ColumnTransform { column: "payload".into(), func: path("$.addr.city", true), output: Output::New { name: "city".into() }, filter: None })
         .unwrap();
     assert_eq!(col(&ws, id, "city"), vec![Some("Baku".into()), None, None]);
-    let bad = Operation::ColumnTransform { column: "payload".into(), func: path("$..[", false), output: Output::InPlace };
+    let bad = Operation::ColumnTransform { column: "payload".into(), func: path("$..[", false), output: Output::InPlace, filter: None };
     assert!(ws.apply(id, &bad).is_err(), "a bad path is refused when applied");
 
-    ws.apply(id, &Operation::ColumnTransform { column: "tags".into(), func: ColumnFn::ListLength, output: Output::New { name: "n".into() } })
+    ws.apply(id, &Operation::ColumnTransform { column: "tags".into(), func: ColumnFn::ListLength, output: Output::New { name: "n".into() }, filter: None })
         .unwrap();
     assert_eq!(col(&ws, id, "n"), vec![Some("2".into()), Some("0".into()), Some("1".into())]);
     ws.apply(
         id,
-        &Operation::ColumnTransform { column: "tags".into(), func: ColumnFn::JoinList { separator: "|".into() }, output: Output::New { name: "joined".into() } },
+        &Operation::ColumnTransform { column: "tags".into(), func: ColumnFn::JoinList { separator: "|".into() }, output: Output::New { name: "joined".into() }, filter: None },
     )
     .unwrap();
     assert_eq!(col(&ws, id, "joined"), vec![Some("a|b".into()), Some("".into()), Some("c".into())]);
@@ -102,7 +102,7 @@ fn structs_and_lists_from_a_json_file() {
     assert_eq!(names(&ws, id), ["name", "city", "zip", "scores"]);
     assert_eq!(col(&ws, id, "city"), vec![Some("Baku".into()), Some("Gence".into())]);
 
-    ws.apply(id, &Operation::ColumnTransform { column: "scores".into(), func: ColumnFn::ListLength, output: Output::New { name: "n".into() } })
+    ws.apply(id, &Operation::ColumnTransform { column: "scores".into(), func: ColumnFn::ListLength, output: Output::New { name: "n".into() }, filter: None })
         .unwrap();
     assert_eq!(col(&ws, id, "n"), vec![Some("3".into()), Some("0".into())]);
     ws.apply(id, &Operation::ToRows { column: "scores".into() }).unwrap();

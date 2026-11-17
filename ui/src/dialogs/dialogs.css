@@ -252,3 +252,5 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-func-table td:nth-child(2) code { white-space: normal; overflow-wrap: anywhere; }
 .pv-func-table td:nth-child(2) { min-width: 140px; max-width: 34%; }
 .pv-func-table td:nth-child(3) { width: 50%; }
+.pv-where { display: flex; flex-direction: column; gap: 8px; }
+.pv-where legend .row { gap: 6px; }

@@ -1465,5 +1465,19 @@
   "dialog.mark_duplicates.all": "Birinci daxil, bütün təkrarlanan sətirlər",
   "dialog.mark_duplicates.name": "Yeni sütun:",
   "step.drop_duplicates_all": "{columns} üzrə bütün təkrarlanan sətirlər silindi",
-  "step.mark_duplicates": "{columns} üzrə təkrarlar {name} sütununda işarələndi"
+  "step.mark_duplicates": "{columns} üzrə təkrarlar {name} sütununda işarələndi",
+  "cond.true": "bəli",
+  "cond.false": "xeyr",
+  "step.where": "harada {conditions}",
+  "step.set_value": "{column} = {value}",
+  "set_value.menu": "Dəyər təyin et…",
+  "set_value.title": "Dəyər təyin et",
+  "set_value.set": "Təyin et:",
+  "set_value.to": "dəyəri",
+  "set_value.empty": "Boş",
+  "where.title": "Bu sətirlərdə:",
+  "where.only": "Yalnız bu sətirlər…",
+  "where.match": "Uyğun gələn sətirlər:",
+  "where.hint": "Digər sətirlər dəyərini saxlayır; yeni sütunda onlar boş qalır.",
+  "where.hint_set": "Yalnız bu sətirlər dəyişir; digərləri dəyərini saxlayır."
 }

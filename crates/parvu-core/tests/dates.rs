@@ -27,7 +27,7 @@ fn col(ws: &Workspace, id: u64, name: &str) -> Vec<Option<String>> {
 }
 
 fn new(ws: &mut Workspace, id: u64, column: &str, func: ColumnFn) -> String {
-    ws.apply(id, &Operation::ColumnTransform { column: column.into(), func, output: Output::New { name: String::new() } })
+    ws.apply(id, &Operation::ColumnTransform { column: column.into(), func, output: Output::New { name: String::new() }, filter: None })
         .unwrap();
     ws.columns(id).unwrap().into_iter().map(|c| c.name).find(|n| n.starts_with(&format!("{column}_"))).unwrap()
 }
@@ -50,7 +50,7 @@ fn parts_and_names() {
     assert_eq!(col(&ws, id, &c), s(&["14", "23"]));
     ws.undo(id).unwrap();
     // Hours of a plain date make no sense.
-    let hour_of_date = Operation::ColumnTransform { column: "day".into(), func: part(DatePart::Hour), output: Output::InPlace };
+    let hour_of_date = Operation::ColumnTransform { column: "day".into(), func: part(DatePart::Hour), output: Output::InPlace, filter: None };
     assert!(ws.apply(id, &hour_of_date).is_err());
 
     // Names in the user's language.
@@ -73,7 +73,7 @@ fn parts_and_names() {
 fn start_end_shift_and_format() {
     let (_d, mut ws, id) = open();
     let in_place = |ws: &mut Workspace, column: &str, func: ColumnFn| {
-        ws.apply(id, &Operation::ColumnTransform { column: column.into(), func, output: Output::InPlace }).unwrap();
+        ws.apply(id, &Operation::ColumnTransform { column: column.into(), func, output: Output::InPlace, filter: None }).unwrap();
     };
     in_place(&mut ws, "day", ColumnFn::StartOf { unit: TimeUnit::Quarter });
     assert_eq!(col(&ws, id, "day"), s(&["2024-04-01", "2024-10-01"]));

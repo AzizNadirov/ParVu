@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::clean::{BinMethod, Combine, Condition, FillMethod, SliceMode, SortKey};
+use crate::clean::{BinMethod, Combine, Condition, FillMethod, RowFilter, SliceMode, SortKey, label_where, only_where};
 use crate::colfn::{ColumnFn, JsonKey, Output, RelativeRange, TimeUnit};
 use crate::error::{CoreError, Result};
 use crate::page::{Cell, ColumnMeta};
@@ -105,6 +105,10 @@ pub enum Operation {
         func: ColumnFn,
         #[serde(default)]
         output: Output,
+        /// Only change these rows; the others keep their value (a new
+        /// column is empty there).
+        #[serde(default, rename = "where", skip_serializing_if = "Option::is_none")]
+        filter: Option<RowFilter>,
     },
     /// Turn chosen keys of a JSON object column into columns (typed by
     /// `keys`), at the column's place; keys missing from a row give empty
@@ -192,6 +196,18 @@ pub enum Operation {
         pattern: String,
         output_column: String,
         expression: String,
+        /// Only replace in these rows.
+        #[serde(default, rename = "where", skip_serializing_if = "Option::is_none")]
+        filter: Option<RowFilter>,
+    },
+    /// Set `column` to `value` (empty when `None`) on the rows `where`
+    /// selects (pandas `df.loc[condition, column] = value`).
+    SetValue {
+        column: String,
+        #[serde(default)]
+        value: Option<String>,
+        #[serde(rename = "where")]
+        filter: RowFilter,
     },
 
     // Reshaping (crate::reshape)
@@ -250,6 +266,9 @@ pub enum Operation {
         method: FillMethod,
         #[serde(default)]
         value: String,
+        /// Only fill in these rows.
+        #[serde(default, rename = "where", skip_serializing_if = "Option::is_none")]
+        filter: Option<RowFilter>,
     },
     /// Sort rows by several columns, first key first.
     SortBy { keys: Vec<SortKey> },
@@ -529,9 +548,11 @@ impl Operation {
                 let key = if *keep { "step.keep_conversion_errors" } else { "step.remove_conversion_errors" };
                 (format!("SELECT * FROM ({cur}) WHERE {cond}"), StepLabel::new(key, &[("column", column), ("type", to.dtype())]))
             }
-            Operation::ColumnTransform { column, func, output } => {
+            Operation::ColumnTransform { column, func, output, filter } => {
                 let meta = ctx.column(column)?;
                 let expr = func.expr(column, &meta.dtype)?;
+                let in_place_expr = only_where(ctx, filter.as_ref(), &expr, &q(column))?;
+                let new_expr = only_where(ctx, filter.as_ref(), &expr, "NULL")?;
                 // A bad pattern would only fail on the first page that needs
                 // it (neither validation nor the row count evaluates it).
                 if let ColumnFn::RegexExtract { pattern, group } = func {
@@ -546,10 +567,10 @@ impl Operation {
                     (ctx.query)(&format!("SELECT json_extract('{{}}', {})", quote_literal(path)))
                         .map_err(|e| CoreError::invalid(format!("Invalid JSON path: {e}")))?;
                 }
-                let label = StepLabel::new(func.key(), &[("column", column)]);
+                let label = label_where(StepLabel::new(func.key(), &[("column", column)]), filter.as_ref());
                 match output {
                     Output::InPlace => (
-                        ctx.select_each(|c| if c == column { format!("{expr} AS {}", q(c)) } else { q(c) }),
+                        ctx.select_each(|c| if c == column { format!("{in_place_expr} AS {}", q(c)) } else { q(c) }),
                         label,
                     ),
                     Output::New { name } => {
@@ -560,7 +581,7 @@ impl Operation {
                             .columns
                             .iter()
                             .flat_map(|c| {
-                                if c.name == *column { vec![q(&c.name), format!("{expr} AS {}", q(&new))] } else { vec![q(&c.name)] }
+                                if c.name == *column { vec![q(&c.name), format!("{new_expr} AS {}", q(&new))] } else { vec![q(&c.name)] }
                             })
                             .collect();
                         (format!("SELECT {} FROM ({cur})", items.join(", ")), label)
@@ -920,18 +941,22 @@ impl Operation {
                 };
                 (sql, StepLabel::new("step.add_column", &[("column", name)]))
             }
-            Operation::Replace { column, pattern, output_column, expression } => {
+            Operation::Replace { column, pattern, output_column, expression, filter } => {
                 ctx.require(column)?;
                 if output_column.trim().is_empty() {
                     return Err(CoreError::invalid("Output column name is empty"));
                 }
                 let t = q(ctx.table);
-                let sql = if ctx.columns.iter().any(|c| &c.name == output_column) {
-                    format!("SELECT * REPLACE ({expression} AS {}) FROM ({cur}) AS {t}", q(output_column))
+                let exists = ctx.columns.iter().any(|c| &c.name == output_column);
+                let old = if exists { q(output_column) } else { "NULL".to_string() };
+                let expr = only_where(ctx, filter.as_ref(), expression, &old)?;
+                let sql = if exists {
+                    format!("SELECT * REPLACE ({expr} AS {}) FROM ({cur}) AS {t}", q(output_column))
                 } else {
-                    format!("SELECT *, {expression} AS {} FROM ({cur}) AS {t}", q(output_column))
+                    format!("SELECT *, {expr} AS {} FROM ({cur}) AS {t}", q(output_column))
                 };
-                (sql, StepLabel::new("step.replace", &[("column", column), ("pattern", pattern)]))
+                let label = StepLabel::new("step.replace", &[("column", column), ("pattern", pattern)]);
+                (sql, label_where(label, filter.as_ref()))
             }
             Operation::GroupBy { by, aggregations } => crate::reshape::group_by(ctx, by, aggregations)?,
             Operation::Pivot { index, columns, values, func } => {
@@ -946,7 +971,10 @@ impl Operation {
             }
             Operation::Describe => crate::reshape::describe(ctx)?,
             Operation::Filter { conditions, combine } => crate::clean::filter(ctx, conditions, *combine)?,
-            Operation::FillNull { columns, method, value } => crate::clean::fill_null(ctx, columns, *method, value)?,
+            Operation::FillNull { columns, method, value, filter } => {
+                crate::clean::fill_null(ctx, columns, *method, value, filter.as_ref())?
+            }
+            Operation::SetValue { column, value, filter } => crate::clean::set_value(ctx, column, value.as_deref(), filter)?,
             Operation::SortBy { keys } => crate::clean::sort_by(ctx, keys)?,
             Operation::SelectColumns { columns } => crate::clean::select_columns(ctx, columns)?,
             Operation::Slice { mode, n, seed } => crate::clean::slice(ctx, *mode, *n, *seed)?,
