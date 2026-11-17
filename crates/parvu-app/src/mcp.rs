@@ -496,7 +496,8 @@ impl ParvuMcp {
                     query runs one DuckDB SELECT over the open tables by name; file functions such as read_csv \
                     are refused. Quote identifiers with spaces in double quotes.\n\
                     apply_operation, set_formula and undo change the user's table only after they approve a card \
-                    in ParVu, so give a short rationale. set_formula adds a live formula column, e.g. \
+                    in ParVu, so give a short rationale. Group by, pivot, unpivot, transpose, value counts, describe, \
+                    join and append open their result as a new tab. set_formula adds a live formula column, e.g. \
                     [price] / SUM([price]). If they reject it, don't retry the same change; ask them instead.\n\
                     Files are opened and saved by the user in ParVu."
                 .into();
@@ -508,27 +509,59 @@ impl ParvuMcp {
              Inspect before answering: describe_table, sample_rows, value_counts, column_stats.\n\
              query runs one DuckDB SELECT over the open tables by name; file functions such as \
              read_csv are refused. Quote identifiers with spaces in double quotes.\n\
-             apply_operation changes a table for this session only (filters, group by, pivot, \
-             new columns…); undo reverts it. Files on disk are never changed{}.",
+             apply_operation changes a table for this session only (filters, new columns…); undo \
+             reverts it. Group by, pivot, unpivot, transpose, value counts, describe, join and \
+             append open their result as a new table instead (named in the answer). Files on disk are never changed{}.",
             if self.allow_write() { ", except by export" } else { "" }
         )
     }
 }
 
 impl ParvuMcp {
-    fn apply_now(ws: &Mutex<Workspace>, id: u64, op: &Operation) -> Result<serde_json::Value, String> {
+    /// Apply `op` to tab `id`. A table operation (group by, pivot, join…)
+    /// opens its result as a new table instead. Returns the changed or new
+    /// tab and what to tell the AI.
+    fn apply_now(ws: &Mutex<Workspace>, id: u64, op: &Operation) -> Result<(u64, serde_json::Value), String> {
         let mut ws = ws.lock().unwrap_or_else(|p| p.into_inner());
+        if op.is_table_op() {
+            use parvu_core::workspace::{Derivation, Materialized, RESULT_ROW_LIMIT, materialize};
+            let plan = ws.plan_result(id, Derivation::Op { op: op.clone() }).map_err(|e| e.to_string())?;
+            if materialize(ws.connection(), &plan).map_err(|e| e.to_string())? == Materialized::TooBig {
+                return Err(format!(
+                    "The result would have more than {RESULT_ROW_LIMIT} rows. Filter or aggregate the table first."
+                ));
+            }
+            let label = plan.origin.label.clone();
+            let source = plan.origin.source.clone();
+            let new = ws.add_result(plan).map_err(|e| e.to_string())?;
+            let s = ws.summary(new).map_err(|e| e.to_string())?;
+            let page = ws.page(new, 1).map_err(|e| e.to_string())?;
+            let first: Vec<_> = page.rows.into_iter().take(10).collect();
+            return Ok((
+                new,
+                json!({
+                    "new_table": s.name,
+                    "from": source,
+                    "step": { "step": label.key, "args": label.args },
+                    "rows": s.total_rows,
+                    "columns": columns_json(&page.columns),
+                    "first_rows": first,
+                    "note": format!("The result is a new table, {}; {source} is unchanged.", s.name),
+                }),
+            ));
+        }
         let label = ws.apply(id, op).map_err(|e| e.to_string())?;
         let s = ws.summary(id).map_err(|e| e.to_string())?;
         let page = ws.page(id, 1).map_err(|e| e.to_string())?;
         let first: Vec<_> = page.rows.into_iter().take(10).collect();
-        Ok(json!({
+        let out = json!({
             "table": s.name,
             "step": { "step": label.key, "args": label.args },
             "rows": s.total_rows,
             "columns": columns_json(&page.columns),
             "first_rows": first,
-        }))
+        });
+        Ok((id, out))
     }
 
     /// Compile and set a formula; the first rows show the result.
@@ -579,7 +612,7 @@ impl ParvuMcp {
                         client,
                         tab_id: id,
                         table: ws.tab_name(id).map_err(|e| e.to_string())?.to_string(),
-                        kind: "operation",
+                        kind: if op.is_table_op() { "new_table" } else { "operation" },
                         label: p.label,
                         rationale,
                         sql: Some(p.sql),
@@ -597,8 +630,8 @@ impl ParvuMcp {
                 Decision::Rejected => return tool_error("The user rejected this change in ParVu. Ask them what they want instead of retrying it."),
                 Decision::TimedOut => return tool_error("The user did not answer the approval request in ParVu."),
             }
-            let out = try_tool!(Self::blocking(move || Self::apply_now(&ws, tab_id, &args.operation)).await);
-            host.changed(&window, tab_id);
+            let (changed, out) = try_tool!(Self::blocking(move || Self::apply_now(&ws, tab_id, &args.operation)).await);
+            host.changed(&window, changed);
             return ok(out);
         }
         let ws = try_tool!(self.workspace());
@@ -608,7 +641,7 @@ impl ParvuMcp {
                     let ws = ws.lock().unwrap_or_else(|p| p.into_inner());
                     Self::tab_id(&ws, &args.table)?
                 };
-                Self::apply_now(&ws, id, &args.operation)
+                Self::apply_now(&ws, id, &args.operation).map(|(_, out)| out)
             })
             .await
         );
@@ -828,7 +861,7 @@ impl ParvuMcp {
         ok(rows_json(&rows))
     }
 
-    #[tool(description = "Apply a table operation (filter, sort, group by, pivot, melt, add column, fill missing values, window functions, …) as a new step on a table. Returns the new row count and the first rows. When connected to the ParVu window, the user approves the change first.")]
+    #[tool(description = "Apply a table operation (filter, sort, group by, pivot, melt, add column, fill missing values, window functions, …) as a new step on a table. Group by, pivot, melt, transpose, value counts, describe, join and append leave the table as it is and open their result as a new table (new_table in the answer). Returns the row count and the first rows. When connected to the ParVu window, the user approves the change first.")]
     async fn apply_operation(
         &self,
         Parameters(args): Parameters<ApplyArgs>,
@@ -1486,6 +1519,26 @@ mod attach_tests {
         assert!(err && text.contains("rejected"), "{text}");
         assert!(h2.ws.lock().unwrap().summary(1).unwrap().steps.is_empty(), "nothing applied");
         assert!(h2.changed.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn table_operations_open_a_new_table() {
+        let (_d, h) = host(Decision::Approved);
+        let (port, token) = listen(h.clone()).await;
+        let mut c = Client::connect(port, &token).await;
+        let op = json!({"op": "group_by", "by": ["region"], "aggregations": [{"column": "qty", "func": "sum"}]});
+        let (err, text) = c.tool("apply_operation", json!({"table": "sales", "operation": op, "rationale": "Totals"})).await;
+        assert!(!err && text.contains("\"new_table\":\"sales_by_region\"") && text.contains("\"rows\":2"), "{text}");
+        assert_eq!(h.seen.lock().unwrap()[0].kind, "new_table");
+        {
+            let ws = h.ws.lock().unwrap();
+            let new = ws.tab_ids()[1];
+            assert_eq!(*h.changed.lock().unwrap(), vec![new], "the window is told about the new tab");
+            assert_eq!(ws.summary(new).unwrap().origin.unwrap().source, "sales");
+            assert!(ws.summary(1).unwrap().steps.is_empty(), "the source is unchanged");
+        }
+        let (err, text) = c.tool("query", json!({"sql": "SELECT count(*) FROM sales_by_region"})).await;
+        assert!(!err && text.contains("[[\"2\"]]"), "{text}");
     }
 
     #[tokio::test]

@@ -285,7 +285,8 @@ How to work:
 SELECT over the open tables by name). Never invent column names; check them first.
 - Quote identifiers that contain spaces or capitals in double quotes.
 - To change a table (filter, sort, group by, pivot, new columns, fill missing values…), call apply_operation \
-with a short rationale. For a live computed column (it updates when cells change), call set_formula with \
+with a short rationale. Group by, pivot, unpivot, transpose, value counts, describe, join and append \
+open their result as a new table (its name is in the answer) and leave the source as it was. For a live computed column (it updates when cells change), call set_formula with \
 a formula such as [qty] * [price], [price] / SUM([price]) (a column total) or SUM([q1:q4]) (across a row). \
 The user approves or rejects each change in ParVu. If they reject it, don't retry the same \
 change; ask what they want instead. Use undo only when the user asks.

@@ -102,6 +102,8 @@ Queries typed in the SQL editor still change the current tab, as a step. They're
 
 ## 6. Status
 
+U2 done: results in memory (`__pv_res_N` tables) computed as a job with progress and Stop; names after the operation; the provenance chip with Refresh; Save As for result tabs and a close warning; the 5M-row safeguard (write to Parquet or CSV); "Result in new tab" for SQL; AI table operations open a new table. Not done: renaming tabs (tables are referenced by name in other tabs' queries and formulas).
+
 U1 done: the menus, the shared header menu, Fill under Edit, `=` in a cell as a value with a one-time hint, the formula bar shown only while editing, and the `+` header. Math Operation stays in the Column menu until U2.
 
 ## 7. Open questions

@@ -56,6 +56,7 @@ Opening `sales.parquet` creates the view `__pv_src_sales` (the file) and the vie
 - SQL typed in SQL mode uses the table name as the original file.
 - Expressions run with the table name bound to the tab's current result (`Workspace::run_relative_sql`).
 - Cell edits are allowed only while no transform is applied.
+- **Table operations** (`Operation::is_table_op`: group by, pivot, melt, transpose, value counts, describe, join, append) don't change the tab: `Workspace::plan_result` → `workspace::materialize` (a job, into the in-memory table `__pv_res_N`, at most `RESULT_ROW_LIMIT` rows) → `add_result` opens a new tab whose source view reads that table. The tab keeps its `Origin` for Refresh until it is saved (Save As makes it a file tab).
 
 ## Conventions
 

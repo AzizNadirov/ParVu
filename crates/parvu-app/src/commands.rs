@@ -8,7 +8,7 @@ use crate::column_types::{ColumnTypes, SavedFormula};
 use parvu_core::colfn::{ColumnFn, JsonKey};
 use parvu_core::formula::Formula;
 use parvu_core::types::{CsvOptions, Reading, SourceColumn};
-use parvu_core::workspace::{CsvPreview, SheetsView};
+use parvu_core::workspace::{CsvPreview, Derivation, Materialized, RESULT_ROW_LIMIT, SheetsView};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -1230,4 +1230,101 @@ mod tests {
         let page = ws.page(id, 1).unwrap();
         assert_eq!(page.rows[0][3].as_deref(), Some("0.8695652173913043"));
     }
+}
+
+// ---------------------------------------------------------------- table results
+//
+// Table operations (Group By, Pivot, Join…) and "Result in new tab" queries
+// open their result in a new tab. The result is computed into an in-memory
+// table as a job (progress, Stop), then opened.
+
+/// What [`make_table`] did: opened the new tab, or found the result too big
+/// to keep in memory (the UI then offers to write it to a file).
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MadeTable {
+    Opened { summary: Box<TabSummary> },
+    TooBig { limit: u64 },
+}
+
+/// Compute `plan` as a job; the result table is dropped if the job fails or
+/// is cancelled.
+async fn materialize_job(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    job: u64,
+    tab: TabId,
+    plan: parvu_core::workspace::ResultPlan,
+) -> ApiResult<parvu_core::workspace::Materialized> {
+    let for_job = plan.clone();
+    let result = run_job(state.clone(), window.clone(), job, "table", Some(tab), move |_| Ok(for_job), |ctx, plan| {
+        parvu_core::workspace::materialize(ctx.conn, plan)
+    })
+    .await;
+    if result.is_err() {
+        let _ = with_ws(state, window, move |ws| {
+            parvu_core::workspace::discard_result(ws.connection(), &plan);
+            Ok(())
+        })
+        .await;
+    }
+    result
+}
+
+/// Make a new tab from tab `id`: a table operation or a SQL query.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn make_table(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    derivation: Derivation,
+    job: u64,
+) -> ApiResult<MadeTable> {
+    let plan = with_ws(state.clone(), window.clone(), move |ws| Ok(ws.plan_result(id, derivation)?)).await?;
+    match materialize_job(state.clone(), window.clone(), job, id, plan.clone()).await? {
+        Materialized::TooBig => Ok(MadeTable::TooBig { limit: RESULT_ROW_LIMIT }),
+        Materialized::Rows(_) => {
+            let summary = with_ws(state, window, move |ws| {
+                let new = ws.add_result(plan)?;
+                Ok(Box::new(ws.summary(new)?))
+            })
+            .await?;
+            Ok(MadeTable::Opened { summary })
+        }
+    }
+}
+
+/// Compute result tab `id` again from its source's current data.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn refresh_table(state: State<'_, AppState>, window: WebviewWindow, id: TabId, job: u64) -> ApiResult<MadeTable> {
+    let plan = with_ws(state.clone(), window.clone(), move |ws| Ok(ws.refresh_plan(id)?)).await?;
+    match materialize_job(state.clone(), window.clone(), job, id, plan.clone()).await? {
+        Materialized::TooBig => Ok(MadeTable::TooBig { limit: RESULT_ROW_LIMIT }),
+        Materialized::Rows(_) => {
+            let summary = with_ws(state, window, move |ws| {
+                ws.replace_result(id, plan)?;
+                Ok(Box::new(ws.summary(id)?))
+            })
+            .await?;
+            Ok(MadeTable::Opened { summary })
+        }
+    }
+}
+
+/// Write a result too big for memory straight to `path` (Parquet, CSV…),
+/// as a job. Returns the rows written; the UI then opens the file.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn table_to_file(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    id: TabId,
+    derivation: Derivation,
+    path: PathBuf,
+    job: u64,
+) -> ApiResult<u64> {
+    parvu_core::format::FileFormat::require(&path).map_err(ApiError::from)?;
+    run_job(state, window, job, "table", Some(id), move |ws| ws.plan_result(id, derivation), move |ctx, plan| {
+        parvu_core::export::export(ctx.conn, &plan.sql, &ExportOptions::for_path(&path))
+    })
+    .await
 }

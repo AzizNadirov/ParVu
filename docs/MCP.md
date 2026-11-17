@@ -94,7 +94,7 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 | `column_stats` | Rows, nulls, distinct values, min, max, mean, standard deviation |
 | `value_counts` | Most frequent values of a column |
 | `query` | One DuckDB `SELECT` over the open tables, by table name (up to 1,000 rows, 30-second limit) |
-| `apply_operation` | Any ParVu table operation (filter, sort, group by, pivot, melt, add column, fill missing values, window functions…) as a step |
+| `apply_operation` | Any ParVu table operation (filter, sort, add column, fill missing values, window functions…) as a step. Group by, pivot, melt, transpose, value counts, describe, join and append leave the table as it is and open their result as a new table (`new_table` in the answer) |
 | `set_formula` | Add or change a formula column: a live column computed from each row, e.g. `[qty] * [price]`, `[price] / SUM([price])` (share of the column's total) or `SUM([q1:q4])` (across a row). Cells stay editable and the column updates when they change. Formulas approved in your window are remembered for the file, like your own. |
 | `undo` | Revert the last step on a table |
 | `export` | Write a table to a file (needs `--allow-write`) |
