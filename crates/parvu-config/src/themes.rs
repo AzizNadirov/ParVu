@@ -239,18 +239,27 @@ impl Theme {
     }
 }
 
+/// Built-in themes that were renamed: settings saved with the old name
+/// keep their theme.
+const RENAMED: &[(&str, &str)] = &[("Excel", "Excel Material")];
+
+fn builtin_name(name: &str) -> &str {
+    RENAMED.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| new)
+}
+
 fn builtin(json: &str) -> Theme {
     Theme::from_json(json).expect("built-in theme JSON is valid (checked by tests)")
 }
 
 /// The built-in themes: "Material Light", "Material Dark", "ParVu Light",
-/// "Excel", "ParVu Black".
+/// "Excel Material", "Jupyter", "ParVu Black".
 pub fn builtin_themes() -> Vec<Theme> {
     vec![
         builtin(include_str!("../themes/material_light.json")),
         builtin(include_str!("../themes/material_dark.json")),
         builtin(include_str!("../themes/parvu_light.json")),
         builtin(include_str!("../themes/excel.json")),
+        builtin(include_str!("../themes/jupyter.json")),
         builtin(include_str!("../themes/parvu_black.json")),
     ]
 }
@@ -396,12 +405,16 @@ impl ThemeManager {
         &self.builtin
     }
 
+    /// Built-in, under its current or an old name (an old reference copy
+    /// such as `excel.json` named "Excel" is not listed as a custom theme).
     pub fn is_builtin(&self, name: &str) -> bool {
+        let name = builtin_name(name);
         self.builtin.iter().any(|t| t.name == name)
     }
 
     /// Theme by name: built-ins first, then `<themes_dir>/<slug>.json`.
     pub fn get_theme(&self, name: &str) -> Option<Theme> {
+        let name = builtin_name(name);
         if let Some(t) = self.builtin.iter().find(|t| t.name == name) {
             return Some(t.clone());
         }

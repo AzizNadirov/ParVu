@@ -7,14 +7,14 @@ use parvu_config::{ColorScheme, ConfigError, Settings, Theme, ThemeManager, them
 fn theme_manager_builtin() {
     let (_tmp, mgr) = common::theme_manager();
     let themes = mgr.list_themes();
-    for name in ["Material Light", "Material Dark", "ParVu Light", "Excel", "ParVu Black"] {
+    for name in ["Material Light", "Material Dark", "ParVu Light", "Excel Material", "Jupyter", "ParVu Black"] {
         assert!(themes.contains(&name.to_string()), "{name}");
     }
     // Built-ins are written to the themes folder for reference.
-    for f in ["material_light.json", "material_dark.json", "parvu_light.json", "excel.json", "parvu_black.json"] {
+    for f in ["material_light.json", "material_dark.json", "parvu_light.json", "excel_material.json", "jupyter.json", "parvu_black.json"] {
         assert!(mgr.themes_dir().join(f).is_file(), "{f}");
     }
-    assert_eq!(themes.len(), 5, "built-in files must not be listed twice");
+    assert_eq!(themes.len(), 6, "built-in files must not be listed twice");
 }
 
 #[test]
@@ -36,8 +36,8 @@ fn theme_manager_invalid_theme() {
 #[test]
 fn apply_settings_with_fallback() {
     let (_tmp, mut mgr) = common::theme_manager();
-    let s = Settings { current_theme: "Excel".into(), ..Settings::default() };
-    assert_eq!(mgr.apply_settings(&s).name, "Excel");
+    let s = Settings { current_theme: "Jupyter".into(), ..Settings::default() };
+    assert_eq!(mgr.apply_settings(&s).name, "Jupyter");
     let s = Settings { current_theme: "Gone".into(), ..Settings::default() };
     assert_eq!(mgr.apply_settings(&s).name, DEFAULT_THEME_NAME);
 }
@@ -53,7 +53,7 @@ fn theme_to_json() {
 #[test]
 fn builtin_themes_round_trip_and_css() {
     let themes = builtin_themes();
-    assert_eq!(themes.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Material Light", "Material Dark", "ParVu Light", "Excel", "ParVu Black"]);
+    assert_eq!(themes.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Material Light", "Material Dark", "ParVu Light", "Excel Material", "Jupyter", "ParVu Black"]);
     for theme in themes {
         let back = Theme::from_json(&theme.to_json().unwrap()).unwrap();
         assert_eq!(back, theme);
@@ -108,7 +108,7 @@ fn custom_themes_load_from_folder() {
     std::fs::write(mgr.themes_dir().join("broken.json"), "nope").unwrap();
     std::fs::write(mgr.themes_dir().join("readme.txt"), "x").unwrap();
 
-    assert_eq!(mgr.list_themes(), ["Excel", "Material Dark", "Material Light", "My Custom", "ParVu Black", "ParVu Light"]);
+    assert_eq!(mgr.list_themes(), ["Excel Material", "Jupyter", "Material Dark", "Material Light", "My Custom", "ParVu Black", "ParVu Light"]);
     let t = mgr.get_theme("My Custom").unwrap();
     assert_eq!(t.colors.background, "#101010");
     assert_eq!(t.colors.menu_hover, ColorScheme::default().menu_hover);
@@ -163,4 +163,19 @@ fn on_accent_colour() {
     assert_eq!(on_color("navy"), "#FFFFFF");
     let css = theme_css_variables(&builtin_themes()[1]);
     assert!(css.contains("  --pv-derived-on-accent: #000000;\n"));
+}
+
+#[test]
+fn renamed_excel_theme_keeps_old_settings() {
+    let (_tmp, mut mgr) = common::theme_manager();
+    // Settings saved before the rename, and the reference copy the old
+    // version wrote to the themes folder.
+    let mut old = mgr.get_theme("Excel Material").unwrap();
+    old.name = "Excel".into();
+    old.save_to_file(&mgr.themes_dir().join("excel.json")).unwrap();
+    let s = Settings { current_theme: "Excel".into(), ..Settings::default() };
+    assert_eq!(mgr.apply_settings(&s).name, "Excel Material");
+    assert!(mgr.is_builtin("Excel"));
+    assert!(!mgr.list_themes().contains(&"Excel".to_string()), "old copy is not a custom theme");
+    assert!(mgr.delete_theme("Excel").is_err());
 }
