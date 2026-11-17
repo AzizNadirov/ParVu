@@ -39,6 +39,8 @@
   border-radius: var(--md-shape-l);
 }
 .editor-toolbar { flex: 0 0 auto; }
+.editor-panel.collapsed { min-height: 0; padding-bottom: 8px; }
+.editor-toolbar .panel-toggle { width: 28px; height: 28px; min-height: 28px; padding: 0; margin-left: -4px; }
 .editor-toolbar strong { font-weight: 500; }
 .segmented {
   display: inline-flex;

@@ -80,6 +80,13 @@ describe("settings form", () => {
     expect(v).not.toHaveProperty("current_theme");
   });
 
+  it("keeps the View choices", () => {
+    const f = settingsToForm({ ...settings, query_panel_collapsed: true, show_ai_panel: true }, "en", "x");
+    expect([f.showQueryPanel, f.queryCollapsed, f.showSteps, f.showAi]).toEqual([true, true, true, true]);
+    const v = formToValues({ ...f, showSteps: false });
+    expect([v.show_query_panel, v.query_panel_collapsed, v.show_steps_panel, v.show_ai_panel]).toEqual([true, true, false, true]);
+  });
+
   it("flags out-of-range numbers", () => {
     const f = settingsToForm(settings, "en", "x");
     expect(invalidNumericFields({ ...f, rowsPerPage: "5", sqlFontSize: "abc" })).toEqual(["rowsPerPage", "sqlFontSize"]);

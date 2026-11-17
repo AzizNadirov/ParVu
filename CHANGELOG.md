@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- **Menus with icons, and shorter right-click menus.**
+  - Every menu item has an icon.
+  - The column menu, both the right-click menu on a header and Column in the menu bar, is grouped into named submenus: **Column** (rename, duplicate, remove), **Type**, **Transform**, **Clean**, **Analyze**, plus the column type's own functions (Text, Extract, Dates…). The header menu keeps Sort and Filter at the top and adds **New Table from This Column** and **Display** (freeze, formatting).
+  - In the cell menu, the extra copy formats moved into **Copy As**.
+- **The SQL Query panel can be collapsed** to its title bar with the arrow next to its title, or with **View → Collapse SQL Query Panel**.
+- **View choices are remembered:** whether the SQL Query panel is shown, collapsed and how tall it is, Applied Steps, and the AI assistant panel. They're also in **Settings → General → View**.
 - **Table operations open their result in a new tab.** Group By, Pivot, Unpivot, Transpose, Value Counts, Describe, Join and Append no longer replace the table you run them on. The source keeps its data, steps and edits.
   - **The new tab is named after what happened:** `orders_by_region`, `orders_pivot`, `orders_join_customers`…
   - **It's a table of its own:** cells can be edited, formula columns added, and any operation applied to it.

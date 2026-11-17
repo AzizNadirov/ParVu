@@ -525,6 +525,11 @@ export interface Settings {
   enable_crash_reporting: boolean;
   mcp_allow_clients: boolean;
   detect_column_types: boolean;
+  show_query_panel: boolean;
+  query_panel_collapsed: boolean;
+  query_panel_height: number;
+  show_steps_panel: boolean;
+  show_ai_panel: boolean;
   date_order: "auto" | "day_first" | "month_first";
   [key: string]: unknown;
 }

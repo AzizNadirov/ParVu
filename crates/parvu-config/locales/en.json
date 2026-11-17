@@ -1439,5 +1439,21 @@
   "table.from": "from {source} · {what}",
   "table.go_to_source": "Go to {source}",
   "table.sql_new_tab": "Result in new tab",
-  "mcp.proposal.new_table": "Opens the result in a new tab; {table} stays as it is."
+  "mcp.proposal.new_table": "Opens the result in a new tab; {table} stays as it is.",
+  "menu.group.column": "Column",
+  "menu.group.type": "Type",
+  "menu.group.transform": "Transform",
+  "menu.group.clean": "Clean",
+  "menu.group.analyze": "Analyze",
+  "menu.group.display": "Display",
+  "context.copy_as": "Copy As",
+  "menu.view.editor_collapsed": "Collapse SQL Query Panel",
+  "editor.collapse": "Collapse the query panel",
+  "editor.expand": "Expand the query panel",
+  "settings.group.view": "View",
+  "settings.label.show_query_panel": "Show the SQL Query panel",
+  "settings.label.query_collapsed": "Start with the SQL Query panel collapsed",
+  "settings.label.show_steps": "Show Applied Steps",
+  "settings.label.show_ai": "Show the AI assistant panel",
+  "settings.hint.view": "Changes made in the View menu are remembered here too."
 }

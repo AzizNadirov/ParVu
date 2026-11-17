@@ -164,13 +164,16 @@ export function App({ boot }: { boot: Bootstrap }) {
   /** AI clients connected through `parvu mcp --attach`. */
   const [aiClients, setAiClients] = useState(0);
   // Built-in AI assistant: panel, providers, one chat per tab (key 0: no tab).
-  const [aiOpen, setAiOpen] = useState(() => {
-    try {
-      return localStorage.getItem("pv.aiPanel") === "1";
-    } catch {
-      return false;
-    }
-  });
+  /** View choices (panels shown or collapsed, the query panel's height)
+   * are settings, so the next start looks the same. */
+  const setView = useCallback((patch: Partial<Settings>) => {
+    setSettings((s) => ({ ...s, ...patch }));
+    void api.updateSettings(patch).catch(() => undefined);
+  }, []);
+  const aiOpen = settings.show_ai_panel ?? false;
+  const editorOpen = settings.show_query_panel ?? true;
+  const editorCollapsed = settings.query_panel_collapsed ?? false;
+  const stepsOpen = settings.show_steps_panel ?? true;
   const [aiProviders, setAiProviders] = useState<ProvidersInfo | null>(null);
   const [aiProvider, setAiProvider] = useState<string | null>(null);
   const [chats, setChats] = useState<Record<number, ChatState>>({});
@@ -211,9 +214,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   const [dialogs, setDialogs] = useState<{ id: number; node: ReactNode }[]>([]);
   const dialogSeq = useRef(0);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
-  const [editorOpen, setEditorOpen] = useState(true);
-  const [stepsOpen, setStepsOpen] = useState(true);
-  const [editorHeight, setEditorHeight] = useState(220);
+  const [editorHeight, setEditorHeight] = useState(() => settings.query_panel_height || 220);
   const [schema, setSchema] = useState<ExprSchema>({ tables: [], functions: boot.functions, methods: [] });
   const [preview, setPreview] = useState("");
   const [search, setSearch] = useState<{ query: string; anchor: { row: number | null; col: number | null } } | null>(null);
@@ -786,6 +787,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     return [
       {
         label: t("menu.col.json"),
+        icon: "json" as const,
         submenu: [
           {
             label: `${t("json.expand.title")}…`,
@@ -812,11 +814,12 @@ export function App({ boot }: { boot: Bootstrap }) {
     const part = (p: DatePartName) => ({ label: t(`part.${p}`), onSelect: () => toNew({ fn: "date_part", part: p }) });
     const names = (key: string, n: number) => Array.from({ length: n }, (_, i) => t(`${key}.${i + 1}`));
     const timeEntries: MenuEntry[] = [part("hour"), part("minute"), part("second")];
-    if (timeOnly) return [{ label: t("menu.col.time"), submenu: timeEntries }, { type: "separator" }];
+    if (timeOnly) return [{ label: t("menu.col.time"), icon: "date" as const, submenu: timeEntries }, { type: "separator" }];
     const dateCols = (page?.columns ?? []).filter((c) => isDateFamily(c.family)).map((c) => c.name);
     return [
       {
         label: t("menu.col.date"),
+        icon: "date" as const,
         submenu: [
           part("year"),
           part("quarter"),
@@ -835,6 +838,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         ? [
             {
               label: t("menu.col.time"),
+              icon: "date" as const,
               submenu: [
                 ...timeEntries,
                 { type: "separator" as const },
@@ -846,6 +850,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         : []),
       {
         label: t("menu.col.start_of"),
+        icon: "date" as const,
         submenu: (["year", "quarter", "month", "week", "day", ...(hasTime(family) ? ["hour"] : [])] as TimeUnitName[]).map((u) => ({
           label: t(`unit.${u}`),
           onSelect: () => inPlace({ fn: "start_of", unit: u }),
@@ -853,6 +858,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       },
       {
         label: t("menu.col.end_of"),
+        icon: "date" as const,
         submenu: (["month", "quarter", "year"] as TimeUnitName[]).map((u) => ({
           label: t(`unit.${u}`),
           onSelect: () => inPlace({ fn: "end_of", unit: u }),
@@ -860,6 +866,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       },
       {
         label: t("menu.col.age"),
+        icon: "date" as const,
         submenu: (["day", "month", "year"] as TimeUnitName[]).map((u) => ({
           label: t(`unit.${u}s`),
           onSelect: () => toNew({ fn: "age", unit: u }),
@@ -877,6 +884,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       },
       {
         label: t("menu.col.filter_dates"),
+        icon: "filter" as const,
         submenu: [
           ...DATE_FILTERS.map((f) => ({ label: t(f.key), onSelect: () => void applyOp({ op: "date_range", column, range: f.range }) })),
           { type: "separator" as const },
@@ -901,6 +909,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       return [
         {
           label: t("menu.col.text"),
+          icon: "text",
           submenu: [
             ...TEXT_FNS.map((f) => ({ label: t(fnLabelKey(f)), onSelect: () => inPlace(f) })),
             { type: "separator" as const },
@@ -920,6 +929,7 @@ export function App({ boot }: { boot: Bootstrap }) {
         },
         {
           label: t("menu.col.extract"),
+          icon: "extract",
           submenu: EXTRACT_FNS.map((n) => ({
             label: n === "length" ? t("fn.length") : `${t(`fn.${n}`)}…`,
             onSelect: () =>
@@ -928,17 +938,17 @@ export function App({ boot }: { boot: Bootstrap }) {
                 : void runColumnFn(column, n),
           })),
         },
-        { label: t("menu.col.merge"), onSelect: () => void runOpDialog(openMergeColumns, column) },
+        { label: t("menu.col.merge"), icon: "merge", onSelect: () => void runOpDialog(openMergeColumns, column) },
         { type: "separator" },
       ];
     if (isDateFamily(family) || family === "time") return dateMenu(column, family === "time");
     if (family === "json" || family === "list" || family === "struct") return nestedMenu(column, family);
     if (family === "boolean")
       return [
-        { label: t("fn.invert"), onSelect: () => inPlace({ fn: "invert" }) },
-        { label: t("menu.col.keep_true"), onSelect: () => void applyOp({ op: "filter_values", column, values: ["true"] }) },
-        { label: t("menu.col.keep_false"), onSelect: () => void applyOp({ op: "filter_values", column, values: ["false"] }) },
-        { label: t("menu.col.keep_empty"), onSelect: () => void applyOp({ op: "filter_values", column, values: [null] }) },
+        { label: t("fn.invert"), icon: "convert", onSelect: () => inPlace({ fn: "invert" }) },
+        { label: t("menu.col.keep_true"), icon: "filter", onSelect: () => void applyOp({ op: "filter_values", column, values: ["true"] }) },
+        { label: t("menu.col.keep_false"), icon: "filter", onSelect: () => void applyOp({ op: "filter_values", column, values: ["false"] }) },
+        { label: t("menu.col.keep_empty"), icon: "filter", onSelect: () => void applyOp({ op: "filter_values", column, values: [null] }) },
         { type: "separator" },
       ];
     return [];
@@ -962,6 +972,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     }
     entries.push({
       label: t("types.read_as"),
+      icon: "type",
       submenu: readAsChoices().map((c) => ({
         label: t(c.key, c.args),
         checked: sameReading(c.reading, r),
@@ -975,96 +986,145 @@ export function App({ boot }: { boot: Bootstrap }) {
   const formulaMenu = (column: string): MenuEntry[] =>
     formulaNames.includes(column)
       ? [
-          { label: t("formula.edit"), onSelect: () => editFormula(column) },
-          { label: t("formula.remove"), onSelect: () => void removeFormula(column) },
-          { type: "separator" },
+          { label: t("formula.edit"), icon: "formula", onSelect: () => editFormula(column) },
+          { label: t("formula.remove"), icon: "removeColumn", onSelect: () => void removeFormula(column) },
         ]
-      : [{ label: t("formula.new_after"), onSelect: () => startFormula(column) }, { type: "separator" }];
+      : [{ label: t("formula.new_after"), icon: "formula", onSelect: () => startFormula(column) }];
 
-  /** The Column menu: what adds or changes a column, for `column`. The
-   * menu bar's Column menu and the header's right-click menu share it. */
-  const columnMenu = (column: string): MenuEntry[] => [
-    ...formulaMenu(column),
-    {
-      label: t("context.rename_column"),
-      onSelect: async () => {
-        const name = await ui.prompt(t("context.rename_dialog.title"), t("context.rename_dialog.prompt"), column);
-        if (name?.trim() && name.trim() !== column) await applyOp({ op: "rename", column, new_name: name.trim() });
+  /** The Column menu: what adds or changes a column, for `column`, in named
+   * groups. The menu bar's Column menu and the header's right-click menu
+   * share it. `extraClean` adds row-dropping items to the Clean group. */
+  const columnMenu = (column: string, extraClean: MenuEntry[] = []): MenuEntry[] => {
+    // Functions for this column's type: their submenus (Text, Extract,
+    // Dates…) stay at the top; single items go to Transform.
+    type Item = Exclude<MenuEntry, { type: "separator" }>;
+    const typed = typeMenu(column).filter((e): e is Item => e.type !== "separator");
+    const typedGroups = typed.filter((e) => e.submenu);
+    const typedItems = typed.filter((e) => !e.submenu && e.label !== t("menu.col.merge"));
+    return [
+      ...formulaMenu(column),
+      { type: "separator" },
+      {
+        label: t("menu.group.column"),
+        icon: "column",
+        submenu: [
+          {
+            label: t("context.rename_column"),
+            icon: "rename",
+            onSelect: async () => {
+              const name = await ui.prompt(t("context.rename_dialog.title"), t("context.rename_dialog.prompt"), column);
+              if (name?.trim() && name.trim() !== column) await applyOp({ op: "rename", column, new_name: name.trim() });
+            },
+          },
+          { label: t("context.duplicate_column"), icon: "duplicate", onSelect: () => void applyOp({ op: "duplicate", column }) },
+          {
+            label: t("context.remove_column"),
+            icon: "removeColumn",
+            disabled: columnNames.length < 2,
+            onSelect: () => void applyOp({ op: "remove", column }),
+          },
+          { type: "separator" },
+          { label: t("context.copy_column"), icon: "copy", onSelect: () => void copyText(column, t("status.copied_name")) },
+        ],
       },
-    },
-    { label: t("context.duplicate_column"), onSelect: () => void applyOp({ op: "duplicate", column }) },
-    { label: t("context.remove_column"), disabled: columnNames.length < 2, onSelect: () => void applyOp({ op: "remove", column }) },
+      {
+        label: t("menu.group.type"),
+        icon: "type",
+        submenu: [
+          ...readAsMenu(column),
+          { label: t("context.convert"), icon: "convert", onSelect: () => void runConvert(column) },
+          { type: "separator" as const },
+          ...CHANGE_TYPES.map((ty) => ({ label: ty, onSelect: () => void applyOp({ op: "change_type", column, new_type: ty }) })),
+          { type: "separator" as const },
+          {
+            label: t("context.change_type.custom"),
+            onSelect: async () => {
+              const ty = await ui.prompt(t("context.change_type"), t("context.change_type.prompt"));
+              if (ty?.trim()) await applyOp({ op: "change_type", column, new_type: ty.trim() });
+            },
+          },
+        ],
+      },
+      ...typedGroups,
+      {
+        label: t("menu.group.transform"),
+        icon: "transform",
+        submenu: [
+          ...typedItems,
+          ...(typedItems.length ? [{ type: "separator" as const }] : []),
+          { label: t("menu.data.split"), icon: "split", onSelect: () => void runOpDialog(openSplitColumn, column) },
+          { label: t("menu.data.merge"), icon: "merge", onSelect: () => void runOpDialog(openMergeColumns, column) },
+          { label: t("menu.data.bin"), icon: "bin", onSelect: () => void runOpDialog(openBin, column) },
+          { label: t("menu.operations.window"), icon: "window", onSelect: () => void runOpDialog(openWindow, column, true) },
+          { label: t("menu.operations.math"), icon: "math", onSelect: () => void runMath() },
+        ],
+      },
+      {
+        label: t("menu.group.clean"),
+        icon: "clean",
+        submenu: [
+          { label: t("context.replace_values"), icon: "replace", onSelect: () => void runReplace(column) },
+          { label: t("context.fill_null"), icon: "fill", onSelect: () => void runOpDialog(openFillNull, column) },
+          ...extraClean,
+        ],
+      },
+      {
+        label: t("menu.group.analyze"),
+        icon: "stats",
+        submenu: [
+          { label: t("context.unique_values"), icon: "unique", onSelect: () => void showUniqueValues(column) },
+          { label: t("context.column_stats"), icon: "info", onSelect: () => void showStats(column) },
+          { label: t("context.chart"), icon: "chart", onSelect: () => void showChart(column) },
+          { label: t("context.copy_values"), icon: "copy", onSelect: () => void copyTuple(column) },
+        ],
+      },
+    ];
+  };
+
+  /** Right-click on a header: sorting and filtering first, then the Column
+   * menu's groups, tables made from the column, and how it looks. */
+  const headerMenu = (column: string): MenuEntry[] => [
+    { label: t("context.sort_asc"), icon: "sortAsc", onSelect: () => void sortBy(column, true) },
+    { label: t("context.sort_desc"), icon: "sortDesc", onSelect: () => void sortBy(column, false) },
+    { label: t("context.filter"), icon: "filter", onSelect: () => void runOpDialog(openFilter, column) },
     { type: "separator" },
-    ...readAsMenu(column),
+    ...columnMenu(column, [{ label: t("context.drop_null"), icon: "dropNull", onSelect: () => void runDropNull(column) }]),
     {
-      label: t("context.change_type"),
+      label: t("context.new_table_from"),
+      icon: "newTable",
       submenu: [
-        { label: t("context.convert"), onSelect: () => void runConvert(column) },
-        { type: "separator" as const },
-        ...CHANGE_TYPES.map((ty) => ({ label: ty, onSelect: () => void applyOp({ op: "change_type", column, new_type: ty }) })),
-        { type: "separator" as const },
+        { label: t("menu.reshape.group_by"), icon: "groupBy", onSelect: () => void runOpDialog(openGroupBy, column, true) },
+        { label: t("menu.reshape.pivot"), icon: "pivot", onSelect: () => void runOpDialog(openPivot, column, true) },
+        { label: t("menu.reshape.value_counts"), icon: "valueCounts", onSelect: () => void runOpDialog(openValueCounts, column, true) },
+      ],
+    },
+    {
+      label: t("menu.group.display"),
+      icon: "view",
+      submenu: [
         {
-          label: t("context.change_type.custom"),
-          onSelect: async () => {
-            const ty = await ui.prompt(t("context.change_type"), t("context.change_type.prompt"));
-            if (ty?.trim()) await applyOp({ op: "change_type", column, new_type: ty.trim() });
+          label: t("context.freeze_here"),
+          icon: "pin",
+          onSelect: () => activeTab && updateView(activeTab.id, { frozen: columnNames.indexOf(column) + 1 }),
+        },
+        {
+          label: t("context.unfreeze"),
+          icon: "unpin",
+          disabled: !(activeTab && (tabUi.current.get(activeTab.id)?.frozen ?? 0) > 0),
+          onSelect: () => activeTab && updateView(activeTab.id, { frozen: 0 }),
+        },
+        { type: "separator" },
+        { label: t("context.conditional_format"), icon: "format", onSelect: () => void editFormats(column) },
+        {
+          label: t("context.clear_format"),
+          icon: "clearFormat",
+          disabled: !(activeTab && tabUi.current.get(activeTab.id)?.formats.some((f) => f.column === column)),
+          onSelect: () => {
+            const st = activeTab && tabUi.current.get(activeTab.id);
+            if (st && activeTab) updateView(activeTab.id, { formats: st.formats.filter((f) => f.column !== column) });
           },
         },
       ],
-    },
-    ...typeMenu(column),
-    { label: t("context.replace_values"), onSelect: () => void runReplace(column) },
-    { label: t("context.fill_null"), onSelect: () => void runOpDialog(openFillNull, column) },
-    { type: "separator" },
-    { label: t("menu.data.split"), onSelect: () => void runOpDialog(openSplitColumn, column) },
-    { label: t("menu.data.merge"), onSelect: () => void runOpDialog(openMergeColumns, column) },
-    { label: t("menu.data.bin"), onSelect: () => void runOpDialog(openBin, column) },
-    { label: t("menu.operations.window"), onSelect: () => void runOpDialog(openWindow, column, true) },
-    { label: t("menu.operations.math"), onSelect: () => void runMath() },
-    { type: "separator" },
-    { label: t("context.unique_values"), onSelect: () => void showUniqueValues(column) },
-    { label: t("context.column_stats"), onSelect: () => void showStats(column) },
-    { label: t("context.chart"), onSelect: () => void showChart(column) },
-    { label: t("context.copy_values"), onSelect: () => void copyTuple(column) },
-    { label: t("context.copy_column"), onSelect: () => void copyText(column, t("status.copied_name")) },
-  ];
-
-  /** Right-click on a header: the Column menu, plus sorting, filtering by
-   * this column, tables made from it, and how it looks. */
-  const headerMenu = (column: string): MenuEntry[] => [
-    { label: t("context.sort_asc"), onSelect: () => void sortBy(column, true) },
-    { label: t("context.sort_desc"), onSelect: () => void sortBy(column, false) },
-    { label: t("context.filter"), onSelect: () => void runOpDialog(openFilter, column) },
-    { label: t("context.drop_null"), onSelect: () => void runDropNull(column) },
-    { type: "separator" },
-    ...columnMenu(column),
-    { type: "separator" },
-    {
-      label: t("context.new_table_from"),
-      submenu: [
-        { label: t("menu.reshape.group_by"), onSelect: () => void runOpDialog(openGroupBy, column, true) },
-        { label: t("menu.reshape.pivot"), onSelect: () => void runOpDialog(openPivot, column, true) },
-        { label: t("menu.reshape.value_counts"), onSelect: () => void runOpDialog(openValueCounts, column, true) },
-      ],
-    },
-    { type: "separator" },
-    {
-      label: t("context.freeze_here"),
-      onSelect: () => activeTab && updateView(activeTab.id, { frozen: columnNames.indexOf(column) + 1 }),
-    },
-    {
-      label: t("context.unfreeze"),
-      disabled: !(activeTab && (tabUi.current.get(activeTab.id)?.frozen ?? 0) > 0),
-      onSelect: () => activeTab && updateView(activeTab.id, { frozen: 0 }),
-    },
-    { label: t("context.conditional_format"), onSelect: () => void editFormats(column) },
-    {
-      label: t("context.clear_format"),
-      disabled: !(activeTab && tabUi.current.get(activeTab.id)?.formats.some((f) => f.column === column)),
-      onSelect: () => {
-        const st = activeTab && tabUi.current.get(activeTab.id);
-        if (st && activeTab) updateView(activeTab.id, { formats: st.formats.filter((f) => f.column !== column) });
-      },
     },
   ];
 
@@ -1074,12 +1134,12 @@ export function App({ boot }: { boot: Bootstrap }) {
     const rows = !page?.editable || (range?.height ?? 0) < 2;
     const cols = !page?.editable || (range?.width ?? 0) < 2;
     return [
-      { label: t("context.fill_down"), shortcut: "Ctrl+D", disabled: rows, onSelect: () => void fillRange("down") },
-      { label: t("context.fill_up"), disabled: rows, onSelect: () => void fillRange("up") },
-      { label: t("context.fill_right"), shortcut: "Ctrl+R", disabled: cols, onSelect: () => void fillRange("right") },
-      { label: t("context.fill_left"), disabled: cols, onSelect: () => void fillRange("left") },
+      { label: t("context.fill_down"), icon: "fillDown", shortcut: "Ctrl+D", disabled: rows, onSelect: () => void fillRange("down") },
+      { label: t("context.fill_up"), icon: "fillUp", disabled: rows, onSelect: () => void fillRange("up") },
+      { label: t("context.fill_right"), icon: "fillRight", shortcut: "Ctrl+R", disabled: cols, onSelect: () => void fillRange("right") },
+      { label: t("context.fill_left"), icon: "fillLeft", disabled: cols, onSelect: () => void fillRange("left") },
       { type: "separator" },
-      { label: t("context.fill_series"), disabled: rows && cols, onSelect: () => void runSeries() },
+      { label: t("context.fill_series"), icon: "series", disabled: rows && cols, onSelect: () => void runSeries() },
     ];
   };
 
@@ -1095,16 +1155,24 @@ export function App({ boot }: { boot: Bootstrap }) {
     const value = page?.rows[row]?.[col] ?? null;
     const column = page?.columns[col]?.name ?? "";
     return [
-      { label: t("context.copy"), shortcut: "Ctrl+C", onSelect: () => copy("tsv") },
-      { label: t("context.copy_csv"), onSelect: () => copy("csv") },
-      { label: t("context.copy_markdown"), onSelect: () => copy("markdown") },
-      { label: t("context.copy_with_headers"), onSelect: () => copy("tsv", true) },
+      { label: t("context.copy"), icon: "copy", shortcut: "Ctrl+C", onSelect: () => copy("tsv") },
+      {
+        label: t("context.copy_as"),
+        icon: "paste",
+        submenu: [
+          { label: t("context.copy_csv"), onSelect: () => copy("csv") },
+          { label: t("context.copy_markdown"), onSelect: () => copy("markdown") },
+          { label: t("context.copy_with_headers"), onSelect: () => copy("tsv", true) },
+        ],
+      },
       { type: "separator" },
-      { label: t("context.filter_by_value"), onSelect: () => void applyOp({ op: "filter_values", column, values: [value] }) },
-      { label: t("context.filter_custom"), onSelect: () => void runFilterFromCell(column, value) },
-      { label: t("context.fill"), disabled: !page?.editable, submenu: fillMenu() },
+      { label: t("context.filter_by_value"), icon: "filter", onSelect: () => void applyOp({ op: "filter_values", column, values: [value] }) },
+      { label: t("context.filter_custom"), icon: "filter", onSelect: () => void runFilterFromCell(column, value) },
+      { type: "separator" },
+      { label: t("context.fill"), icon: "fill", disabled: !page?.editable, submenu: fillMenu() },
       {
         label: t("context.set_null"),
+        icon: "clearFormat",
         disabled: !page?.editable || value === null,
         onSelect: () => void editCell(row, column, null),
       },
@@ -1620,16 +1688,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       setAiProviders({ providers: [], keychain: false });
     }
   }, []);
-  const toggleAi = useCallback(() => {
-    setAiOpen((open) => {
-      try {
-        localStorage.setItem("pv.aiPanel", open ? "0" : "1");
-      } catch {
-        /* per-viewer convenience only */
-      }
-      return !open;
-    });
-  }, []);
+  const toggleAi = useCallback(() => setView({ show_ai_panel: !aiOpen }), [setView, aiOpen]);
   const manageProviders = async () => {
     await openAiProviders(ui);
     await loadAiProviders();
@@ -1642,12 +1701,13 @@ export function App({ boot }: { boot: Bootstrap }) {
     {
       title: t("menu.file"),
       items: (): MenuEntry[] => [
-        { label: t("menu.file.new_window"), shortcut: "Ctrl+N", onSelect: () => void api.newWindow() },
+        { label: t("menu.file.new_window"), icon: "newWindow", shortcut: "Ctrl+N", onSelect: () => void api.newWindow() },
         { type: "separator" },
-        { label: t("menu.file.open"), shortcut: "Ctrl+O", onSelect: () => void browse() },
-        { label: t("menu.file.open_options"), onSelect: () => void browseWithOptions() },
+        { label: t("menu.file.open"), icon: "open", shortcut: "Ctrl+O", onSelect: () => void browse() },
+        { label: t("menu.file.open_options"), icon: "openOptions", onSelect: () => void browseWithOptions() },
         {
           label: t("menu.file.recent_files"),
+          icon: "recent",
           submenu: recents.length
             ? [
                 ...recents.map((r) => ({ label: r, onSelect: () => void openPath(r) })),
@@ -1657,57 +1717,65 @@ export function App({ boot }: { boot: Bootstrap }) {
             : [{ label: t("menu.file.no_recents"), disabled: true }],
         },
         { type: "separator" },
-        { label: t("menu.file.save"), shortcut: "Ctrl+S", disabled: !activeTab, onSelect: () => void save() },
-        { label: t("menu.file.save_as"), shortcut: "Ctrl+Shift+S", disabled: !activeTab, onSelect: () => activeTab && void saveAs(activeTab) },
-        { label: t("menu.file.export"), shortcut: "Ctrl+E", disabled: !activeTab, onSelect: () => void exportTab() },
+        { label: t("menu.file.save"), icon: "save", shortcut: "Ctrl+S", disabled: !activeTab, onSelect: () => void save() },
+        { label: t("menu.file.save_as"), icon: "saveAs", shortcut: "Ctrl+Shift+S", disabled: !activeTab, onSelect: () => activeTab && void saveAs(activeTab) },
+        { label: t("menu.file.export"), icon: "export", shortcut: "Ctrl+E", disabled: !activeTab, onSelect: () => void exportTab() },
         { type: "separator" },
-        { label: t("menu.file.close_tab"), shortcut: "Ctrl+W", disabled: !activeTab, onSelect: () => activeTab && void closeTab(activeTab.id) },
-        { label: t("menu.file.settings"), onSelect: () => void openSettingsDialog(ui, { onSettings: setSettings, onTheme, onLanguage }) },
+        { label: t("menu.file.close_tab"), icon: "close", shortcut: "Ctrl+W", disabled: !activeTab, onSelect: () => activeTab && void closeTab(activeTab.id) },
+        { label: t("menu.file.settings"), icon: "settings", onSelect: () => void openSettingsDialog(ui, { onSettings: setSettings, onTheme, onLanguage }) },
         { type: "separator" },
-        { label: t("menu.file.exit"), onSelect: () => void getCurrentWindow().close() },
+        { label: t("menu.file.exit"), icon: "exit", onSelect: () => void getCurrentWindow().close() },
       ],
     },
     {
       title: t("menu.edit"),
       items: (): MenuEntry[] => [
-        { label: t("menu.edit.undo"), shortcut: "Ctrl+Z", disabled: !activeTab?.steps.length, onSelect: () => void undo() },
-        { label: t("menu.edit.reset"), disabled: !activeTab, onSelect: () => void resetTab() },
+        { label: t("menu.edit.undo"), icon: "undo", shortcut: "Ctrl+Z", disabled: !activeTab?.steps.length, onSelect: () => void undo() },
+        { label: t("menu.edit.reset"), icon: "reset", disabled: !activeTab, onSelect: () => void resetTab() },
         { type: "separator" },
-        { label: t("menu.edit.find"), shortcut: "Ctrl+F", disabled: !activeTab, onSelect: openSearch },
-        { label: t("menu.edit.find_next"), shortcut: "F3", disabled: !activeTab, onSelect: () => (search ? searchKeys.current?.next() : openSearch()) },
-        { label: t("menu.edit.find_prev"), shortcut: "Shift+F3", disabled: !activeTab, onSelect: () => (search ? searchKeys.current?.prev() : openSearch()) },
+        { label: t("menu.edit.find"), icon: "search", shortcut: "Ctrl+F", disabled: !activeTab, onSelect: openSearch },
+        { label: t("menu.edit.find_next"), icon: "arrowDown", shortcut: "F3", disabled: !activeTab, onSelect: () => (search ? searchKeys.current?.next() : openSearch()) },
+        { label: t("menu.edit.find_prev"), icon: "arrowUp", shortcut: "Shift+F3", disabled: !activeTab, onSelect: () => (search ? searchKeys.current?.prev() : openSearch()) },
         { type: "separator" },
-        { label: t("context.fill"), disabled: !activeTab || !page?.editable, submenu: fillMenu() },
+        { label: t("context.fill"), icon: "fill", disabled: !activeTab || !page?.editable, submenu: fillMenu() },
       ],
     },
     {
       title: t("menu.view"),
       items: (): MenuEntry[] => [
-        { label: t("menu.view.editor"), checked: editorOpen, onSelect: () => setEditorOpen((v) => !v) },
-        { label: t("menu.view.steps"), checked: stepsOpen, onSelect: () => setStepsOpen((v) => !v) },
+        { label: t("menu.view.editor"), icon: "database", checked: editorOpen, onSelect: () => setView({ show_query_panel: !editorOpen }) },
+        {
+          label: t("menu.view.editor_collapsed"),
+          icon: "collapse",
+          checked: editorCollapsed,
+          disabled: !editorOpen,
+          onSelect: () => setView({ query_panel_collapsed: !editorCollapsed }),
+        },
+        { label: t("menu.view.steps"), icon: "steps", checked: stepsOpen, onSelect: () => setView({ show_steps_panel: !stepsOpen }) },
         { type: "separator" },
-        { label: t("menu.view.table_info"), disabled: !activeTab, onSelect: () => void showTableInfo() },
-        { label: t("menu.view.chart"), shortcut: "Ctrl+Shift+C", disabled: !activeTab, onSelect: () => void showChart() },
-        { label: t("menu.view.conditional_format"), disabled: !activeTab, onSelect: () => void editFormats() },
+        { label: t("menu.view.table_info"), icon: "info", disabled: !activeTab, onSelect: () => void showTableInfo() },
+        { label: t("menu.view.chart"), icon: "chart", shortcut: "Ctrl+Shift+C", disabled: !activeTab, onSelect: () => void showChart() },
+        { label: t("menu.view.conditional_format"), icon: "format", disabled: !activeTab, onSelect: () => void editFormats() },
         {
           label: t("menu.view.unfreeze"),
+          icon: "unpin",
           disabled: !(activeTab && (tabUi.current.get(activeTab.id)?.frozen ?? 0) > 0),
           onSelect: () => activeTab && updateView(activeTab.id, { frozen: 0 }),
         },
         { type: "separator" },
-        { label: t("menu.view.theme"), onSelect: () => void openThemeSelector(ui, { onTheme }) },
-        { label: t("menu.view.language"), onSelect: () => void openLanguageSelector(ui, { onLanguage }) },
+        { label: t("menu.view.theme"), icon: "theme", onSelect: () => void openThemeSelector(ui, { onTheme }) },
+        { label: t("menu.view.language"), icon: "language", onSelect: () => void openLanguageSelector(ui, { onLanguage }) },
       ],
     },
     {
       title: t("menu.rows"),
       items: (): MenuEntry[] => [
-        { label: t("menu.data.filter"), shortcut: "Ctrl+Shift+L", disabled: !activeTab, onSelect: () => void runOpDialog(openFilter) },
-        { label: t("menu.data.sort"), disabled: !activeTab, onSelect: () => void runOpDialog(openSort) },
-        { label: t("menu.data.slice"), disabled: !activeTab, onSelect: () => void runSlice() },
+        { label: t("menu.data.filter"), icon: "filter", shortcut: "Ctrl+Shift+L", disabled: !activeTab, onSelect: () => void runOpDialog(openFilter) },
+        { label: t("menu.data.sort"), icon: "sort", disabled: !activeTab, onSelect: () => void runOpDialog(openSort) },
+        { label: t("menu.data.slice"), icon: "rows", disabled: !activeTab, onSelect: () => void runSlice() },
         { type: "separator" },
-        { label: t("menu.operations.drop_duplicates"), disabled: !activeTab, onSelect: () => void runDropDuplicates() },
-        { label: t("menu.operations.drop_null"), disabled: !activeTab, onSelect: () => void runDropNull() },
+        { label: t("menu.operations.drop_duplicates"), icon: "dropDuplicates", disabled: !activeTab, onSelect: () => void runDropDuplicates() },
+        { label: t("menu.operations.drop_null"), icon: "dropNull", disabled: !activeTab, onSelect: () => void runDropNull() },
       ],
     },
     {
@@ -1721,13 +1789,13 @@ export function App({ boot }: { boot: Bootstrap }) {
         ];
         const all: MenuEntry[] = [
           { type: "separator" },
-          { label: t("menu.data.columns"), disabled: !activeTab, onSelect: () => void runOpDialog(openColumns) },
+          { label: t("menu.data.columns"), icon: "column", disabled: !activeTab, onSelect: () => void runOpDialog(openColumns) },
         ];
         if (!activeTab) return [...head, ...all];
         if (!column) {
           return [
             ...head,
-            { label: t("formula.new_end"), onSelect: () => startFormula(null) },
+            { label: t("formula.new_end"), icon: "formula", onSelect: () => startFormula(null) },
             ...all,
           ];
         }
@@ -1737,34 +1805,34 @@ export function App({ boot }: { boot: Bootstrap }) {
     {
       title: t("menu.table"),
       items: (): MenuEntry[] => [
-        { label: t("menu.reshape.group_by"), shortcut: "Ctrl+G", disabled: !activeTab, onSelect: () => void runOpDialog(openGroupBy, undefined, true) },
-        { label: t("menu.reshape.pivot"), disabled: !activeTab, onSelect: () => void runOpDialog(openPivot, undefined, true) },
-        { label: t("menu.reshape.melt"), disabled: !activeTab, onSelect: () => void runOpDialog(openMelt) },
-        { label: t("menu.reshape.transpose"), disabled: !activeTab, onSelect: () => void runTranspose() },
+        { label: t("menu.reshape.group_by"), icon: "groupBy", shortcut: "Ctrl+G", disabled: !activeTab, onSelect: () => void runOpDialog(openGroupBy, undefined, true) },
+        { label: t("menu.reshape.pivot"), icon: "pivot", disabled: !activeTab, onSelect: () => void runOpDialog(openPivot, undefined, true) },
+        { label: t("menu.reshape.melt"), icon: "melt", disabled: !activeTab, onSelect: () => void runOpDialog(openMelt) },
+        { label: t("menu.reshape.transpose"), icon: "transpose", disabled: !activeTab, onSelect: () => void runTranspose() },
         { type: "separator" },
-        { label: t("menu.reshape.value_counts"), disabled: !activeTab, onSelect: () => void runOpDialog(openValueCounts, undefined, true) },
-        { label: t("menu.reshape.describe"), disabled: !activeTab, onSelect: () => void runDescribe() },
+        { label: t("menu.reshape.value_counts"), icon: "valueCounts", disabled: !activeTab, onSelect: () => void runOpDialog(openValueCounts, undefined, true) },
+        { label: t("menu.reshape.describe"), icon: "describe", disabled: !activeTab, onSelect: () => void runDescribe() },
         { type: "separator" },
-        { label: t("menu.operations.join"), disabled: !activeTab, onSelect: () => void runJoin() },
-        { label: t("menu.operations.append"), disabled: !activeTab, onSelect: () => void runAppend() },
+        { label: t("menu.operations.join"), icon: "join", disabled: !activeTab, onSelect: () => void runJoin() },
+        { label: t("menu.operations.append"), icon: "append", disabled: !activeTab, onSelect: () => void runAppend() },
       ],
     },
     {
       title: t("menu.ai"),
       items: (): MenuEntry[] => [
-        { label: t("menu.ai.assistant"), shortcut: "Ctrl+Shift+A", checked: aiOpen, onSelect: () => toggleAi() },
-        { label: t("menu.ai.providers"), onSelect: () => void manageProviders() },
+        { label: t("menu.ai.assistant"), icon: "ai", shortcut: "Ctrl+Shift+A", checked: aiOpen, onSelect: () => toggleAi() },
+        { label: t("menu.ai.providers"), icon: "key", onSelect: () => void manageProviders() },
         { type: "separator" },
-        { label: t("menu.ai.connect"), onSelect: () => void openConnectAi(ui) },
+        { label: t("menu.ai.connect"), icon: "connect", onSelect: () => void openConnectAi(ui) },
       ],
     },
     {
       title: t("menu.help"),
       items: (): MenuEntry[] => [
-        { label: t("menu.help.expression"), onSelect: () => void openExpressionHelp(ui) },
-        { label: t("menu.help.shortcuts"), shortcut: "Ctrl+/", onSelect: () => void openShortcutsDialog(ui) },
+        { label: t("menu.help.expression"), icon: "book", onSelect: () => void openExpressionHelp(ui) },
+        { label: t("menu.help.shortcuts"), icon: "keyboard", shortcut: "Ctrl+/", onSelect: () => void openShortcutsDialog(ui) },
         { type: "separator" },
-        { label: t("menu.help.about"), onSelect: () => void openAboutDialog(ui) },
+        { label: t("menu.help.about"), icon: "info", onSelect: () => void openAboutDialog(ui) },
       ],
     },
   ];
@@ -1978,10 +2046,15 @@ export function App({ boot }: { boot: Bootstrap }) {
     e.preventDefault();
     const startY = e.clientY;
     const startH = editorHeight;
-    const move = (ev: MouseEvent) => setEditorHeight(Math.max(80, Math.min(window.innerHeight - 250, startH + ev.clientY - startY)));
+    let h = startH;
+    const move = (ev: MouseEvent) => {
+      h = Math.max(80, Math.min(window.innerHeight - 250, startH + ev.clientY - startY));
+      setEditorHeight(h);
+    };
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
+      if (h !== startH) setView({ query_panel_height: Math.round(h) });
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
@@ -1997,8 +2070,17 @@ export function App({ boot }: { boot: Bootstrap }) {
         ) : (
           <main className="workspace">
             {editorOpen && (
-              <section className="editor-panel" style={{ height: editorHeight }}>
+              <section className={`editor-panel${editorCollapsed ? " collapsed" : ""}`} style={editorCollapsed ? undefined : { height: editorHeight }}>
                 <div className="editor-toolbar row">
+                  <button
+                    className="icon panel-toggle"
+                    aria-expanded={!editorCollapsed}
+                    aria-label={t(editorCollapsed ? "editor.expand" : "editor.collapse")}
+                    title={t(editorCollapsed ? "editor.expand" : "editor.collapse")}
+                    onClick={() => setView({ query_panel_collapsed: !editorCollapsed })}
+                  >
+                    <Icon name={editorCollapsed ? "chevronRight" : "chevronDown"} size={18} />
+                  </button>
                   <strong className="ellipsis">{headerLabel}</strong>
                   {activeTab.sheet !== null && (
                     <button
@@ -2056,6 +2138,8 @@ export function App({ boot }: { boot: Bootstrap }) {
                     </button>
                   </div>
                 </div>
+                {!editorCollapsed && (
+                  <>
                 <QueryEditor
                   mode={mode}
                   value={editorText}
@@ -2070,11 +2154,15 @@ export function App({ boot }: { boot: Bootstrap }) {
                   fontSize={sqlSize}
                 />
                 {mode === "expression" && <div className="expr-preview mono ellipsis" title={preview}>{preview}</div>}
+                  </>
+                )}
                 <div className="editor-actions row">
-                  <button className="primary" disabled={busy} onClick={() => void execute()} title={t("editor.run_hint")}>
-                    <Icon name="run" />
-                    {t("btn.execute")}
-                  </button>
+                  {!editorCollapsed && (
+                    <button className="primary" disabled={busy} onClick={() => void execute()} title={t("editor.run_hint")}>
+                      <Icon name="run" />
+                      {t("btn.execute")}
+                    </button>
+                  )}
                   <button className="outlined" disabled={busy} onClick={() => void resetTab()}>
                     <Icon name="reset" />
                     {t("btn.reset")}
@@ -2083,13 +2171,13 @@ export function App({ boot }: { boot: Bootstrap }) {
                     <Icon name="info" />
                     {t("btn.table_info")}
                   </button>
-                  {mode === "sql" && (
+                  {mode === "sql" && !editorCollapsed && (
                     <label className="check small">
                       <input type="checkbox" checked={sqlToNewTab} onChange={(e) => setSqlToNewTab(e.target.checked)} />
                       {t("table.sql_new_tab")}
                     </label>
                   )}
-                  <span className="muted small">{t("editor.run_hint")}</span>
+                  {!editorCollapsed && <span className="muted small">{t("editor.run_hint")}</span>}
                   <span className="spacer" />
                   <button className="text" onClick={() => void runOpDialog(openFilter)}>
                     <Icon name="filter" />
@@ -2117,14 +2205,14 @@ export function App({ boot }: { boot: Bootstrap }) {
                     {t("menu.operations.append")}
                   </button>
                 </div>
-                <div className="resize-handle" onMouseDown={startResize} />
+                {!editorCollapsed && <div className="resize-handle" onMouseDown={startResize} />}
               </section>
             )}
             <StepsPanel
               t={t}
               steps={activeTab.steps}
               open={stepsOpen}
-              onToggle={() => setStepsOpen((v) => !v)}
+              onToggle={() => setView({ show_steps_panel: !stepsOpen })}
               onUndo={() => void undo()}
               busy={busy}
             />
