@@ -177,6 +177,19 @@ pub const DEFAULT_MEMORY_LIMIT_MB: u64 = 1024;
 /// little but each one holds its own buffers.
 pub const MAX_THREADS: usize = 8;
 
+/// Memory each DuckDB thread gets. Every thread reading a Parquet file holds
+/// a decoded column chunk of its row group; on wide files with big row
+/// groups that is 100–150 MB, so 8 threads did not fit in a 1 GB limit
+/// (a filter's first page failed with "could not allocate block").
+const MB_PER_THREAD: u64 = 256;
+
+/// Threads for a memory limit: one per 256 MB, at most one per core and
+/// [`MAX_THREADS`].
+pub fn threads_for(memory_limit_mb: u64) -> usize {
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    ((memory_limit_mb / MB_PER_THREAD) as usize).clamp(1, cores.clamp(1, MAX_THREADS))
+}
+
 /// DuckDB settings that keep memory use bounded and predictable.
 ///
 /// DuckDB's own defaults (80% of RAM, one thread per core) suit a database
@@ -184,12 +197,12 @@ pub const MAX_THREADS: usize = 8;
 /// memory limit can be changed with the `PARVU_MEMORY_LIMIT_MB` environment
 /// variable.
 fn resource_settings() -> String {
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, MAX_THREADS);
     let limit = std::env::var("PARVU_MEMORY_LIMIT_MB")
         .ok()
         .and_then(|v| v.trim().parse::<u64>().ok())
         .filter(|v| *v >= 128)
         .unwrap_or(DEFAULT_MEMORY_LIMIT_MB);
+    let threads = threads_for(limit);
     // Return freed memory to the system quickly instead of keeping it
     // cached in the allocator after a large query.
     format!(
@@ -496,7 +509,8 @@ impl Workspace {
 
     /// Change DuckDB's working-memory limit (MB, at least 128).
     pub fn set_memory_limit_mb(&self, mb: u64) -> Result<()> {
-        self.conn.execute_batch(&format!("SET memory_limit = '{}MB'", mb.max(128)))?;
+        let mb = mb.max(128);
+        self.conn.execute_batch(&format!("SET memory_limit = '{mb}MB'; SET threads = {}", threads_for(mb)))?;
         Ok(())
     }
 

@@ -51,6 +51,7 @@
   - Whole-table totals (statistics, formula totals such as `MODE`, Group By with no columns, Fill missing with mean, median or most frequent) are now computed in a form that DuckDB can spill to disk.
   - A memory guard watches ParVu's memory. If it passes twice the query memory limit plus 1 GB (at most 65% of the computer's memory) and keeps growing, the running queries stop with "This operation needed more memory than allowed". The guard also covers `parvu mcp`; `PARVU_MEMORY_GUARD_MB` sets the ceiling, `0` turns the guard off.
   - On Linux, if memory runs out anyway, the system stops ParVu before other programs.
+- **Filtering a big file failed with "Out of Memory Error: could not allocate block".** Each DuckDB thread reading a wide Parquet file needs 100–150 MB, and 8 threads did not fit in the 1 GB query limit. ParVu now uses one thread per 256 MB of the limit (4 at the default), and a page that still runs out of memory is read again on one thread. Raising the limit in Settings brings back more threads.
 - Changing settings or the language no longer waits for a running query.
 - Stop in the Convert dialog's full count works again after changing the reading.
 

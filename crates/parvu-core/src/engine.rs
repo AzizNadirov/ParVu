@@ -163,7 +163,68 @@ impl QueryEngine {
         let offset = self.paginator.page_offset(page);
         let columns = self.columns(conn)?;
         let sql = format!("{} LIMIT {} OFFSET {offset}", wrap(&self.current), self.page_size());
-        let rows = format_batches(&query_batches(conn, &sql)?)?;
+        let rows = format_batches(&single_thread_on_oom(conn, || query_batches(conn, &sql))?)?;
         Ok((page, offset, columns, rows))
+    }
+}
+
+/// Run `f`; if DuckDB runs out of memory, run it again on one thread (each
+/// thread holds its own buffers, so one thread needs the least memory).
+/// Only for small reads such as a page: the thread count is shared by the
+/// whole database while the retry runs.
+pub fn single_thread_on_oom<T>(conn: &Connection, f: impl Fn() -> Result<T>) -> Result<T> {
+    match f() {
+        Err(e) if e.to_string().contains("Out of Memory") => {
+            let threads: i64 = conn.query_row("SELECT current_setting('threads')::BIGINT", [], |r| r.get(0))?;
+            if threads <= 1 {
+                return Err(e);
+            }
+            tracing::warn!("out of memory with {threads} threads; retrying on one thread");
+            conn.execute_batch("SET threads = 1")?;
+            let r = f();
+            conn.execute_batch(&format!("SET threads = {threads}"))?;
+            r
+        }
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn out_of_memory_is_retried_on_one_thread() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("SET threads = 4").unwrap();
+        let calls = Cell::new(0);
+        let threads = || conn.query_row("SELECT current_setting('threads')::BIGINT", [], |r| r.get::<_, i64>(0)).unwrap();
+        let r = single_thread_on_oom(&conn, || {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                conn.execute_batch("SELECT error('Out of Memory Error: test')")?;
+            }
+            Ok(threads())
+        });
+        assert_eq!(r.unwrap(), 1, "the retry runs on one thread");
+        assert_eq!(calls.get(), 2);
+        assert_eq!(threads(), 4, "the thread count is restored");
+        // Other errors are not retried.
+        calls.set(0);
+        let r: Result<()> = single_thread_on_oom(&conn, || {
+            calls.set(calls.get() + 1);
+            Ok(conn.execute_batch("SELECT error('something else')")?)
+        });
+        assert!(r.is_err());
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn threads_follow_the_memory_limit() {
+        use crate::workspace::{MAX_THREADS, threads_for};
+        assert_eq!(threads_for(128), 1);
+        assert!(threads_for(1024) <= 4);
+        assert!(threads_for(1 << 20) <= MAX_THREADS);
     }
 }
