@@ -11,12 +11,12 @@ use std::time::Duration;
 use duckdb::Connection;
 use serde::{Deserialize, Serialize};
 
-use super::compile::{ARGS_TABLE, compile, function_stability, reserved_words};
+use super::compile::{ARGS_TABLE, check_text, compile, function_stability, reserved_words};
 use super::examples::{ExampleOutcome, clean_error, run_example};
 use super::fill::{check_table_result, fill_slots, value_literal, with_tables};
 use super::signature::{check_signature, families_of, family_name, is_valid_name, probe_families, probe_type};
 use super::{
-    Compiled, DefKind, Definition, MAX_EXAMPLE_COLUMNS, MAX_EXAMPLE_ROWS, MAX_EXAMPLES, ParamKind, ResultKind, Shape,
+    Body, BodyLanguage, Compiled, DefKind, Definition, MAX_EXAMPLE_COLUMNS, MAX_EXAMPLE_ROWS, MAX_EXAMPLES, ParamKind, ResultKind, Shape,
 };
 use crate::engine::describe;
 use crate::page::ColumnMeta;
@@ -101,6 +101,10 @@ pub struct ValidateEnv<'a> {
     pub name_taken: &'a dyn Fn(&str) -> Option<String>,
     /// The app's version, stored with the compiled form.
     pub app_version: &'a str,
+    /// Translate an expression-language body to a SQL expression (the
+    /// expression language lives in `parvu-dsl`, which this crate doesn't
+    /// use). `None`: expression bodies can't be validated here.
+    pub expression_sql: Option<&'a dyn Fn(&Definition) -> Result<String, Issue>>,
 }
 
 /// A connection for validation: in memory, small, two threads.
@@ -148,6 +152,39 @@ pub fn validate(def: &Definition, env: &ValidateEnv) -> crate::Result<Report> {
         report.skip(&["body", "types", "shape", "examples"]);
         return Ok(report);
     }
+
+    // An expression body becomes SQL first; the SQL then takes every check.
+    // The hash stays the one of the source as written.
+    let source = def;
+    let translated;
+    let def = match def.body.language {
+        BodyLanguage::Sql => def,
+        BodyLanguage::Expression => {
+            let sql = if def.kind != DefKind::Function {
+                Err(Issue::new("custom.check.expression_function_only", &[]))
+            } else if let Some(issue) = check_text(&def.body.source) {
+                Err(issue)
+            } else {
+                match env.expression_sql {
+                    Some(f) => f(def),
+                    None => Err(Issue::new("custom.check.expression_unavailable", &[])),
+                }
+            };
+            match sql {
+                Ok(sql) => {
+                    let mut d = def.clone();
+                    d.body = Body { language: BodyLanguage::Sql, source: sql };
+                    translated = d;
+                    &translated
+                }
+                Err(issue) => {
+                    report.fail("body", issue);
+                    report.skip(&["types", "shape", "examples"]);
+                    return Ok(report);
+                }
+            }
+        }
+    };
 
     // 3–6. Body, safety, determinism (compile)
     let out = match compile(&conn, def, &stability) {
@@ -240,7 +277,7 @@ pub fn validate(def: &Definition, env: &ValidateEnv) -> crate::Result<Report> {
     if types_ok {
         report.compiled = Some(Compiled {
             template: out.template,
-            hash: def.source_hash(),
+            hash: source.source_hash(),
             shape,
             reads_other_rows: out.reads_other_rows,
             result_types,
@@ -467,7 +504,11 @@ mod tests {
     use crate::custom::{Body, Example, ExampleColumn, ExampleTable, Param, ResultSpec};
 
     fn env() -> ValidateEnv<'static> {
-        ValidateEnv { name_taken: &|n| (n == "sum_all").then(|| "a built-in function".to_string()), app_version: "test" }
+        ValidateEnv {
+            name_taken: &|n| (n == "sum_all").then(|| "a built-in function".to_string()),
+            app_version: "test",
+            expression_sql: None,
+        }
     }
 
     fn table(cols: &[(&str, &str)], rows: &[&[Option<&str>]]) -> ExampleTable {
@@ -527,5 +568,32 @@ mod tests {
         let mut d = double();
         d.examples.clear();
         assert_eq!(fail(d), "custom.check.no_examples");
+    }
+
+    #[test]
+    fn expression_bodies_are_translated_then_checked() {
+        let mut d = double();
+        d.body = Body { language: BodyLanguage::Expression, source: "[x] * 2".into() };
+        // Without a translator: refused.
+        let r = validate(&d, &env()).unwrap();
+        assert_eq!(r.first_failure().unwrap().message.key, "custom.check.expression_unavailable");
+        // With one: the SQL it gives takes every check; the hash is the source's.
+        let tr = |def: &Definition| {
+            assert_eq!(def.body.source, "[x] * 2");
+            Ok("x * 2".to_string())
+        };
+        let with = ValidateEnv { expression_sql: Some(&tr), ..env() };
+        let r = validate(&d, &with).unwrap();
+        assert!(r.passed(), "{:#?}", r.checks);
+        let c = r.compiled.unwrap();
+        assert_eq!(c.template, "(__pv_arg_0 * 2)");
+        assert_eq!(c.hash, d.source_hash());
+        // The translation's error is the body's failure; `__pv_` in the source is refused first.
+        let bad = |_: &Definition| Err(Issue::new("custom.check.parse", &[("error", "nope")]));
+        let r = validate(&d, &ValidateEnv { expression_sql: Some(&bad), ..env() }).unwrap();
+        assert_eq!(r.first_failure().unwrap().id, "body");
+        d.body.source = "[__pv_x]".into();
+        let r = validate(&d, &ValidateEnv { expression_sql: Some(&tr), ..env() }).unwrap();
+        assert_eq!(r.first_failure().unwrap().message.key, "custom.check.body_reserved");
     }
 }

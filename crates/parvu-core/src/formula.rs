@@ -31,6 +31,18 @@ pub struct Formula {
     /// so pages don't rescan the table.
     #[serde(default)]
     pub totals: Vec<String>,
+    /// Why the formula doesn't compile any more (a custom function it calls
+    /// was deleted or broke, a column it uses is gone). It is kept, so the
+    /// user can fix it, and its column is empty meanwhile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl Formula {
+    /// A formula kept with an error: an empty column until it is fixed.
+    pub fn broken(name: String, source: String, after: Option<String>, error: String) -> Self {
+        Formula { name, source, sql: "CAST(NULL AS VARCHAR)".into(), after, totals: Vec::new(), error: Some(error) }
+    }
 }
 
 /// Where total `i` goes in a formula's SQL. The expression language's
@@ -134,6 +146,7 @@ mod tests {
             sql: sql.into(),
             after: after.map(str::to_string),
             totals: Vec::new(),
+            error: None,
         };
         let sql = formula_sql("b", "t", &cols, &[f("total", "t.qty * t.price", None), f("half", "t.total / 2", Some("qty"))]);
         assert_eq!(

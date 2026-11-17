@@ -352,7 +352,7 @@ mod tests {
     use parvu_core::custom::{ValidateEnv, validate};
 
     fn check(d: &Definition) -> Report {
-        validate(d, &ValidateEnv { name_taken: &|_| None, app_version: "test" }).unwrap()
+        validate(d, &ValidateEnv { name_taken: &|_| None, app_version: "test", expression_sql: None }).unwrap()
     }
 
     fn duckdb() -> String {
@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(s.library("test", &db).len(), 7);
         // Another app version: nothing is current until revalidated.
         assert_eq!(s.library("2.0", &db).len(), 0);
-        let v2 = |d: &Definition| validate(d, &ValidateEnv { name_taken: &|_| None, app_version: "2.0" }).unwrap();
+        let v2 = |d: &Definition| validate(d, &ValidateEnv { name_taken: &|_| None, app_version: "2.0", expression_sql: None }).unwrap();
         // An edited file whose body no longer passes its examples breaks.
         let path = dir.path().join("title_case.json");
         let text = std::fs::read_to_string(&path).unwrap().replace("upper(left(w, 1))", "lower(left(w, 1))");

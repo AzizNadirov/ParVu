@@ -145,13 +145,17 @@ pub enum Placement {
     NewTable,
 }
 
-/// The language a body is written in. Only SQL in this version; the
-/// expression language is planned (phase 5).
+/// The language a body is written in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BodyLanguage {
+    /// A SQL expression (functions) or one SELECT (operations).
     #[default]
     Sql,
+    /// ParVu's expression language, `[x]` meaning parameter `x` (functions
+    /// only). The app translates it to SQL (`parvu-dsl`), which then goes
+    /// through the same checks ([`ValidateEnv::expression_sql`]).
+    Expression,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -324,6 +328,42 @@ impl Definition {
         }
     }
 
+    /// `clean_phone(phone: column<text>, prefix: value<VARCHAR> = "+") → column<text>`,
+    /// as the editor shows it.
+    pub fn signature(&self) -> String {
+        let types = |t: &[String]| if t.is_empty() { "any".to_string() } else { t.join(" | ") };
+        let params: Vec<String> = self
+            .params
+            .iter()
+            .map(|p| match p.kind {
+                ParamKind::Table => {
+                    let cols: Vec<String> = p.columns.iter().map(|c| format!("{}: {}", c.name, types(&c.types))).collect();
+                    if cols.is_empty() { format!("{}: table", p.name) } else { format!("{}: table{{{}}}", p.name, cols.join(", ")) }
+                }
+                ParamKind::Column => format!("{}: column<{}>", p.name, types(&p.types)),
+                ParamKind::Value => {
+                    let default = match (&p.default, p.optional) {
+                        (Some(d), true) => format!(" = {}", serde_json::Value::String(d.clone())),
+                        (None, true) => " = empty".into(),
+                        _ => String::new(),
+                    };
+                    format!("{}: value<{}>{default}", p.name, p.dtype.as_deref().unwrap_or("VARCHAR"))
+                }
+            })
+            .collect();
+        let result = match self.result.kind {
+            ResultKind::Table => "table".to_string(),
+            k => {
+                let kind = if k == ResultKind::Value { "value" } else { "column" };
+                match &self.result.same_as {
+                    Some(s) => format!("{kind}<same as {s}>"),
+                    None => format!("{kind}<{}>", types(&self.result.types)),
+                }
+            }
+        };
+        format!("{}({}) → {result}", self.name, params.join(", "))
+    }
+
     /// Ready to use: validated and compiled.
     pub fn is_usable(&self) -> bool {
         self.status == Status::Ok && self.compiled.is_some()
@@ -395,6 +435,13 @@ impl Library {
 
     pub fn len(&self) -> usize {
         self.defs.len()
+    }
+
+    /// Every definition, in name order.
+    pub fn definitions(&self) -> Vec<Arc<Definition>> {
+        let mut v: Vec<Arc<Definition>> = self.defs.values().cloned().collect();
+        v.sort_by(|a, b| a.name.cmp(&b.name));
+        v
     }
 
     pub fn is_empty(&self) -> bool {
