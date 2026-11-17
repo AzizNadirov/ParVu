@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- The Filter dialog's hint still said dates are written as `2024-12-31`; it now explains the value boxes that follow the column's type. **Drop Duplicates…** has the ellipsis of a menu item that opens a dialog.
+
 ## [1.0.0-alpha.6]
 
 Operations are grouped by what they touch (Rows, Column, Table), and table operations open their result in a new tab. Column formulas speak about 100 Excel functions, Excel workbooks keep all their sheets, conditions follow the column's type and can limit a change to some rows, and big files can no longer take all of the computer's memory.
