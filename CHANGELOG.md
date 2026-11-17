@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.0.0]
+
+The first stable ParVu. Before this release every feature went through a full manual test pass in the real app: files and sheets, row and column operations, table operations and formulas, a 160-million-row file under a memory cap, settings, themes and languages, and the MCP server. Each bug found was fixed and the fix tested again. The fixes below are what changed since 1.0.0-alpha.6.
+
+### Highlights
+- **Opens Parquet, CSV, JSON and Excel**, including workbooks with several sheets. Big files are read in place, and only the page on screen is loaded.
+- **Works without SQL.** The **Rows**, **Column** and **Table** menus filter, sort, clean, type, transform and reshape. Group By, Pivot, Join and the other table operations open their result in a new tab. Every change is a step you can undo.
+- **Conditions follow the column's type**, and Replace, Fill and Set Value can change only the rows that match.
+- **Live formula columns** use about 100 Excel functions (`XLOOKUP`, `COUNTIF`, `TEXT`…), and full DuckDB SQL is available alongside.
+- **Cells can be edited, filled and saved back**, to the same file or as Parquet, CSV, JSON or Excel.
+- **Charts and conditional formatting.**
+- **AI:** a built-in assistant using your own key or a local model, and an MCP server for Claude and other clients. Every change is approved in ParVu first.
+- **Safe on big data:** long work runs in the background with progress and Stop, queries respect a memory limit, and a memory guard stops a runaway query before it takes the computer's memory.
+- **English, Russian and Azerbaijani**, with five themes, or your own.
+
 ### Fixed
 - **Data safety:**
   - **Undo of a second edit of a cell** went back to the file's value, losing the first edit too.
