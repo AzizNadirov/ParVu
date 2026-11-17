@@ -1246,7 +1246,7 @@ mod tests {
         assert_eq!(names, ["total", "share"]);
         assert!(ws.summary(id).unwrap().steps.is_empty(), "restoring adds no undo step");
         let page = ws.page(id, 1).unwrap();
-        assert_eq!(page.rows[0][3].as_deref(), Some("0.8695652173913043"));
+        assert_eq!(page.rows[0][3].as_deref(), Some("0.869565217391304"));
     }
 }
 

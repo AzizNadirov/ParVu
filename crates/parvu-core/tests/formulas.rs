@@ -158,7 +158,7 @@ fn column_totals_are_constants_that_follow_edits() {
     // Edit qty 2 → 12: the total becomes 18.
     ws.edit_cell(id, 0, "qty", Some("12".into())).unwrap();
     let got = col(&ws, id, "share");
-    assert_eq!(got[2].as_deref(), Some(&*format!("{}", 1.0 / 18.0)));
+    assert_eq!(got[2].as_deref(), Some(&*parvu_core::page::display_float(1.0 / 18.0)));
     // Undo goes back to the old total.
     ws.undo(id).unwrap();
     assert_eq!(col(&ws, id, "share")[2].as_deref(), Some("0.125"));

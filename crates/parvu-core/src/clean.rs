@@ -292,6 +292,11 @@ fn whole_value(item: &str, source: &str) -> String {
     format!("({})", crate::sql::whole_table_view(item, source, "__pv_t"))
 }
 
+/// A bin edge in a label: whole numbers bare, others as the grid shows them.
+fn label_number(v: f64) -> String {
+    if v.fract() == 0.0 && v.abs() < 1e15 { format!("{}", v as i64) } else { crate::page::display_float(v) }
+}
+
 pub(crate) fn fill_null(
     ctx: &OpContext,
     columns: &[String],
@@ -606,7 +611,9 @@ pub(crate) fn bin(
         let (lo, hi) = (e[i], e[i + 1]);
         let label = labels.get(i).cloned().unwrap_or_else(|| {
             let open = if i == 0 { "[" } else { "(" };
-            format!("{open}{}, {}]", fmt_number(lo), fmt_number(hi))
+            // Labels read like the grid (15 significant digits); the
+            // comparisons below keep the exact edges.
+            format!("{open}{}, {}]", label_number(lo), label_number(hi))
         });
         let lower = if i == 0 { format!("{x} >= {}", fmt_number(lo)) } else { format!("{x} > {}", fmt_number(lo)) };
         whens.push(format!("WHEN {lower} AND {x} <= {} THEN {}", fmt_number(hi), quote_literal(&label)));
