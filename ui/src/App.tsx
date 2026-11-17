@@ -34,7 +34,7 @@ import {
 } from "./lib/api";
 import { makeTranslator } from "./lib/i18n";
 import { dayFirst, readAsChoices, sameReading, swapDayMonth } from "./lib/types";
-import { columnHighlights, errorOffset, formulaBody, formulaRefs, newFormulaName, refFor } from "./lib/formula";
+import { columnHighlights, errorOffset, formulaRefs, newFormulaName, refFor } from "./lib/formula";
 import { jobResult } from "./lib/jobs";
 import { sheetMenu, sheetsToOpen, type SheetActions } from "./lib/sheets";
 import { StatusJobs } from "./components/JobProgress";
@@ -196,6 +196,8 @@ export function App({ boot }: { boot: Bootstrap }) {
   const formulaBar = useRef<FormulaBarHandle>(null);
   // Workbooks the user agreed to overwrite with values this session.
   const workbookConfirmed = useRef(new Set<string>());
+  // "Formulas are columns" is said once a session.
+  const formulaHintShown = useRef(false);
   const saveAsRef = useRef<(tab: TabSummary) => Promise<boolean>>(async () => false);
   // How each column of the active tab's CSV file is read ("Read as").
   const [sourceCols, setSourceCols] = useState<SourceColumn[]>([]);
@@ -894,12 +896,21 @@ export function App({ boot }: { boot: Bootstrap }) {
         ]
       : [{ label: t("formula.new_after"), onSelect: () => startFormula(column) }, { type: "separator" }];
 
-  const headerMenu = (column: string): MenuEntry[] => [
-    { label: t("context.copy_column"), onSelect: () => void copyText(column, t("status.copied_name")) },
-    { type: "separator" },
+  /** The Column menu: what adds or changes a column, for `column`. The
+   * menu bar's Column menu and the header's right-click menu share it. */
+  const columnMenu = (column: string): MenuEntry[] => [
     ...formulaMenu(column),
+    {
+      label: t("context.rename_column"),
+      onSelect: async () => {
+        const name = await ui.prompt(t("context.rename_dialog.title"), t("context.rename_dialog.prompt"), column);
+        if (name?.trim() && name.trim() !== column) await applyOp({ op: "rename", column, new_name: name.trim() });
+      },
+    },
+    { label: t("context.duplicate_column"), onSelect: () => void applyOp({ op: "duplicate", column }) },
+    { label: t("context.remove_column"), disabled: columnNames.length < 2, onSelect: () => void applyOp({ op: "remove", column }) },
+    { type: "separator" },
     ...readAsMenu(column),
-    ...typeMenu(column),
     {
       label: t("context.change_type"),
       submenu: [
@@ -916,38 +927,39 @@ export function App({ boot }: { boot: Bootstrap }) {
         },
       ],
     },
-    {
-      label: t("context.rename_column"),
-      onSelect: async () => {
-        const name = await ui.prompt(t("context.rename_dialog.title"), t("context.rename_dialog.prompt"), column);
-        if (name?.trim() && name.trim() !== column) await applyOp({ op: "rename", column, new_name: name.trim() });
-      },
-    },
-    { label: t("context.duplicate_column"), onSelect: () => void applyOp({ op: "duplicate", column }) },
-    { label: t("context.remove_column"), disabled: columnNames.length < 2, onSelect: () => void applyOp({ op: "remove", column }) },
-    { type: "separator" },
-    { label: t("context.sort_asc"), onSelect: () => void sortBy(column, true) },
-    { label: t("context.sort_desc"), onSelect: () => void sortBy(column, false) },
-    { label: t("context.sort_more"), onSelect: () => void runOpDialog(openSort, column) },
-    { type: "separator" },
-    { label: t("context.filter"), onSelect: () => void runOpDialog(openFilter, column) },
-    { label: t("context.copy_values"), onSelect: () => void copyTuple(column) },
-    { label: t("context.unique_values"), onSelect: () => void showUniqueValues(column) },
-    { label: t("context.value_counts"), onSelect: () => void runOpDialog(openValueCounts, column, true) },
-    { label: t("context.column_stats"), onSelect: () => void showStats(column) },
-    { label: t("context.chart"), onSelect: () => void showChart(column) },
-    { type: "separator" },
+    ...typeMenu(column),
     { label: t("context.replace_values"), onSelect: () => void runReplace(column) },
     { label: t("context.fill_null"), onSelect: () => void runOpDialog(openFillNull, column) },
+    { type: "separator" },
+    { label: t("menu.data.split"), onSelect: () => void runOpDialog(openSplitColumn, column) },
+    { label: t("menu.data.merge"), onSelect: () => void runOpDialog(openMergeColumns, column) },
+    { label: t("menu.data.bin"), onSelect: () => void runOpDialog(openBin, column) },
+    { label: t("menu.operations.window"), onSelect: () => void runOpDialog(openWindow, column, true) },
+    { label: t("menu.operations.math"), onSelect: () => void runMath() },
+    { type: "separator" },
+    { label: t("context.unique_values"), onSelect: () => void showUniqueValues(column) },
+    { label: t("context.column_stats"), onSelect: () => void showStats(column) },
+    { label: t("context.chart"), onSelect: () => void showChart(column) },
+    { label: t("context.copy_values"), onSelect: () => void copyTuple(column) },
+    { label: t("context.copy_column"), onSelect: () => void copyText(column, t("status.copied_name")) },
+  ];
+
+  /** Right-click on a header: the Column menu, plus sorting, filtering by
+   * this column, tables made from it, and how it looks. */
+  const headerMenu = (column: string): MenuEntry[] => [
+    { label: t("context.sort_asc"), onSelect: () => void sortBy(column, true) },
+    { label: t("context.sort_desc"), onSelect: () => void sortBy(column, false) },
+    { label: t("context.filter"), onSelect: () => void runOpDialog(openFilter, column) },
     { label: t("context.drop_null"), onSelect: () => void runDropNull(column) },
+    { type: "separator" },
+    ...columnMenu(column),
+    { type: "separator" },
     {
-      label: t("context.transform"),
+      label: t("context.new_table_from"),
       submenu: [
         { label: t("menu.reshape.group_by"), onSelect: () => void runOpDialog(openGroupBy, column, true) },
         { label: t("menu.reshape.pivot"), onSelect: () => void runOpDialog(openPivot, column, true) },
-        { label: t("menu.operations.window"), onSelect: () => void runOpDialog(openWindow, column, true) },
-        { label: t("menu.data.split"), onSelect: () => void runOpDialog(openSplitColumn, column) },
-        { label: t("menu.data.bin"), onSelect: () => void runOpDialog(openBin, column) },
+        { label: t("menu.reshape.value_counts"), onSelect: () => void runOpDialog(openValueCounts, column, true) },
       ],
     },
     { type: "separator" },
@@ -1017,11 +1029,9 @@ export function App({ boot }: { boot: Bootstrap }) {
   const editCell = useCallback(
     async (row: number, column: string, value: Cell) => {
       if (!activeTab || !page) return;
-      // "=..." typed into a cell starts a formula column after it.
-      if (value?.trim().startsWith("=")) {
-        startFormula(column, formulaBody(value));
-        return;
-      }
+      // "=…" in a cell is a value: formulas are columns. Say so once.
+      const formulaHint = !!value?.trim().startsWith("=") && !formulaHintShown.current;
+      if (formulaHint) formulaHintShown.current = true;
       if (!page.editable) {
         status(t("status.read_only"), 4000);
         return;
@@ -1030,13 +1040,13 @@ export function App({ boot }: { boot: Bootstrap }) {
         const s = await api.editCell(activeTab.id, page.offset + row, column, value);
         upsertTab(s);
         await loadPage(activeTab.id, page.page);
+        if (formulaHint) status(t("status.formula_hint"), 9000);
       } catch (e) {
         await loadPage(activeTab.id, page.page);
-        status(t("status.edit_rejected", { error: errorMessage(e) }), 8000);
+        const rejected = t("status.edit_rejected", { error: errorMessage(e) });
+        status(formulaHint ? `${rejected} ${t("status.formula_hint")}` : rejected, 9000);
       }
     },
-    // startFormula is a plain function of this render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeTab, page, upsertTab, loadPage, status, t],
   );
 
@@ -1044,9 +1054,11 @@ export function App({ boot }: { boot: Bootstrap }) {
   const formulas = activeTab?.formulas ?? [];
   const formulaNames = formulas.map((f) => f.name);
   /** Start a new formula column after `after` (default: the selected column). */
+  /** Start a new formula column after `after`; left out: after the
+   * selected cell's column; `null`: at the end. */
   const startFormula = (after?: string | null, source = "") => {
     const cols = page?.columns.map((c) => c.name) ?? [];
-    const at = after ?? (currentCell ? (cols[currentCell.col] ?? null) : null);
+    const at = after !== undefined ? after : currentCell ? (cols[currentCell.col] ?? null) : null;
     setFormulaEdit({ name: newFormulaName([...cols, ...formulaNames]), isNew: true, after: at, source, error: "" });
   };
   const editFormula = (name: string) => {
@@ -1142,14 +1154,6 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
   // What the bar shows while not editing: the formula of a formula column,
   // or the selected cell's value.
-  const barIdle = (() => {
-    if (!page || !currentCell) return { target: null as string | null, value: "" };
-    const name = page.columns[currentCell.col]?.name;
-    const f = formulas.find((x) => x.name === name);
-    if (f) return { target: f.name, value: f.source };
-    return { target: null, value: page.rows[currentCell.row]?.[currentCell.col] ?? "" };
-  })();
-
   const runReplace = useCallback(
     async (selected?: string) => {
       if (!activeTab) return;
@@ -1572,6 +1576,8 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.edit.find"), shortcut: "Ctrl+F", disabled: !activeTab, onSelect: openSearch },
         { label: t("menu.edit.find_next"), shortcut: "F3", disabled: !activeTab, onSelect: () => (search ? searchKeys.current?.next() : openSearch()) },
         { label: t("menu.edit.find_prev"), shortcut: "Shift+F3", disabled: !activeTab, onSelect: () => (search ? searchKeys.current?.prev() : openSearch()) },
+        { type: "separator" },
+        { label: t("context.fill"), disabled: !activeTab || !page?.editable, submenu: fillMenu() },
       ],
     },
     {
@@ -1594,26 +1600,42 @@ export function App({ boot }: { boot: Bootstrap }) {
       ],
     },
     {
-      title: t("menu.data"),
+      title: t("menu.rows"),
       items: (): MenuEntry[] => [
         { label: t("menu.data.filter"), shortcut: "Ctrl+Shift+L", disabled: !activeTab, onSelect: () => void runOpDialog(openFilter) },
         { label: t("menu.data.sort"), disabled: !activeTab, onSelect: () => void runOpDialog(openSort) },
-        { label: t("menu.data.columns"), disabled: !activeTab, onSelect: () => void runOpDialog(openColumns) },
         { label: t("menu.data.slice"), disabled: !activeTab, onSelect: () => void runSlice() },
         { type: "separator" },
-        { label: t("context.fill"), disabled: !activeTab || !page?.editable, submenu: fillMenu() },
-        { label: t("menu.data.fill_null"), disabled: !activeTab, onSelect: () => void runOpDialog(openFillNull) },
-        { label: t("menu.operations.drop_null"), disabled: !activeTab, onSelect: () => void runDropNull() },
         { label: t("menu.operations.drop_duplicates"), disabled: !activeTab, onSelect: () => void runDropDuplicates() },
-        { label: t("menu.operations.replace"), disabled: !activeTab, onSelect: () => void runReplace() },
-        { type: "separator" },
-        { label: t("menu.data.split"), disabled: !activeTab, onSelect: () => void runOpDialog(openSplitColumn) },
-        { label: t("menu.data.merge"), disabled: !activeTab, onSelect: () => void runOpDialog(openMergeColumns) },
-        { label: t("menu.data.bin"), disabled: !activeTab, onSelect: () => void runOpDialog(openBin) },
+        { label: t("menu.operations.drop_null"), disabled: !activeTab, onSelect: () => void runDropNull() },
       ],
     },
     {
-      title: t("menu.reshape"),
+      title: t("menu.column"),
+      items: (): MenuEntry[] => {
+        // The column of the selected cell.
+        const column = currentCell ? page?.columns[currentCell.col]?.name : undefined;
+        const head: MenuEntry[] = [
+          { label: column ? t("menu.column.selected", { column }) : t("menu.column.none"), disabled: true },
+          { type: "separator" },
+        ];
+        const all: MenuEntry[] = [
+          { type: "separator" },
+          { label: t("menu.data.columns"), disabled: !activeTab, onSelect: () => void runOpDialog(openColumns) },
+        ];
+        if (!activeTab) return [...head, ...all];
+        if (!column) {
+          return [
+            ...head,
+            { label: t("formula.new_end"), onSelect: () => startFormula(null) },
+            ...all,
+          ];
+        }
+        return [...head, ...columnMenu(column), ...all];
+      },
+    },
+    {
+      title: t("menu.table"),
       items: (): MenuEntry[] => [
         { label: t("menu.reshape.group_by"), shortcut: "Ctrl+G", disabled: !activeTab, onSelect: () => void runOpDialog(openGroupBy, undefined, true) },
         { label: t("menu.reshape.pivot"), disabled: !activeTab, onSelect: () => void runOpDialog(openPivot, undefined, true) },
@@ -1622,13 +1644,6 @@ export function App({ boot }: { boot: Bootstrap }) {
         { type: "separator" },
         { label: t("menu.reshape.value_counts"), disabled: !activeTab, onSelect: () => void runOpDialog(openValueCounts, undefined, true) },
         { label: t("menu.reshape.describe"), disabled: !activeTab, onSelect: () => void runDescribe() },
-      ],
-    },
-    {
-      title: t("menu.operations"),
-      items: (): MenuEntry[] => [
-        { label: t("menu.operations.math"), disabled: !activeTab, onSelect: () => void runMath() },
-        { label: t("menu.operations.window"), disabled: !activeTab, onSelect: () => void runOpDialog(openWindow, undefined, true) },
         { type: "separator" },
         { label: t("menu.operations.join"), disabled: !activeTab, onSelect: () => void runJoin() },
         { label: t("menu.operations.append"), disabled: !activeTab, onSelect: () => void runAppend() },
@@ -1954,9 +1969,9 @@ export function App({ boot }: { boot: Bootstrap }) {
                     {t("btn.chart")}
                   </button>
                   <span className="divider" />
-                  <button className="text" onClick={() => void runMath()}>
-                    <Icon name="math" />
-                    {t("menu.operations.math")}
+                  <button className="text" onClick={() => startFormula()}>
+                    <Icon name="formula" />
+                    {t("btn.formula")}
                   </button>
                   <button className="text" onClick={() => void runJoin()}>
                     <Icon name="join" />
@@ -1978,24 +1993,24 @@ export function App({ boot }: { boot: Bootstrap }) {
               onUndo={() => void undo()}
               busy={busy}
             />
-            <FormulaBar
-              ref={formulaBar}
-              t={t}
-              schema={schema}
-              dark={darkTheme}
-              editing={!!formulaEdit}
-              target={formulaEdit ? formulaEdit.name : barIdle.target}
-              isNew={!!formulaEdit?.isNew}
-              onNameChange={(name) => formulaEdit && setFormulaEdit({ ...formulaEdit, name })}
-              value={formulaEdit ? formulaEdit.source : barIdle.value}
-              error={formulaEdit?.error ?? ""}
-              errorAt={formulaEdit?.errorAt ?? null}
-              onStart={() => (barIdle.target ? editFormula(barIdle.target) : startFormula())}
-              onNew={() => startFormula()}
-              onChange={(source) => formulaEdit && setFormulaEdit({ ...formulaEdit, source, error: "" })}
-              onApply={() => void applyFormula()}
-              onCancel={() => setFormulaEdit(null)}
-            />
+            {formulaEdit && (
+              <FormulaBar
+                ref={formulaBar}
+                t={t}
+                schema={schema}
+                dark={darkTheme}
+                editing
+                target={formulaEdit.name}
+                isNew={formulaEdit.isNew}
+                onNameChange={(name) => setFormulaEdit({ ...formulaEdit, name })}
+                value={formulaEdit.source}
+                error={formulaEdit.error}
+                errorAt={formulaEdit.errorAt ?? null}
+                onChange={(source) => setFormulaEdit({ ...formulaEdit, source, error: "" })}
+                onApply={() => void applyFormula()}
+                onCancel={() => setFormulaEdit(null)}
+              />
+            )}
             <section className="grid-panel">
               <DataGrid
                 ref={grid}
@@ -2015,6 +2030,8 @@ export function App({ boot }: { boot: Bootstrap }) {
                 onHeaderMenu={(c, x, y) => setMenu({ x, y, items: headerMenu(c) })}
                 onCellMenu={(r, c, x, y) => setMenu({ x, y, items: cellMenu(r, c) })}
                 onFill={fillHandle}
+                onNewColumn={formulaEdit ? undefined : () => startFormula(null)}
+                newColumnLabel={t("formula.new_end")}
                 onEdit={(r, c, v) => void editCell(r, c, v)}
                 frozen={st?.frozen ?? 0}
                 widths={st?.widths ?? NO_WIDTHS}

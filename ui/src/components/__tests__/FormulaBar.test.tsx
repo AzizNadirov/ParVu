@@ -16,8 +16,6 @@ function props(over: Partial<FormulaBarProps> = {}): FormulaBarProps {
     onNameChange: vi.fn(),
     value: "",
     error: "",
-    onStart: vi.fn(),
-    onNew: vi.fn(),
     onChange: vi.fn(),
     onApply: vi.fn(),
     onCancel: vi.fn(),
@@ -26,14 +24,15 @@ function props(over: Partial<FormulaBarProps> = {}): FormulaBarProps {
 }
 
 describe("formula bar", () => {
-  it("starts a formula when clicked while idle", () => {
-    const p = props({ value: "42" });
+  it("applies and cancels with its buttons", () => {
+    const p = props({ editing: true, target: "total", value: "[qty]" });
     const { container } = render(<FormulaBar {...p} />);
-    expect(container.querySelector(".cm-content")?.textContent).toBe("42");
-    fireEvent.mouseDown(container.querySelector(".cm-content")!);
-    expect(p.onStart).toHaveBeenCalled();
-    fireEvent.click(container.querySelector("button")!);
-    expect(p.onNew).toHaveBeenCalled();
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["formula.apply", "formula.cancel"]);
+    fireEvent.click(buttons[0]);
+    expect(p.onApply).toHaveBeenCalled();
+    fireEvent.click(buttons[1]);
+    expect(p.onCancel).toHaveBeenCalled();
   });
 
   it("colours references and applies with Enter", () => {

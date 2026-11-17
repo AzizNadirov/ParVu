@@ -834,7 +834,7 @@
   "formula.name": "Name of the new column",
   "formula.new": "New formula column",
   "formula.new_after": "New Formula Column After This",
-  "formula.placeholder": "Select a cell, or type = in a cell to start a formula",
+  "formula.placeholder": "Write the formula, e.g. [qty] * [price]",
   "formula.remove": "Remove Formula Column",
   "grid.null": "NULL",
   "job.cancelled": "Stopped.",
@@ -1412,5 +1412,14 @@
   "window.row_number": "Row number from 1",
   "window.row_number.hint": "1, 2, 3… in the chosen row order.",
   "window.shift": "Value from another row (shift)",
-  "window.shift.hint": "The value a number of rows earlier; a negative number takes it from later rows."
+  "window.shift.hint": "The value a number of rows earlier; a negative number takes it from later rows.",
+  "btn.formula": "Formula",
+  "context.new_table_from": "New Table from This Column",
+  "formula.new_end": "New Formula Column at the End",
+  "menu.column": "Column",
+  "menu.column.none": "No column selected",
+  "menu.column.selected": "Column: {column}",
+  "menu.rows": "Rows",
+  "menu.table": "Table",
+  "status.formula_hint": "Formulas are columns: use Column → New Formula Column."
 }
