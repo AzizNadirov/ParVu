@@ -957,49 +957,154 @@ fn launch_app() -> Result<(), String> {
 /// after about 30 seconds).
 const LAUNCH_WAIT: Duration = Duration::from_secs(25);
 
-/// `parvu mcp --attach`: copy stdin/stdout to the app's listener, starting
-/// the ParVu window first when none is running.
+/// `parvu mcp --attach`: copy stdin/stdout to the app's listener.
+///
+/// MCP clients start their servers when a session opens (Claude Code does
+/// so for every new window), so the bridge must not open ParVu then. While
+/// ParVu isn't running it answers the handshake itself (`initialize`, the
+/// tool list, `ping`) with the same answers the window gives. The first
+/// real request (a tool call) connects, starting ParVu if needed; the
+/// handshake is replayed to the window and its duplicate answers dropped.
 async fn bridge() -> Result<(), String> {
-    let switch_on = "ParVu is open, but AI clients are not allowed. In ParVu choose AI → Connect an AI client \
-                     and switch it on, then reconnect this server (in Claude Code: /mcp).";
-    let sock = match connect_app().await {
-        Some(s) => s,
-        None if app_running() => return Err(switch_on.into()),
-        None => {
-            tracing::info!("MCP bridge: starting ParVu");
-            launch_app()?;
-            let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
-            loop {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                if let Some(s) = connect_app().await {
-                    break s;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    return Err(if app_running() {
-                        switch_on.into()
-                    } else {
-                        "ParVu did not start in time. Open it yourself, then reconnect this server (in Claude Code: /mcp).".into()
-                    });
-                }
-            }
-        }
-    };
-    let (mut from_app, mut to_app) = sock.into_split();
-    let mut stdin = tokio::io::stdin();
+    if let Some(sock) = connect_app().await {
+        return pipe(sock, BufReader::new(tokio::io::stdin()), Vec::new(), Vec::new()).await;
+    }
+    let local = ParvuMcp::attached(Arc::new(Offline));
+    let mut stdin = BufReader::new(tokio::io::stdin());
     let mut stdout = tokio::io::stdout();
+    // Handshake lines to replay to the window, and the ids of the requests
+    // among them that were already answered here.
+    let mut replay: Vec<String> = Vec::new();
+    let mut answered: Vec<serde_json::Value> = Vec::new();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if stdin.read_line(&mut line).await.map_err(|e| e.to_string())? == 0 {
+            return Ok(()); // the client closed the session without needing ParVu
+        }
+        let Ok(msg) = serde_json::from_str::<serde_json::Value>(line.trim()) else { continue };
+        let id = msg.get("id").cloned();
+        let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("");
+        let reply = |result: serde_json::Value| serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": result });
+        let answer = match method {
+            "initialize" => {
+                replay.push(line.clone());
+                answered.extend(id.clone());
+                let mut info = serde_json::to_value(local.get_info()).map_err(|e| e.to_string())?;
+                // As rmcp's server does: echo the client's version when it is
+                // one the server supports.
+                if let Some(asked) = msg.pointer("/params/protocolVersion").and_then(|v| v.as_str()) {
+                    let supported = ServerHandler::supported_protocol_versions(&local);
+                    if supported.iter().any(|v| serde_json::to_value(v).ok().is_some_and(|s| s == asked)) {
+                        info["protocolVersion"] = asked.into();
+                    }
+                }
+                Some(reply(info))
+            }
+            "ping" => Some(reply(serde_json::json!({}))),
+            "tools/list" => Some(reply(serde_json::json!({ "tools": local.tool_router.list_all() }))),
+            _ if id.is_none() => {
+                // A notification (e.g. notifications/initialized): the window
+                // needs it too once connected.
+                replay.push(line.clone());
+                None
+            }
+            _ => match start_and_connect().await {
+                Ok(sock) => {
+                    replay.push(line.clone());
+                    return pipe(sock, stdin, replay, answered).await;
+                }
+                Err(e) => Some(serde_json::json!({
+                    "jsonrpc": "2.0", "id": id, "error": { "code": -32000, "message": e }
+                })),
+            },
+        };
+        if let Some(a) = answer {
+            let mut text = a.to_string();
+            text.push('\n');
+            stdout.write_all(text.as_bytes()).await.map_err(|e| e.to_string())?;
+            stdout.flush().await.map_err(|e| e.to_string())?;
+        }
+    }
+}
+
+/// An attached server with no window, for answering the handshake.
+struct Offline;
+
+impl AttachHost for Offline {
+    fn workspace(&self) -> Result<(String, Arc<Mutex<Workspace>>), String> {
+        Err("ParVu is not connected yet".into())
+    }
+    fn propose(&self, _proposal: Proposal) -> Pin<Box<dyn Future<Output = Decision> + Send>> {
+        Box::pin(async { Decision::Rejected })
+    }
+    fn changed(&self, _window: &str, _tab_id: u64) {}
+}
+
+/// Connect to the window, starting ParVu when it isn't running.
+async fn start_and_connect() -> Result<tokio::net::TcpStream, String> {
+    let switch_on = "ParVu is open, but AI clients are not allowed. In ParVu choose AI → Connect an AI client \
+                     and switch it on, then try again.";
+    if let Some(s) = connect_app().await {
+        return Ok(s);
+    }
+    if app_running() {
+        return Err(switch_on.into());
+    }
+    tracing::info!("MCP bridge: starting ParVu");
+    launch_app()?;
+    let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
+    loop {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        if let Some(s) = connect_app().await {
+            return Ok(s);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(if app_running() {
+                switch_on.into()
+            } else {
+                "ParVu did not start in time. Open it yourself, then try again.".into()
+            });
+        }
+    }
+}
+
+/// Copy stdin to the window and the window's lines to stdout. `replay`
+/// (complete lines) is sent first; the window's answers to the requests in
+/// `drop_ids` (already answered by the bridge) are not passed on.
+async fn pipe(
+    sock: tokio::net::TcpStream,
+    mut stdin: BufReader<tokio::io::Stdin>,
+    replay: Vec<String>,
+    mut drop_ids: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let (from_app, mut to_app) = sock.into_split();
+    for l in &replay {
+        to_app.write_all(l.as_bytes()).await.map_err(|e| e.to_string())?;
+    }
     let up = async {
         let r = tokio::io::copy(&mut stdin, &mut to_app).await;
         let _ = to_app.shutdown().await;
         r
     };
     let down = async {
-        let mut buf = vec![0u8; 64 * 1024];
+        let mut reader = BufReader::new(from_app);
+        let mut stdout = tokio::io::stdout();
+        let mut line = String::new();
         loop {
-            let n = from_app.read(&mut buf).await?;
-            if n == 0 {
+            line.clear();
+            if reader.read_line(&mut line).await? == 0 {
                 return Ok::<_, std::io::Error>(());
             }
-            stdout.write_all(&buf[..n]).await?;
+            if !drop_ids.is_empty()
+                && let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim())
+                && v.get("method").is_none()
+                && let Some(i) = v.get("id").and_then(|id| drop_ids.iter().position(|d| d == id))
+            {
+                drop_ids.remove(i);
+                continue;
+            }
+            stdout.write_all(line.as_bytes()).await?;
             stdout.flush().await?;
         }
     };

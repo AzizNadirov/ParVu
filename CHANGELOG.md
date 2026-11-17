@@ -2,20 +2,8 @@
 
 ## [Unreleased]
 
-### Added
-- **Column formulas and the formula bar.** A formula column computes every row from an expression such as `= [qty] * [price]`.
-  - **Starting a formula:** type `=` in a cell, use the *fx* button of the new formula bar above the grid, or choose **New Formula Column After This** in the column menu.
-  - **Writing it:** the bar has the expression language's highlighting and autocomplete. Each column the formula refers to gets its own colour, both in the bar and as a tinted column in the grid, and clicking a column header inserts it.
-  - **Live, like Excel:** change a cell and the formulas using it update at once. Cell editing stays available, and undo covers adding, changing and removing a formula.
-  - Formula columns show an *fx* icon. Their cells open the formula instead of being edited directly.
-  - Saving writes the computed values.
-- **Filling, as in a spreadsheet.** Drag the square at the corner of a selection to fill the cells next to it, down, up, left or right. ParVu continues the series instead of copying:
-  - numbers by their step (1, 2 → 3, 4; one number is copied);
-  - dates by day, or by month or year when the seeds share a day of the month (31 Jan, 29 Feb → 31 Mar keeps to month ends); timestamps keep their format;
-  - month and day names in English, Russian and Azerbaijani (Jan → Feb, пн → вт), keeping their case;
-  - text ending in a number (Item 1 → Item 2, INV-007 → INV-008);
-  - anything else repeats the selected cells.
-  - **Fill Down, Up, Right and Left** in the Data menu and the cell menu copy the selection's edge row or column; Ctrl+D fills down and Ctrl+R fills right. Every fill is one step that undo reverts. Formula columns are left as they are.
+### Fixed
+- **ParVu no longer opens whenever Claude Code (or VS Code with Claude) starts.** MCP clients start their servers when a session opens, and `parvu mcp --attach` used to open ParVu right then. Now it answers the client's startup itself and opens ParVu only when the AI first uses a tool.
 
 ## [1.0.0-alpha.5]
 
