@@ -5,6 +5,7 @@ import {
   SearchNavigator,
   buildAppendOp,
   buildDropDuplicatesOp,
+  buildMarkDuplicatesOp,
   buildDropNullOp,
   buildExportOptions,
   buildJoinOp,
@@ -382,5 +383,17 @@ describe("AI client setup", () => {
     expect(s.claudeCode).toBe("claude mcp add -s user parvu-app -- parvu mcp --attach");
     expect(JSON.parse(s.claudeDesktop)).toEqual({ mcpServers: { "parvu-app": { command: "parvu", args: ["mcp", "--attach"] } } });
     expect(mcpClientSetup("/opt/Par Vu/parvu", ["mcp", "--attach"]).plain).toBe("'/opt/Par Vu/parvu' mcp --attach");
+  });
+});
+
+describe("mark duplicates", () => {
+  it("needs a name and keeps the column order", () => {
+    expect(buildMarkDuplicatesOp(["a", "b"], ["b", "a"], "none", " dup ")).toEqual({
+      op: "mark_duplicates",
+      columns: ["a", "b"],
+      keep: "none",
+      name: "dup",
+    });
+    expect(buildMarkDuplicatesOp(["a"], [], "first", "  ")).toBeNull();
   });
 });

@@ -38,9 +38,13 @@ impl StepLabel {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Keep {
+    /// Keep the first row of each group of duplicates.
     #[default]
     First,
+    /// Keep the last row.
     Last,
+    /// Keep none: every row that has a duplicate goes (pandas `keep=False`).
+    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,6 +156,16 @@ pub enum Operation {
         columns: Vec<String>,
         #[serde(default)]
         keep: Keep,
+    },
+    /// Add a yes/no column that is true for duplicated rows (pandas
+    /// `duplicated()`): every occurrence but the first (`keep: first`), but
+    /// the last, or every occurrence (`none`). Empty `columns`: all columns.
+    MarkDuplicates {
+        #[serde(default)]
+        columns: Vec<String>,
+        #[serde(default)]
+        keep: Keep,
+        name: String,
     },
     /// Remove rows where a column is missing (pandas `dropna`).
     DropNull {
@@ -378,6 +392,22 @@ pub(crate) fn conversion(ctx: &OpContext, column: &str, to: &Reading) -> Result<
     let conv = to.expr_of(&x, text);
     let empty = if text { format!(" AND {x} <> ''") } else { String::new() };
     Ok((conv.clone(), format!("({x} IS NOT NULL{empty} AND {conv} IS NULL)")))
+}
+
+/// The columns that decide whether two rows are duplicates; empty means all.
+fn duplicate_subset(ctx: &OpContext, columns: &[String]) -> Result<Vec<String>> {
+    let subset: Vec<String> = if columns.is_empty() {
+        ctx.columns.iter().map(|c| c.name.clone()).collect()
+    } else {
+        for c in columns {
+            ctx.require(c)?;
+        }
+        columns.to_vec()
+    };
+    if subset.is_empty() {
+        return Err(CoreError::invalid("No columns"));
+    }
+    Ok(subset)
 }
 
 /// SQL literal for a user-typed sentinel: numbers stay bare, anything else is quoted.
@@ -759,32 +789,50 @@ impl Operation {
                 )
             }
             Operation::DropDuplicates { columns, keep } => {
-                let subset: Vec<String> = if columns.is_empty() {
-                    ctx.columns.iter().map(|c| c.name.clone()).collect()
-                } else {
-                    for c in columns {
-                        ctx.require(c)?;
-                    }
-                    columns.clone()
-                };
-                if subset.is_empty() {
-                    return Err(CoreError::invalid("No columns"));
-                }
+                let subset = duplicate_subset(ctx, columns)?;
                 let partition = subset.iter().map(|c| q(c)).collect::<Vec<_>>().join(", ");
-                let order = match keep {
-                    Keep::First => "ASC",
-                    Keep::Last => "DESC",
+                let keep_rows = match keep {
+                    Keep::First => format!("ROW_NUMBER() OVER (PARTITION BY {partition} ORDER BY __pv_rn ASC) = 1"),
+                    Keep::Last => format!("ROW_NUMBER() OVER (PARTITION BY {partition} ORDER BY __pv_rn DESC) = 1"),
+                    Keep::None => format!("COUNT(*) OVER (PARTITION BY {partition}) = 1"),
                 };
-                let keep_word = match keep {
-                    Keep::First => "first",
-                    Keep::Last => "last",
+                let label = match keep {
+                    Keep::None => StepLabel::new("step.drop_duplicates_all", &[("columns", &subset.join(", "))]),
+                    Keep::First | Keep::Last => StepLabel::new(
+                        "step.drop_duplicates",
+                        &[("keep", if *keep == Keep::First { "first" } else { "last" }), ("columns", &subset.join(", "))],
+                    ),
                 };
                 (
                     format!(
                         "SELECT * EXCLUDE (__pv_rn) FROM (SELECT *, ROW_NUMBER() OVER () AS __pv_rn FROM ({cur})) \
-                         QUALIFY ROW_NUMBER() OVER (PARTITION BY {partition} ORDER BY __pv_rn {order}) = 1 ORDER BY __pv_rn"
+                         QUALIFY {keep_rows} ORDER BY __pv_rn"
                     ),
-                    StepLabel::new("step.drop_duplicates", &[("keep", keep_word), ("columns", &subset.join(", "))]),
+                    label,
+                )
+            }
+            Operation::MarkDuplicates { columns, keep, name } => {
+                let name = name.trim();
+                if name.is_empty() {
+                    return Err(CoreError::invalid("Name the new column"));
+                }
+                if ctx.columns.iter().any(|c| c.name == name) {
+                    return Err(CoreError::invalid(format!("A column named {name} already exists")));
+                }
+                let subset = duplicate_subset(ctx, columns)?;
+                let partition = subset.iter().map(|c| q(c)).collect::<Vec<_>>().join(", ");
+                let flag = match keep {
+                    Keep::First => format!("ROW_NUMBER() OVER (PARTITION BY {partition} ORDER BY __pv_rn ASC) > 1"),
+                    Keep::Last => format!("ROW_NUMBER() OVER (PARTITION BY {partition} ORDER BY __pv_rn DESC) > 1"),
+                    Keep::None => format!("COUNT(*) OVER (PARTITION BY {partition}) > 1"),
+                };
+                (
+                    format!(
+                        "SELECT * EXCLUDE (__pv_rn), {flag} AS {} FROM (SELECT *, ROW_NUMBER() OVER () AS __pv_rn FROM ({cur})) \
+                         ORDER BY __pv_rn",
+                        q(name)
+                    ),
+                    StepLabel::new("step.mark_duplicates", &[("columns", &subset.join(", ")), ("name", name)]),
                 )
             }
             Operation::DropNull { column, null_value } => {

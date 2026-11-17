@@ -153,7 +153,7 @@ export function PopupMenu({ x, y, items, onClose, anchor }: PopupMenuProps) {
 }
 
 /** Menu bar: titles that open dropdown menus; hovering switches menus while one is open. */
-export function MenuBar({ menus }: { menus: { title: string; items: () => MenuEntry[] }[] }) {
+export function MenuBar({ menus }: { menus: { title: string; icon?: IconName; items: () => MenuEntry[] }[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const at = (i: number) => {
@@ -176,6 +176,7 @@ export function MenuBar({ menus }: { menus: { title: string; items: () => MenuEn
           }}
           onMouseEnter={() => open !== null && open !== i && setOpen(i)}
         >
+          {m.icon && <Icon name={m.icon} size={16} />}
           {m.title}
         </button>
       ))}

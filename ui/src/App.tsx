@@ -1029,7 +1029,7 @@ export function App({ boot }: { boot: Bootstrap }) {
       },
       {
         label: t("menu.group.type"),
-        icon: "type",
+        icon: "dtype",
         submenu: [
           ...readAsMenu(column),
           { label: t("context.convert"), icon: "convert", onSelect: () => void runConvert(column) },
@@ -1065,6 +1065,9 @@ export function App({ boot }: { boot: Bootstrap }) {
         submenu: [
           { label: t("context.replace_values"), icon: "replace", onSelect: () => void runReplace(column) },
           { label: t("context.fill_null"), icon: "fill", onSelect: () => void runOpDialog(openFillNull, column) },
+          { type: "separator" },
+          { label: t("menu.operations.drop_duplicates"), icon: "dropDuplicates", onSelect: () => void runDropDuplicates(column) },
+          { label: t("menu.operations.mark_duplicates"), icon: "markDuplicates", onSelect: () => void runDropDuplicates(column, true) },
           ...extraClean,
         ],
       },
@@ -1346,9 +1349,10 @@ export function App({ boot }: { boot: Bootstrap }) {
       if (op) await applyOp(op);
     });
 
-  const runDropDuplicates = async () =>
+  /** Drop duplicated rows, or (`mark`) add a yes/no column for them. */
+  const runDropDuplicates = async (selected?: string, mark = false) =>
     withTab(async (tab) => {
-      const op = await openDropDuplicates(ui, { table: tab.name, columns: columnNames });
+      const op = await openDropDuplicates(ui, { table: tab.name, columns: columnNames, selected, mark });
       if (op) await applyOp(op);
     });
 
@@ -1700,6 +1704,7 @@ export function App({ boot }: { boot: Bootstrap }) {
   const menus = [
     {
       title: t("menu.file"),
+      icon: "file" as const,
       items: (): MenuEntry[] => [
         { label: t("menu.file.new_window"), icon: "newWindow", shortcut: "Ctrl+N", onSelect: () => void api.newWindow() },
         { type: "separator" },
@@ -1729,6 +1734,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     {
       title: t("menu.edit"),
+      icon: "editMenu" as const,
       items: (): MenuEntry[] => [
         { label: t("menu.edit.undo"), icon: "undo", shortcut: "Ctrl+Z", disabled: !activeTab?.steps.length, onSelect: () => void undo() },
         { label: t("menu.edit.reset"), icon: "reset", disabled: !activeTab, onSelect: () => void resetTab() },
@@ -1742,6 +1748,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     {
       title: t("menu.view"),
+      icon: "view" as const,
       items: (): MenuEntry[] => [
         { label: t("menu.view.editor"), icon: "database", checked: editorOpen, onSelect: () => setView({ show_query_panel: !editorOpen }) },
         {
@@ -1769,17 +1776,20 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     {
       title: t("menu.rows"),
+      icon: "rows" as const,
       items: (): MenuEntry[] => [
         { label: t("menu.data.filter"), icon: "filter", shortcut: "Ctrl+Shift+L", disabled: !activeTab, onSelect: () => void runOpDialog(openFilter) },
         { label: t("menu.data.sort"), icon: "sort", disabled: !activeTab, onSelect: () => void runOpDialog(openSort) },
         { label: t("menu.data.slice"), icon: "rows", disabled: !activeTab, onSelect: () => void runSlice() },
         { type: "separator" },
         { label: t("menu.operations.drop_duplicates"), icon: "dropDuplicates", disabled: !activeTab, onSelect: () => void runDropDuplicates() },
+        { label: t("menu.operations.mark_duplicates"), icon: "markDuplicates", disabled: !activeTab, onSelect: () => void runDropDuplicates(undefined, true) },
         { label: t("menu.operations.drop_null"), icon: "dropNull", disabled: !activeTab, onSelect: () => void runDropNull() },
       ],
     },
     {
       title: t("menu.column"),
+      icon: "column" as const,
       items: (): MenuEntry[] => {
         // The column of the selected cell.
         const column = currentCell ? page?.columns[currentCell.col]?.name : undefined;
@@ -1804,6 +1814,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     {
       title: t("menu.table"),
+      icon: "table" as const,
       items: (): MenuEntry[] => [
         { label: t("menu.reshape.group_by"), icon: "groupBy", shortcut: "Ctrl+G", disabled: !activeTab, onSelect: () => void runOpDialog(openGroupBy, undefined, true) },
         { label: t("menu.reshape.pivot"), icon: "pivot", disabled: !activeTab, onSelect: () => void runOpDialog(openPivot, undefined, true) },
@@ -1819,6 +1830,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     {
       title: t("menu.ai"),
+      icon: "ai" as const,
       items: (): MenuEntry[] => [
         { label: t("menu.ai.assistant"), icon: "ai", shortcut: "Ctrl+Shift+A", checked: aiOpen, onSelect: () => toggleAi() },
         { label: t("menu.ai.providers"), icon: "key", onSelect: () => void manageProviders() },
@@ -1828,6 +1840,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     },
     {
       title: t("menu.help"),
+      icon: "help" as const,
       items: (): MenuEntry[] => [
         { label: t("menu.help.expression"), icon: "book", onSelect: () => void openExpressionHelp(ui) },
         { label: t("menu.help.shortcuts"), icon: "keyboard", shortcut: "Ctrl+/", onSelect: () => void openShortcutsDialog(ui) },
@@ -2042,6 +2055,42 @@ export function App({ boot }: { boot: Bootstrap }) {
     ? t(mode === "sql" ? "label.sql_query" : "label.expression_query", { table_name: activeTab.name })
     : "";
 
+  /** Quick operations next to the query editor (on its title row when collapsed). */
+  const opsButtons = (
+    <>
+      <button className="text" onClick={() => void showTableInfo()}>
+        <Icon name="info" />
+        {t("btn.table_info")}
+      </button>
+      <span className="divider" />
+      <button className="text" onClick={() => void runOpDialog(openFilter)}>
+        <Icon name="filter" />
+        {t("btn.filter")}
+      </button>
+      <button className="text" onClick={() => void runOpDialog(openGroupBy, undefined, true)}>
+        <Icon name="groupBy" />
+        {t("btn.group_by")}
+      </button>
+      <button className="text" onClick={() => void showChart()}>
+        <Icon name="chart" />
+        {t("btn.chart")}
+      </button>
+      <span className="divider" />
+      <button className="text" onClick={() => startFormula()}>
+        <Icon name="formula" />
+        {t("btn.formula")}
+      </button>
+      <button className="text" onClick={() => void runJoin()}>
+        <Icon name="join" />
+        {t("menu.operations.join")}
+      </button>
+      <button className="text" onClick={() => void runAppend()}>
+        <Icon name="append" />
+        {t("menu.operations.append")}
+      </button>
+    </>
+  );
+
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
     const startY = e.clientY;
@@ -2114,6 +2163,10 @@ export function App({ boot }: { boot: Bootstrap }) {
                     </span>
                   )}
                   <span className="spacer" />
+                  {editorCollapsed ? (
+                    opsButtons
+                  ) : (
+                    <>
                   <span className="muted">{t("editor.mode")}</span>
                   <div className="segmented">
                     <button
@@ -2137,6 +2190,8 @@ export function App({ boot }: { boot: Bootstrap }) {
                       {t("editor.mode.expression")}
                     </button>
                   </div>
+                    </>
+                  )}
                 </div>
                 {!editorCollapsed && (
                   <>
@@ -2156,6 +2211,7 @@ export function App({ boot }: { boot: Bootstrap }) {
                 {mode === "expression" && <div className="expr-preview mono ellipsis" title={preview}>{preview}</div>}
                   </>
                 )}
+                {!editorCollapsed && (
                 <div className="editor-actions row">
                   {!editorCollapsed && (
                     <button className="primary" disabled={busy} onClick={() => void execute()} title={t("editor.run_hint")}>
@@ -2177,37 +2233,9 @@ export function App({ boot }: { boot: Bootstrap }) {
                   )}
                   {!editorCollapsed && <span className="muted small">{t("editor.run_hint")}</span>}
                   <span className="spacer" />
-                  <button className="text" onClick={() => void runOpDialog(openFilter)}>
-                    <Icon name="filter" />
-                    {t("btn.filter")}
-                  </button>
-                  <button className="text" onClick={() => void runOpDialog(openGroupBy, undefined, true)}>
-                    <Icon name="groupBy" />
-                    {t("btn.group_by")}
-                  </button>
-                  <button className="text" onClick={() => void showChart()}>
-                    <Icon name="chart" />
-                    {t("btn.chart")}
-                  </button>
-                  <span className="divider" />
-                  <button className="text" onClick={() => startFormula()}>
-                    <Icon name="formula" />
-                    {t("btn.formula")}
-                  </button>
-                  <button className="text" onClick={() => void runJoin()}>
-                    <Icon name="join" />
-                    {t("menu.operations.join")}
-                  </button>
-                  <button className="text" onClick={() => void runAppend()}>
-                    <Icon name="append" />
-                    {t("menu.operations.append")}
-                  </button>
-                  <span className="divider" />
-                  <button className="text" onClick={() => void showTableInfo()}>
-                    <Icon name="info" />
-                    {t("btn.table_info")}
-                  </button>
+                  {opsButtons}
                 </div>
+                )}
                 {!editorCollapsed && <div className="resize-handle" onMouseDown={startResize} />}
               </section>
             )}

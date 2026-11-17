@@ -144,6 +144,38 @@ fn drop_duplicates_keeps_order_and_last() {
 }
 
 #[test]
+fn drop_every_duplicated_row_and_mark_duplicates() {
+    // 10 rows, name_0 … name_6: name_0, name_1 and name_2 appear twice.
+    let (_d, _p, mut ws, id) = setup(10, "parquet");
+    ws.apply(id, &Operation::DropDuplicates { columns: vec!["name".into()], keep: Keep::None }).unwrap();
+    let p = ws.page(id, 1).unwrap();
+    let ids: Vec<&str> = p.rows.iter().map(|r| r[0].as_deref().unwrap()).collect();
+    assert_eq!(ids, ["3", "4", "5", "6"], "only names that occur once stay, in order");
+    assert_eq!(ws.summary(id).unwrap().steps[0].key, "step.drop_duplicates_all");
+    ws.undo(id).unwrap();
+
+    let mark = |keep| Operation::MarkDuplicates { columns: vec!["name".into()], keep, name: "dup".into() };
+    let flags = |ws: &Workspace| -> Vec<String> {
+        let p = ws.page(id, 1).unwrap();
+        let i = p.columns.iter().position(|c| c.name == "dup").unwrap();
+        p.rows.iter().map(|r| r[i].clone().unwrap()).collect()
+    };
+    let (t, f) = ("true".to_string(), "false".to_string());
+    ws.apply(id, &mark(Keep::First)).unwrap();
+    assert_eq!(flags(&ws)[..9], [&f, &f, &f, &f, &f, &f, &f, &t, &t].map(String::clone));
+    ws.undo(id).unwrap();
+    ws.apply(id, &mark(Keep::Last)).unwrap();
+    assert_eq!(flags(&ws)[..3], [&t, &t, &t].map(String::clone));
+    assert_eq!(flags(&ws)[7], f);
+    ws.undo(id).unwrap();
+    ws.apply(id, &mark(Keep::None)).unwrap();
+    assert_eq!(flags(&ws).iter().filter(|v| **v == t).count(), 6);
+    assert_eq!(ws.summary(id).unwrap().total_rows, 10, "marking keeps every row");
+    // The name must be new.
+    assert!(ws.apply(id, &Operation::MarkDuplicates { columns: vec![], keep: Keep::First, name: "name".into() }).is_err());
+}
+
+#[test]
 fn filter_drop_null_change_type_duplicate_add() {
     let (_d, _p, mut ws, id) = setup(14, "csv");
     ws.apply(id, &Operation::FilterValues { column: "name".into(), values: vec![Some("name_1".into()), Some("name_2".into())] }).unwrap();

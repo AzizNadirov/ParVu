@@ -227,7 +227,8 @@ export interface Formula {
   totals?: string[];
 }
 
-export type Keep = "first" | "last";
+/** Which of a group of duplicates is kept ("none": every one goes, pandas keep=False). */
+export type Keep = "first" | "last" | "none";
 export type JoinType = "inner" | "left" | "right" | "full_outer";
 
 export type Operation =
@@ -247,6 +248,7 @@ export type Operation =
   | { op: "conversion_errors"; column: string; to: Reading; keep: boolean }
   | { op: "duplicate"; column: string }
   | { op: "drop_duplicates"; columns: string[]; keep: Keep }
+  | { op: "mark_duplicates"; columns: string[]; keep: Keep; name: string }
   | { op: "drop_null"; column: string; null_value: string | null }
   | { op: "filter_values"; column: string; values: Cell[] }
   | { op: "join"; right: string; join_type: JoinType; left_key: string; right_key: string }
