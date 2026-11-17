@@ -7,7 +7,7 @@
   "about.feature.operations": "**«Sətirlər», «Sütun» və «Cədvəl» menyuları** - SQL olmadan süzgəc, sıralama, təmizləmə və çevirmə; cədvəl nəticələri yeni tablarda açılır",
   "about.feature.pagination": "**Səhifələnmiş baxış** - Böyük məlumat dəstlərinə səmərəli baxın",
   "about.feature.sql": "**SQL sorğuları** - Sintaksis vurğulanması ilə tam DuckDB SQL dəstəyi",
-  "about.feature.themes": "**Mövzular** - 5 daxili mövzu + öz mövzularının idxalı və ixracı",
+  "about.feature.themes": "**Mövzular** - 6 daxili mövzu + öz mövzularının idxalı və ixracı",
   "about.features": "Xüsusiyyətlər",
   "about.license": "Lisenziya",
   "about.license_text": "Açıq Mənbə",

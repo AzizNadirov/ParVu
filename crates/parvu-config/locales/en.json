@@ -7,7 +7,7 @@
   "about.feature.operations": "**Rows, Column and Table menus** - Filter, sort, clean and reshape without SQL; table results open in new tabs",
   "about.feature.pagination": "**Paginated view** - Browse large datasets efficiently",
   "about.feature.sql": "**SQL queries** - Full DuckDB SQL support with syntax highlighting",
-  "about.feature.themes": "**Themes** - 5 built-in themes + import/export custom themes",
+  "about.feature.themes": "**Themes** - 6 built-in themes + import/export custom themes",
   "about.features": "Features",
   "about.license": "License",
   "about.license_text": "Open Source",

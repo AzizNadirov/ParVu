@@ -11,7 +11,7 @@ ParVu features a comprehensive theme system that allows you to customize:
 
 ## Built-in Themes
 
-ParVu comes with 5 built-in themes. The interface follows Material Design 3 in all of them; a theme sets the colours, fonts and sizes, and the Material surfaces, outlines and state colours are derived from those.
+ParVu comes with 6 built-in themes. The interface follows Material Design 3 in all of them; a theme sets the colours, fonts and sizes, and the Material surfaces, outlines and state colours are derived from those.
 
 ### Material Light (Default)
 - Material Design 3 baseline light colours (purple primary)
@@ -26,11 +26,15 @@ ParVu comes with 5 built-in themes. The interface follows Material Design 3 in a
 - Blue and green accents
 - Optimized for long viewing sessions
 
-### Excel
-- Microsoft Excel-inspired design
-- Classic green color scheme
-- Familiar layout for Excel users
-- Professional business appearance
+### Excel Material
+- Excel's green in Material Design 3: green-tinted surfaces, tonal buttons, a green status bar
+- Light green column headers, Calibri in the table and dense rows, like a spreadsheet
+- Called "Excel" before 1.0.0; settings that name "Excel" open this theme
+
+### Jupyter
+- The look of JupyterLab: white surfaces, light grey borders and headers
+- JupyterLab's blue for selection and accents, with Jupyter orange
+- The notebook's code colours in the SQL editor (green keywords, red strings)
 
 ### ParVu Black
 - Dark theme based on Visual Studio Code
@@ -95,7 +99,7 @@ The theme selector shows:
 3. Click **Delete**
 4. Confirm deletion
 
-**Note:** Built-in themes (Material Light, Material Dark, ParVu Light, Excel, ParVu Black) cannot be deleted.
+**Note:** Built-in themes (Material Light, Material Dark, ParVu Light, Excel Material, Jupyter, ParVu Black) cannot be deleted.
 
 ## Creating Custom Themes
 
@@ -326,7 +330,7 @@ All colors use hex format (#RRGGBB):
 
 **Built-in Themes:**
 - Stored in: `~/.ParVu/themes/`
-- Files: `material_light.json`, `material_dark.json`, `parvu_light.json`, `excel.json`, `parvu_black.json`
+- Files: `material_light.json`, `material_dark.json`, `parvu_light.json`, `excel.json` (Excel Material), `jupyter.json`, `parvu_black.json`
 - Auto-generated on first run
 
 **Custom Themes:**
