@@ -3496,6 +3496,7 @@ dependencies = [
  "dirs 7.0.0",
  "getrandom 0.3.4",
  "gio",
+ "gtk",
  "keyring",
  "libc",
  "libloading",
