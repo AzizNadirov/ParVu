@@ -133,7 +133,13 @@ pub fn bootstrap(state: State<'_, AppState>, window: WebviewWindow) -> ApiResult
         excel_functions: parvu_dsl::excel::catalog(),
         methods: methods_by_type(),
         crash_report: if is_first { lock(&state.pending_crash).take() } else { None },
-        initial_files: if is_first { std::mem::take(&mut *lock(&state.initial_files)) } else { Vec::new() },
+        initial_files: if is_first {
+            let mut files = lock(&state.initial_files);
+            state.booted.store(true, std::sync::atomic::Ordering::SeqCst);
+            std::mem::take(&mut *files)
+        } else {
+            Vec::new()
+        },
         log_dir: parvu_config::paths::log_dir().unwrap_or_default(),
     })
 }

@@ -344,7 +344,7 @@
   "dialog.connect_ai.error": "Could not start: {error}",
   "dialog.connect_ai.intro": "Let Claude Desktop, Claude Code or another MCP client work with the tables open in this window, using your own Claude subscription or AI account. The client can read the tables; every change needs your approval here.",
   "dialog.connect_ai.listening": "On. Connected clients: {count}",
-  "dialog.connect_ai.note": "Keep ParVu open while you use the client. With several windows open, the client works on the one you used last. Only you open and save files.",
+  "dialog.connect_ai.note": "ParVu doesn't have to be open: when the client first uses a tool, ParVu starts minimised. If you never open that window, it closes itself 10 minutes after the last client disconnects. With several windows open, the client works on the one you used last. Only you open and save files.",
   "dialog.connect_ai.off": "Off. AI clients can't connect.",
   "dialog.connect_ai.other": "Other MCP clients: a stdio server with this command",
   "dialog.connect_ai.title": "Connect an AI client",

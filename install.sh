@@ -23,7 +23,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/AzizNadirov/ParVu.git"
 REPO_API="https://api.github.com/repos/AzizNadirov/ParVu"
-MIN_RUST="1.88"
+MIN_RUST="1.89"
 MIN_NODE="22.12"
 NODE_SERIES="22"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/parvu"

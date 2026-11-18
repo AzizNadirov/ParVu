@@ -36,6 +36,12 @@ pub struct AppState {
     pub next_window: AtomicU64,
     /// Files passed on the command line, opened by the first window.
     pub initial_files: Mutex<Vec<PathBuf>>,
+    /// Set once the first window's UI took `initial_files`; later files
+    /// from other `parvu` starts go to the UI as `open-files` events.
+    pub booted: AtomicBool,
+    /// Started with `--background` and the user hasn't brought the window
+    /// up yet: the app quits by itself when AI clients are gone.
+    pub background: AtomicBool,
     /// Text of a crash report left by the previous run, shown once.
     pub pending_crash: Mutex<Option<String>>,
     /// AI clients connected through `parvu mcp --attach`.
@@ -63,6 +69,8 @@ impl AppState {
             next_job: AtomicU64::new(1),
             next_window: AtomicU64::new(2),
             initial_files: Mutex::new(initial_files),
+            booted: AtomicBool::new(false),
+            background: AtomicBool::new(false),
             pending_crash: Mutex::new(pending_crash),
             attach: Default::default(),
             assistant: Default::default(),

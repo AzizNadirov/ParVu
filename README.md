@@ -114,7 +114,7 @@ See [RELEASES.md](RELEASES.md) for details.
 
 ### For Developers
 
-Requirements: [Rust](https://rustup.rs/) 1.88 or newer and Node.js 22.12 or newer. On Debian/Ubuntu also:
+Requirements: [Rust](https://rustup.rs/) 1.89 or newer and Node.js 22.12 or newer. On Debian/Ubuntu also:
 
 ```bash
 sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \

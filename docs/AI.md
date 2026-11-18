@@ -10,6 +10,8 @@ There are two ways to use AI with your tables:
 
 Both use the same tools and the same safety rules. The AI can read the tables open in your window. Any change it wants to make appears as a card in ParVu, showing the step, the AI's reason, the row count before and after, and a preview. Nothing changes until you click **Apply**, and every applied change is an ordinary step that `Ctrl+Z` undoes.
 
+When you connect an AI client, ParVu doesn't have to be open: the client starts it minimised when it first needs it, and that ParVu closes by itself once the clients are gone, unless you opened it. See [MCP.md](MCP.md#when-parvu-isnt-running).
+
 ## The built-in assistant
 
 1. **Add a provider:** **AI → AI providers…** → choose a provider type → **Add** → paste your API key → **Save and test**.

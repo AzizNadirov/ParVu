@@ -107,6 +107,8 @@ Settings, recent files, themes and translations, all stored in `~/.ParVu` in the
   - `provider/openai.rs`: Chat Completions;
   - `agent.rs`: the tool loop;
   - `pricing.rs`, `redact.rs`.
+- `bridge.rs` is `parvu mcp --attach`: it relays the client to the window's listener; while ParVu isn't running, a local `ParvuMcp::attached` with no window answers everything but `tools/call`, which starts ParVu (`--background`) under a launch lock and replays the handshake. The link to the app is a trait (`AppLink`), faked in its tests.
+- `instance.rs`: one app per profile (an instance lock held for the process's life, and a token-protected control connection through which a second `parvu` hands over its files), the bridges' launch lock, `--background` options, and `IdleClock`, which quits a background start the user never opened once AI clients are gone.
 - `mcp_attach.rs` runs attached mode. While the `mcp_allow_clients` setting is on, a token-protected listener on 127.0.0.1 serves `ParvuMcp::attached`. Its `AttachHost` gives the server the focused window's workspace, shows approval cards (`mcp-proposal` event, answered by `mcp_decide`), and tells the window to refresh (`mcp-changed`).
 - `mcp.rs` is the MCP server. `main.rs` checks for the `mcp` argument before starting Tauri, so no window or webview is created. It uses the `rmcp` SDK on a tokio runtime over stdin/stdout. The server holds one `Workspace`; tools read through `ReadSession` and change tables with `Workspace::apply` / `undo`. stdout carries the protocol, so logs only go to the log file. User guide: [MCP.md](MCP.md).
 

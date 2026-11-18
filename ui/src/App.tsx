@@ -2195,6 +2195,10 @@ export function App({ boot }: { boot: Bootstrap }) {
       }),
       getCurrentWindow().listen<number>("mcp-changed", (e) => void handlers.current.refreshFromAi(e.payload)),
       getCurrentWindow().listen<CustomOffer>("custom-proposal", (e) => void handlers.current.reviewCustomOffer(e.payload)),
+      // Files from another `parvu` start (file manager, command line): one ParVu runs per profile.
+      getCurrentWindow().listen<string[]>("open-files", async (e) => {
+        for (const p of e.payload) await handlers.current.openPath(p);
+      }),
       // Built-in assistant: streamed events and the end of a run, per tab.
       getCurrentWindow().listen<AiRunEvent>("ai-event", (e) =>
         updateChat(e.payload.tab_id ?? 0, (c) => (c.runId === e.payload.run_id ? applyEvent(c, e.payload.event) : c)),

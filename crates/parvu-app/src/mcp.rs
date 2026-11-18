@@ -18,8 +18,9 @@
 //! Attached mode (`parvu mcp --attach`): when the user allows AI clients in
 //! the app (AI → Connect an AI client), the app listens on 127.0.0.1 with a
 //! random token written to `~/.ParVu/run/mcp.json`. `parvu mcp --attach` is a
-//! stdio bridge to that listener, so clients see the user's open tabs.
-//! Changes there go through an approval card in the window ([`AttachHost`]).
+//! stdio bridge to that listener (`bridge.rs`), so clients see the user's
+//! open tabs. Changes there go through an approval card in the window
+//! ([`AttachHost`]).
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -38,7 +39,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock, Implementation, RequestMetaObject, ServerCapabilities, ServerConfig};
 use rmcp::service::{Peer, RoleServer};
 use rmcp::{ErrorData, ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::net::TcpListener;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -55,8 +56,9 @@ Runs ParVu as an MCP server on stdin/stdout for AI clients.
   --allow-dir DIR   folder the client may open files from (repeatable)
   --allow-write     allow the export tool to write files into those folders
   FILE              files to open at start (always allowed)
-  --attach          connect to the running ParVu window instead (AI → Connect
-                    an AI client must be switched on there)";
+  --attach          connect to the ParVu window instead (AI → Connect an AI
+                    client must be switched on there); the first tool call
+                    starts ParVu minimised when it isn't running";
 
 /// How long an approval card waits for the user.
 pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(600);
@@ -120,7 +122,7 @@ pub fn run(args: Vec<String>) -> i32 {
     };
     if options.attach {
         return runtime.block_on(async {
-            match bridge().await {
+            match crate::bridge::run().await {
                 Ok(()) => 0,
                 Err(e) => {
                     tracing::warn!("parvu mcp --attach: {e}");
@@ -1112,7 +1114,7 @@ pub fn new_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn same_token(a: &str, b: &str) -> bool {
+pub(crate) fn same_token(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
@@ -1162,245 +1164,17 @@ pub async fn serve_tcp(
     }
 }
 
-/// Marks that a ParVu window is running (`~/.ParVu/run/app.pid`), so the
-/// bridge knows whether to start one.
-pub fn app_pid_file() -> PathBuf {
-    parvu_config::paths::legacy_app_dir().join("run").join("app.pid")
-}
-
-/// Called by the app at start.
-pub fn mark_app_running() {
-    let path = app_pid_file();
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let _ = std::fs::write(&path, std::process::id().to_string());
-}
-
-/// Remove a listener file left by a ParVu that was killed (its process is
-/// gone), so clients don't try a dead port.
+/// Remove a listener file left by a ParVu that was killed. Called by the
+/// app at start while it holds the instance lock (`instance.rs`), so no
+/// other ParVu of this profile can be listening.
 pub fn clear_stale_run_file() {
     let path = run_file();
     let stale = std::fs::read_to_string(&path)
         .ok()
         .and_then(|t| serde_json::from_str::<RunInfo>(&t).ok())
-        .is_some_and(|info| info.pid != std::process::id() && !pid_alive(info.pid));
+        .is_none_or(|info| info.pid != std::process::id());
     if stale {
         let _ = std::fs::remove_file(&path);
-    }
-}
-
-/// Called by the app on exit; leaves the file if another ParVu wrote it since.
-pub fn clear_app_running() {
-    let path = app_pid_file();
-    if std::fs::read_to_string(&path).is_ok_and(|t| t.trim() == std::process::id().to_string()) {
-        let _ = std::fs::remove_file(&path);
-    }
-}
-
-/// Whether process `pid` exists. Only checked on Linux; elsewhere a pid file
-/// counts as running (a window that crashed leaves one behind until the
-/// next start).
-fn pid_alive(pid: u32) -> bool {
-    if cfg!(target_os = "linux") { Path::new(&format!("/proc/{pid}")).exists() } else { true }
-}
-
-/// Whether a ParVu window is running, by its pid file.
-fn app_running() -> bool {
-    std::fs::read_to_string(app_pid_file())
-        .ok()
-        .and_then(|t| t.trim().parse::<u32>().ok())
-        .is_some_and(pid_alive)
-}
-
-/// Connect to the app's listener and present the token.
-async fn connect_app() -> Option<tokio::net::TcpStream> {
-    let text = std::fs::read_to_string(run_file()).ok()?;
-    let info: RunInfo = serde_json::from_str(&text).ok()?;
-    let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", info.port)).await.ok()?;
-    sock.write_all(format!("{}\n", info.token).as_bytes()).await.ok()?;
-    Some(sock)
-}
-
-/// Start the ParVu window, detached from this process: its output must not
-/// reach stdout (the MCP channel), and it must outlive the bridge.
-fn launch_app() -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut cmd = std::process::Command::new(exe);
-    cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
-    }
-    cmd.spawn().map(|_| ()).map_err(|e| format!("could not start ParVu: {e}"))
-}
-
-/// How long the bridge waits for a ParVu it started (MCP clients give up
-/// after about 30 seconds).
-const LAUNCH_WAIT: Duration = Duration::from_secs(25);
-
-/// `parvu mcp --attach`: copy stdin/stdout to the app's listener.
-///
-/// MCP clients start their servers when a session opens (Claude Code does
-/// so for every new window), so the bridge must not open ParVu then. While
-/// ParVu isn't running it answers the handshake itself (`initialize`, the
-/// tool list, `ping`) with the same answers the window gives. The first
-/// real request (a tool call) connects, starting ParVu if needed; the
-/// handshake is replayed to the window and its duplicate answers dropped.
-async fn bridge() -> Result<(), String> {
-    if let Some(sock) = connect_app().await {
-        return pipe(sock, BufReader::new(tokio::io::stdin()), Vec::new(), Vec::new()).await;
-    }
-    let local = ParvuMcp::attached(Arc::new(Offline));
-    let mut stdin = BufReader::new(tokio::io::stdin());
-    let mut stdout = tokio::io::stdout();
-    // Handshake lines to replay to the window, and the ids of the requests
-    // among them that were already answered here.
-    let mut replay: Vec<String> = Vec::new();
-    let mut answered: Vec<serde_json::Value> = Vec::new();
-    let mut line = String::new();
-    loop {
-        line.clear();
-        if stdin.read_line(&mut line).await.map_err(|e| e.to_string())? == 0 {
-            return Ok(()); // the client closed the session without needing ParVu
-        }
-        let Ok(msg) = serde_json::from_str::<serde_json::Value>(line.trim()) else { continue };
-        let id = msg.get("id").cloned();
-        let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("");
-        let reply = |result: serde_json::Value| serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": result });
-        let answer = match method {
-            "initialize" => {
-                replay.push(line.clone());
-                answered.extend(id.clone());
-                let mut info = serde_json::to_value(local.get_info()).map_err(|e| e.to_string())?;
-                // As rmcp's server does: echo the client's version when it is
-                // one the server supports.
-                if let Some(asked) = msg.pointer("/params/protocolVersion").and_then(|v| v.as_str()) {
-                    let supported = ServerHandler::supported_protocol_versions(&local);
-                    if supported.iter().any(|v| serde_json::to_value(v).ok().is_some_and(|s| s == asked)) {
-                        info["protocolVersion"] = asked.into();
-                    }
-                }
-                Some(reply(info))
-            }
-            "ping" => Some(reply(serde_json::json!({}))),
-            "tools/list" => Some(reply(serde_json::json!({ "tools": local.tool_router.list_all() }))),
-            _ if id.is_none() => {
-                // A notification (e.g. notifications/initialized): the window
-                // needs it too once connected.
-                replay.push(line.clone());
-                None
-            }
-            _ => match start_and_connect().await {
-                Ok(sock) => {
-                    replay.push(line.clone());
-                    return pipe(sock, stdin, replay, answered).await;
-                }
-                Err(e) => Some(serde_json::json!({
-                    "jsonrpc": "2.0", "id": id, "error": { "code": -32000, "message": e }
-                })),
-            },
-        };
-        if let Some(a) = answer {
-            let mut text = a.to_string();
-            text.push('\n');
-            stdout.write_all(text.as_bytes()).await.map_err(|e| e.to_string())?;
-            stdout.flush().await.map_err(|e| e.to_string())?;
-        }
-    }
-}
-
-/// An attached server with no window, for answering the handshake.
-struct Offline;
-
-impl AttachHost for Offline {
-    fn workspace(&self) -> Result<(String, Arc<Mutex<Workspace>>), String> {
-        Err("ParVu is not connected yet".into())
-    }
-    fn propose(&self, _proposal: Proposal) -> Pin<Box<dyn Future<Output = Decision> + Send>> {
-        Box::pin(async { Decision::Rejected })
-    }
-    fn changed(&self, _window: &str, _tab_id: u64) {}
-}
-
-/// Connect to the window, starting ParVu when it isn't running.
-async fn start_and_connect() -> Result<tokio::net::TcpStream, String> {
-    let switch_on = "ParVu is open, but AI clients are not allowed. In ParVu choose AI → Connect an AI client \
-                     and switch it on, then try again.";
-    if let Some(s) = connect_app().await {
-        return Ok(s);
-    }
-    if app_running() {
-        return Err(switch_on.into());
-    }
-    tracing::info!("MCP bridge: starting ParVu");
-    launch_app()?;
-    let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
-    loop {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        if let Some(s) = connect_app().await {
-            return Ok(s);
-        }
-        if tokio::time::Instant::now() >= deadline {
-            return Err(if app_running() {
-                switch_on.into()
-            } else {
-                "ParVu did not start in time. Open it yourself, then try again.".into()
-            });
-        }
-    }
-}
-
-/// Copy stdin to the window and the window's lines to stdout. `replay`
-/// (complete lines) is sent first; the window's answers to the requests in
-/// `drop_ids` (already answered by the bridge) are not passed on.
-async fn pipe(
-    sock: tokio::net::TcpStream,
-    mut stdin: BufReader<tokio::io::Stdin>,
-    replay: Vec<String>,
-    mut drop_ids: Vec<serde_json::Value>,
-) -> Result<(), String> {
-    let (from_app, mut to_app) = sock.into_split();
-    for l in &replay {
-        to_app.write_all(l.as_bytes()).await.map_err(|e| e.to_string())?;
-    }
-    let up = async {
-        let r = tokio::io::copy(&mut stdin, &mut to_app).await;
-        let _ = to_app.shutdown().await;
-        r
-    };
-    let down = async {
-        let mut reader = BufReader::new(from_app);
-        let mut stdout = tokio::io::stdout();
-        let mut line = String::new();
-        loop {
-            line.clear();
-            if reader.read_line(&mut line).await? == 0 {
-                return Ok::<_, std::io::Error>(());
-            }
-            if !drop_ids.is_empty()
-                && let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim())
-                && v.get("method").is_none()
-                && let Some(i) = v.get("id").and_then(|id| drop_ids.iter().position(|d| d == id))
-            {
-                drop_ids.remove(i);
-                continue;
-            }
-            stdout.write_all(line.as_bytes()).await?;
-            stdout.flush().await?;
-        }
-    };
-    tokio::select! {
-        r = up => r.map(|_| ()).map_err(|e| e.to_string()),
-        r = down => r.map_err(|e| e.to_string()),
     }
 }
 
@@ -1649,6 +1423,7 @@ mod tool_tests {
 #[cfg(test)]
 mod attach_tests {
     use super::*;
+    use tokio::io::AsyncWriteExt;
     use tokio::io::AsyncBufReadExt;
 
     /// A host with one workspace that answers every proposal with `answer`.
@@ -1903,10 +1678,6 @@ mod attach_tests {
         titled.title = Some("Claude Desktop".into());
         assert_eq!(display_name(&titled), "Claude Desktop");
         assert!(Options::parse(["--attach".to_string()]).unwrap().attach);
-        assert!(pid_alive(std::process::id()));
-        if cfg!(target_os = "linux") {
-            assert!(!pid_alive(u32::MAX - 7));
-        }
         assert!(Options::parse(["--attach", "--allow-write"].map(String::from)).is_err());
     }
 }
