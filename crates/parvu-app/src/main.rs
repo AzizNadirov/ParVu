@@ -15,6 +15,7 @@ mod jobs;
 mod mcp;
 mod mcp_attach;
 mod memguard;
+mod present;
 mod state;
 mod tray;
 
@@ -37,14 +38,15 @@ const SETTLE: std::time::Duration = std::time::Duration::from_secs(3);
 /// Create a top-level window. Every window loads the same UI and gets its own
 /// set of tabs.
 pub fn build_window(app: &AppHandle, label: &str) -> tauri::Result<()> {
-    window_builder(app, label).build()?;
+    let w = window_builder(app, label).build()?;
+    present::prepare(&w);
     Ok(())
 }
 
 fn window_builder<'a>(app: &'a AppHandle, label: &str) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("ParVu")
-        .inner_size(1400.0, 900.0)
+        .inner_size(present::WIDTH, present::HEIGHT)
         .min_inner_size(900.0, 600.0)
 }
 
@@ -53,69 +55,14 @@ fn window_builder<'a>(app: &'a AppHandle, label: &str) -> WebviewWindowBuilder<'
 /// so it starts minimised instead, without taking the focus.
 fn build_background_window(app: &AppHandle) -> tauri::Result<()> {
     let w = window_builder(app, "main").visible(false).focused(false).build()?;
-    #[cfg(target_os = "linux")]
-    let_title_bar_buttons_click(&w);
+    present::prepare(&w);
+    present::match_shown_size(&w);
     if tray::available(app) {
         tracing::info!("background start: window hidden, tray icon shown");
         return Ok(());
     }
     tracing::info!("background start: no tray host; starting minimised");
-    show_minimised(&w)?;
-    if cfg!(target_os = "linux") {
-        // Wayland has no way to start minimised: GTK ignores it until the
-        // window is on screen, so minimise again right after it appears.
-        let (app, w) = (app.clone(), w.clone());
-        std::thread::spawn(move || {
-            for ms in [200, 1000] {
-                std::thread::sleep(std::time::Duration::from_millis(ms));
-                if app.state::<AppState>().background.load(Ordering::SeqCst) {
-                    let _ = w.minimize();
-                }
-            }
-        });
-    }
-    Ok(())
-}
-
-/// On Wayland, tao 0.35 draws the title bar itself: a GTK header bar inside a
-/// `GtkEventBox` with `above_child` set, whose input window lies over the
-/// bar. In a window shown at once, the minimise / maximise / close buttons
-/// end up above it and get their clicks. In a window created hidden and shown
-/// later (the background start), the event box ends up on top (seen on GNOME
-/// 50): it takes every click on those buttons, which then reaches tao's
-/// window handler and stops there, so the buttons don't respond. With the box
-/// below its child, the buttons get their own clicks; clicks elsewhere on the
-/// bar (drag, double-click) still reach the window as before. Newer tao drops
-/// this title bar (tao#1218). No-op on X11, where the window manager draws it.
-#[cfg(target_os = "linux")]
-fn let_title_bar_buttons_click(w: &WebviewWindow) {
-    use gtk::prelude::*;
-    let Some(bar) = w.gtk_window().ok().and_then(|g| g.titlebar()) else { return };
-    if let Ok(event_box) = bar.downcast::<gtk::EventBox>() {
-        event_box.set_above_child(false);
-    }
-}
-
-/// Show a hidden window minimised, without taking the focus.
-pub fn show_minimised(w: &WebviewWindow) -> tauri::Result<()> {
-    if cfg!(target_os = "linux") {
-        // On X11, GTK iconifies a window that isn't shown yet, so it appears
-        // minimised without flashing on screen.
-        w.minimize()?;
-        w.show()
-    } else {
-        // Windows and macOS keep a hidden window hidden when minimising it;
-        // show it without focus, then minimise.
-        w.show()?;
-        w.minimize()
-    }
-}
-
-/// Bring `w` to the front (restored if minimised or hidden).
-pub fn bring_forward(w: &WebviewWindow) {
-    let _ = w.unminimize();
-    let _ = w.show();
-    let _ = w.set_focus();
+    present::show_minimised(&w)
 }
 
 /// The window to show or hand to AI clients: the one used last, or any.
@@ -137,7 +84,7 @@ fn handle_second_start(app: &AppHandle, req: instance::Request) {
     }
     if req.show {
         // Also brings back a window hidden in the tray.
-        tray::show_app(app);
+        tray::show_app(app, req.activation_token.clone());
     }
     if !req.files.is_empty() {
         let Some(label) = pick_window(app).map(|w| w.label().to_string()) else { return };
@@ -242,7 +189,9 @@ fn main() {
     let initial_files: Vec<PathBuf> =
         args.files.iter().filter(|p| p.is_file()).map(|p| std::path::absolute(p).unwrap_or_else(|_| p.clone())).collect();
     // One ParVu per profile: a second start hands its files to the first.
-    let request = instance::Request { files: initial_files.clone(), show: !args.background, quit: false };
+    let show = !args.background;
+    let activation_token = if show { present::launch_token(|k| std::env::var(k).ok()) } else { None };
+    let request = instance::Request { files: initial_files.clone(), show, quit: false, activation_token };
     let _instance_lock = match instance::claim(&request) {
         instance::Startup::Primary(lock) => lock,
         instance::Startup::Forwarded => {
@@ -267,6 +216,7 @@ fn main() {
         .setup(move |app| {
             let state = app.state::<AppState>();
             state.background.store(background, Ordering::SeqCst);
+            present::init();
             tray::start(app.handle());
             if background {
                 build_background_window(app.handle())?;

@@ -5,6 +5,9 @@
 ### Fixed
 - **Claude Code no longer opens ParVu for every window.** Claude Code now checks each MCP server with a new kind of startup message, and ParVu took it for real work and opened a window each time. ParVu now answers every startup message itself and starts only when the AI first uses one of its tools.
 - On GNOME (Wayland), the minimise, maximise and close buttons of a ParVu that an AI client started in the background now respond on the first click.
+- On GNOME (Wayland), **Open ParVu** in the tray and starting ParVu again now bring back a minimised ParVu window. Before, the window stayed minimised and GNOME only showed a "ParVu is ready" notification.
+- On GNOME (Wayland), when an AI client asks to change a table while ParVu is hidden in the tray, ParVu now appears minimised and asks for your attention, instead of opening in front of your work and taking the keyboard focus.
+- On GNOME (Wayland), a ParVu that an AI client started in the background now opens at the same size as one you start yourself. Before, it was 47 pixels taller.
 
 ### Added
 - **ParVu starts in the background for AI clients.** When an AI client needs ParVu and it isn't running, ParVu starts hidden, with only its icon in the tray (minimised where there is no tray), instead of in front of your work. If several AI sessions need it at once, only one ParVu starts. A ParVu started this way that you never open closes by itself 10 minutes after the last AI client disconnects. When the AI asks to change a table while ParVu is hidden or minimised, ParVu shows its window minimised and its taskbar entry asks for your attention. With AI clients switched off, ParVu isn't started at all and the AI is told how to switch them on.

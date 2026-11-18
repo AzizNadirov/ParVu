@@ -64,7 +64,7 @@ fn call_attention(app: &AppHandle, window: &str) {
     let Some(w) = app.get_webview_window(window) else { return };
     if !w.is_visible().unwrap_or(true) {
         tracing::info!("MCP: showing window {window}, hidden in the tray, for a request");
-        if let Err(e) = crate::show_minimised(&w) {
+        if let Err(e) = crate::present::show_minimised(&w) {
             tracing::warn!("MCP: could not show the window: {e}");
         }
         let state = app.state::<AppState>();
@@ -78,9 +78,7 @@ fn call_attention(app: &AppHandle, window: &str) {
     let focused = w.is_focused().unwrap_or(true);
     if minimized || !focused {
         tracing::info!("MCP: asking for attention to window {window} (minimised: {minimized}, focused: {focused})");
-        if let Err(e) = w.request_user_attention(Some(tauri::UserAttentionType::Critical)) {
-            tracing::warn!("MCP: could not request attention: {e}");
-        }
+        crate::present::request_attention(&w);
     }
 }
 
