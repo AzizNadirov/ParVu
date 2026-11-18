@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- [Rust](https://rustup.rs/) 1.88 or newer (stable)
+- [Rust](https://rustup.rs/) 1.89 or newer (stable)
 - Node.js 22.12 or newer
 - **Linux (Debian/Ubuntu):**
   ```bash
