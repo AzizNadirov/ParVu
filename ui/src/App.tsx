@@ -125,6 +125,7 @@ import {
   operationsFor,
   signatureText,
   sqlCallable,
+  windowIsDirty,
 } from "./dialogs/logic";
 import { Icon } from "./components/Icon";
 
@@ -1972,7 +1973,14 @@ export function App({ boot }: { boot: Bootstrap }) {
         { label: t("menu.file.close_tab"), icon: "close", shortcut: "Ctrl+W", disabled: !activeTab, onSelect: () => activeTab && void closeTab(activeTab.id) },
         { label: t("menu.file.settings"), icon: "settings", onSelect: () => void openSettingsDialog(ui, { onSettings: onSettingsSaved, onTheme, onLanguage }) },
         { type: "separator" },
-        { label: t("menu.file.exit"), icon: "exit", onSelect: () => void getCurrentWindow().close() },
+        {
+          label: t("menu.file.exit"),
+          icon: "exit",
+          onSelect: () => {
+            exiting.current = true;
+            void getCurrentWindow().close();
+          },
+        },
       ],
     },
     {
@@ -2230,29 +2238,56 @@ export function App({ boot }: { boot: Bootstrap }) {
     return () => unsubs.forEach((u) => void u.then((f) => f()));
   }, [boot.extensions, status, t, ui, updateChat]);
 
-  // Closing the window: unsaved edits, then (optionally) the transforms warning.
+  // Closing the window: with AI clients on, the last window may hide in the
+  // tray instead (tray.rs `close_action`). Otherwise unsaved edits, then
+  // (optionally) the transforms warning. File → Exit always closes.
   const closeState = useRef({ tabs, settings, resolveUnsaved, exportTab, ui });
   closeState.current = { tabs, settings, resolveUnsaved, exportTab, ui };
+  const exiting = useRef(false);
   useEffect(() => {
     const win = getCurrentWindow();
-    const un = win.onCloseRequested(async (event) => {
-      event.preventDefault();
+    // Ask about anything closing would lose; false when the user cancels.
+    const confirmClose = async (): Promise<boolean> => {
       const c = closeState.current;
-      for (const tab of c.tabs) if (!(await c.resolveUnsaved(tab))) return;
+      for (const tab of c.tabs) if (!(await c.resolveUnsaved(tab))) return false;
       const withSteps = c.tabs.filter((x) => x.steps.length && !x.pending_edits);
       if (c.settings.warn_on_exit_with_transforms && withSteps.length) {
         const r = await openConfirmClose(c.ui, { tabs: withSteps.map((x) => x.name) });
-        if (r.result === "cancel") return;
-        if (r.result === "save_and_close" && !(await c.exportTab())) return;
+        if (r.result === "cancel") return false;
+        if (r.result === "save_and_close" && !(await c.exportTab())) return false;
         if (r.dontAsk) {
           const s = await api.updateSettings({ warn_on_exit_with_transforms: false });
           setSettings(s);
           await c.ui.alert(t("dialog.confirm_close.setting_saved"), t("dialog.confirm_close.setting_saved_msg"));
         }
       }
+      return true;
+    };
+    const un = win.onCloseRequested(async (event) => {
+      event.preventDefault();
+      const c = closeState.current;
+      const forced = exiting.current;
+      exiting.current = false;
+      if (!forced) {
+        const dirty = windowIsDirty(c.tabs, c.settings.warn_on_exit_with_transforms);
+        const decision = await api.windowCloseAction(dirty).catch(() => null);
+        if (decision?.action === "hide") {
+          if (decision.notice) await c.ui.alert(t("tray.hidden_title"), t("tray.hidden_message"));
+          await api.hideToTray();
+          return;
+        }
+      }
+      if (!(await confirmClose())) return;
       await win.destroy();
     });
-    return () => void un.then((f) => f());
+    // "Quit ParVu" in the tray (or `parvu --quit`) found something to ask about here.
+    const unQuit = win.listen("quit-requested", async () => {
+      if (await confirmClose()) await win.destroy();
+    });
+    return () => {
+      void un.then((f) => f());
+      void unQuit.then((f) => f());
+    };
   }, [t]);
 
   // First start: crash report and files from the command line. React runs

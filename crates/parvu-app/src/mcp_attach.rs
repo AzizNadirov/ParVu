@@ -55,12 +55,25 @@ pub fn client_count(app: &AppHandle) -> usize {
     app.state::<AppState>().attach.clients.load(Ordering::SeqCst)
 }
 
-/// Make sure the user sees a request waiting in `window`: when the window
-/// is minimised or in the background, ask the system to draw attention to
-/// it (the taskbar entry flashes or is marked urgent) without moving it in
-/// front of the user's work.
+/// Make sure the user sees a request waiting in `window`: a window hidden
+/// in the tray is shown minimised first (a card in a hidden window would
+/// never be seen); when the window is minimised or in the background, ask
+/// the system to draw attention to it (the taskbar entry flashes or is
+/// marked urgent) without moving it in front of the user's work.
 fn call_attention(app: &AppHandle, window: &str) {
     let Some(w) = app.get_webview_window(window) else { return };
+    if !w.is_visible().unwrap_or(true) {
+        tracing::info!("MCP: showing window {window}, hidden in the tray, for a request");
+        if let Err(e) = crate::show_minimised(&w) {
+            tracing::warn!("MCP: could not show the window: {e}");
+        }
+        let state = app.state::<AppState>();
+        let untouched = state.background.load(Ordering::SeqCst);
+        state.background.store(
+            crate::instance::untouched_after(untouched, crate::instance::Touch::ShownForApproval),
+            Ordering::SeqCst,
+        );
+    }
     let minimized = w.is_minimized().unwrap_or(false);
     let focused = w.is_focused().unwrap_or(true);
     if minimized || !focused {
@@ -144,6 +157,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                 move |n| {
                     count_app.state::<AppState>().attach.clients.store(n, Ordering::SeqCst);
                     let _ = count_app.emit("mcp-clients", n);
+                    crate::tray::refresh(&count_app);
                 },
             )
             .await;
@@ -155,6 +169,8 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         Ok(r) => {
             *running = Some(r);
             *lock(&at.last_error) = None;
+            drop(running);
+            crate::tray::refresh(app);
             Ok(())
         }
         Err(e) => {
@@ -185,6 +201,7 @@ pub fn stop(app: &AppHandle) {
     lock(&at.pending).clear();
     at.clients.store(0, Ordering::SeqCst);
     let _ = app.emit("mcp-clients", 0usize);
+    crate::tray::refresh(app);
 }
 
 /// The app as seen by an attached MCP server.

@@ -344,7 +344,7 @@
   "dialog.connect_ai.error": "Başlatmaq mümkün olmadı: {error}",
   "dialog.connect_ai.intro": "Claude Desktop, Claude Code və ya başqa MCP klientinə öz Claude abunəliyiniz və ya Sİ hesabınızla bu pəncərədə açıq cədvəllərlə işləməyə icazə verin. Klient cədvəlləri oxuya bilər; hər dəyişiklik burada sizin təsdiqinizi tələb edir.",
   "dialog.connect_ai.listening": "Aktivdir. Qoşulmuş klientlər: {count}",
-  "dialog.connect_ai.note": "ParVu-nu açıq saxlamaq lazım deyil: klient ilk dəfə alətdən istifadə edəndə ParVu kiçildilmiş açılır. Həmin pəncərəni heç açmasanız, sonuncu klient ayrıldıqdan 10 dəqiqə sonra özü bağlanır. Bir neçə pəncərə açıqdırsa, klient sonuncu istifadə etdiyiniz pəncərə ilə işləyir. Faylları yalnız siz açır və saxlayırsınız.",
+  "dialog.connect_ai.note": "ParVu-nu açıq saxlamaq lazım deyil: klient ilk dəfə alətdən istifadə edəndə ParVu arxa planda, yalnız yuxarı paneldəki ikonu ilə başlayır (trey yoxdursa, kiçildilmiş). Həmin pəncərəni heç açmasanız, sonuncu klient ayrıldıqdan 10 dəqiqə sonra özü bağlanır. Sİ klientləri aktiv olanda pəncərəni bağlamaq ParVu-nu trey-də saxlayır (Parametrlərə baxın). Bir neçə pəncərə açıqdırsa, klient sonuncu istifadə etdiyiniz pəncərə ilə işləyir. Faylları yalnız siz açır və saxlayırsınız.",
   "dialog.connect_ai.off": "Söndürülüb. Sİ klientləri qoşula bilməz.",
   "dialog.connect_ai.other": "Digər MCP klientləri: bu əmrlə stdio serveri",
   "dialog.connect_ai.title": "Sİ klientinin qoşulması",
@@ -1791,5 +1791,13 @@
   "custom.steps.fixed_values": "Bu cədvəldən hesablanmış qiymətlər (interval sərhədləri, hissələrin sayı) olduğu kimi qalır.",
   "custom.steps.column_written": "addım bu sütunu yazır, ona görə sabit qalır",
   "custom.steps.column_reserved": "gizli sütun; sabit qalır",
-  "dialog.group_by.custom": "Xüsusi funksiyalar"
+  "dialog.group_by.custom": "Xüsusi funksiyalar",
+  "tray.open": "ParVu-nu aç",
+  "tray.quit": "ParVu-dan çıx",
+  "tray.status_on": "Sİ klientləri: aktiv, qoşulub: {count}",
+  "tray.status_off": "Sİ klientləri: söndürülüb",
+  "tray.hidden_title": "ParVu işləməyə davam edir",
+  "tray.hidden_message": "ParVu yuxarı paneldə (Windows-da bildiriş sahəsində) işləməyə davam edir ki, Sİ klientləri ona qoşula bilsin. Pəncərəni qaytarmaq üçün ParVu ikonuna klikləyib «ParVu-nu aç» seçin və ya ParVu-nu yenidən başladın. Çıxmaq üçün ikonun menyusunda «ParVu-dan çıx» və ya Fayl → Çıxış seçin. Bunu Parametrlər → Ümumi → Çıxış davranışı bölməsində söndürə bilərsiniz.",
+  "settings.label.keep_in_tray": "Pəncərə bağlananda trey-də işləməyə davam et (Sİ klientləri aktiv olanda)",
+  "settings.tooltip.keep_in_tray": "Sonuncu pəncərəni bağlamaq onu gizlədir; ParVu Sİ klientləri üçün yuxarı paneldə qalır, tablar olduğu kimi saxlanılır. Çıxış ikonun menyusundandır."
 }

@@ -7,7 +7,7 @@ ParVu works with AI clients that speak the [Model Context Protocol](https://mode
 | Command | `parvu mcp --attach` | `parvu mcp --allow-dir <folder>` |
 | Tables | The tabs open in your ParVu window, with your filters and steps | Files the client opens itself |
 | Changes | Appear in your window after you approve them | Stay in the server's session |
-| ParVu window | Started for you when needed (minimised), with AI → Connect an AI client switched on | Not needed |
+| ParVu window | Started for you when needed (in the background, in the tray), with AI → Connect an AI client switched on | Not needed |
 
 ## Connect to the ParVu window
 
@@ -32,16 +32,30 @@ The client can list, describe, sample and query the open tables freely. When it 
 
 `parvu mcp --attach` doesn't open ParVu when the client starts. Until the AI first uses a tool, it answers the client's startup itself (`server/discover`, `initialize`, the tool list, and "method not found" for features ParVu doesn't have), with the same answers the window gives. Starting Claude Code, or opening a new window of it, therefore doesn't open ParVu, and the order you start things in doesn't matter.
 
-At the first tool call the bridge starts ParVu **in the background**: minimised in the taskbar, without taking the focus from what you're doing. If several AI sessions call a tool at the same moment, one of them starts ParVu and the others wait for it (a lock file, `~/.ParVu/run/launch.lock`), so you get one ParVu, not one per session.
+At the first tool call the bridge starts ParVu **in the background**: the window stays hidden and only ParVu's icon appears in the tray (the top bar on Ubuntu, the notification area on Windows), without taking the focus from what you're doing. Where there is no tray (see [The tray icon](#the-tray-icon)) it starts minimised in the taskbar instead. If several AI sessions call a tool at the same moment, one of them starts ParVu and the others wait for it (a lock file, `~/.ParVu/run/launch.lock`), so you get one ParVu, not one per session.
 
-- **Approvals:** when the AI wants to change a table or proposes a custom tool while the window is minimised or behind other windows, ParVu asks the system for your attention (the taskbar entry flashes or is marked urgent) but doesn't jump in front of your work. Open it to answer the card.
-- **Closing by itself:** a background ParVu you never opened closes 10 minutes after the last AI client disconnects. Once you bring its window up (or open a file in it), it is a normal ParVu that stays until you close it.
+- **Approvals:** when the AI wants to change a table or proposes a custom tool while the window is hidden in the tray, ParVu shows it minimised, because a card in a hidden window would never be seen. While it is minimised or behind other windows, ParVu asks the system for your attention (the taskbar entry flashes or is marked urgent) but doesn't jump in front of your work. Open it to answer the card.
+- **Closing by itself:** a background ParVu you never opened closes 10 minutes after the last AI client disconnects. Once you bring its window up (from the tray, by starting ParVu again, or by opening a file in it), it is a normal ParVu that stays until you quit it. Closing its window into the tray doesn't change that: it stays for your AI clients until you choose **Quit ParVu**.
 - **AI clients switched off:** the bridge doesn't start ParVu; the tool call answers that AI clients are switched off and how to switch them on. If ParVu is open with AI clients switched off, the client is told the same. Your setting is never changed for you.
 - **ParVu closes while a client is connected:** requests waiting for it get an error, and the next tool call starts or reconnects ParVu. The client doesn't have to reconnect.
 
 Only one ParVu runs per user profile. Starting ParVu again (from the menu, a file manager or `parvu file.csv`) brings the running window to the front and opens the files there instead of starting a second copy. `parvu mcp` servers are separate processes and aren't affected.
 
-`parvu --background` starts ParVu the way the bridge does. With AI clients switched off it opens a normal window instead, since a hidden ParVu would serve nothing.
+`parvu --background` starts ParVu the way the bridge does. With AI clients switched off it opens a normal window instead, since a hidden ParVu would serve nothing. `parvu --quit` asks a running ParVu to quit, as **Quit ParVu** in the tray does (it does nothing when ParVu isn't running).
+
+### The tray icon
+
+While ParVu runs it shows an icon in the tray: in the top bar on Ubuntu and other GNOME desktops with the AppIndicator extension (Ubuntu enables it), in the panel on KDE, Xfce and others, in the notification area on Windows. Its menu:
+
+- **Open ParVu** brings the window back (on Windows a left click on the icon does the same);
+- a status line: **AI clients: on, 2 connected** or **AI clients: off**;
+- **Quit ParVu**.
+
+**Closing the window keeps ParVu running.** While AI clients are switched on, closing the last ParVu window hides it into the tray instead of quitting, so your AI clients keep working with the same tabs. Nothing is lost: the tabs, their steps and unsaved cell edits stay as they were, and **Open ParVu** shows them again. The first time, ParVu tells you where it went. To turn this off, clear **Settings → General → Exit Behavior → Keep running in the tray when the window is closed**; with it off, or with AI clients off, closing quits as before. **File → Exit** always closes the window. With several windows open, the others close as usual; only the last one hides.
+
+**Quit ParVu** quits at once when nothing would be lost. When a window has unsaved edits, tables not saved to a file, or applied steps (if you asked to be warned about those), ParVu shows that window and asks, as closing it would; **Cancel** keeps ParVu running.
+
+**Without a tray**, a hidden window could never be found again, so ParVu doesn't hide: closing quits, and background starts are minimised. On Linux ParVu checks for a tray (a StatusNotifier host) when you close the window. GNOME without the AppIndicator extension has none; install and enable it (`gnome-shell-extension-appindicator`) to get the icon. The icon also needs `libayatana-appindicator3-1`, which the ParVu package depends on.
 
 While a client is connected, the status bar shows **AI clients: N**. With several ParVu windows open, the client works on the window you used last. Switching the setting off disconnects every client.
 
@@ -132,7 +146,11 @@ Logs go to ParVu's usual log folder (`~/.ParVu/logs`), never to the protocol str
 
 **"ParVu did not start in time".** The bridge starts ParVu when it isn't running and waits up to 25 seconds. On a slow first start, open ParVu yourself and ask again.
 
-**A minimised ParVu appeared in the taskbar.** An AI session used a ParVu tool. It closes by itself 10 minutes after the last AI client disconnects, unless you opened it (`PARVU_BACKGROUND_IDLE_SECS` in the client's environment changes the delay).
+**ParVu's icon appeared in the top bar (or a minimised ParVu in the taskbar).** An AI session used a ParVu tool. It closes by itself 10 minutes after the last AI client disconnects, unless you opened it (`PARVU_BACKGROUND_IDLE_SECS` in the client's environment changes the delay).
+
+**I closed ParVu but it is still running.** AI clients are on, so ParVu stays in the tray for them: choose **Quit ParVu** in the icon's menu, run `parvu --quit`, or turn off **Keep running in the tray when the window is closed** in Settings.
+
+**I closed ParVu and can't see its icon.** Your desktop has no tray: on GNOME, enable the AppIndicator extension. ParVu doesn't hide its window when it finds no tray, so this means the tray went away after ParVu checked; start ParVu again to bring the window back, or run `parvu --quit`.
 
 **The approval card says "An AI client".** The client didn't send its name; the change is the same.
 

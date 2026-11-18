@@ -16,6 +16,7 @@ mod mcp;
 mod mcp_attach;
 mod memguard;
 mod state;
+mod tray;
 
 use std::path::PathBuf;
 
@@ -47,17 +48,20 @@ fn window_builder<'a>(app: &'a AppHandle, label: &str) -> WebviewWindowBuilder<'
         .min_inner_size(900.0, 600.0)
 }
 
-/// The first window of a `--background` start: minimised, without taking
-/// the focus from what the user is doing.
+/// The first window of a `--background` start: hidden, with only the tray
+/// icon showing. Without a tray the user could never find a hidden window,
+/// so it starts minimised instead, without taking the focus.
 fn build_background_window(app: &AppHandle) -> tauri::Result<()> {
     let w = window_builder(app, "main").visible(false).focused(false).build()?;
+    if tray::available(app) {
+        tracing::info!("background start: window hidden, tray icon shown");
+        return Ok(());
+    }
+    tracing::info!("background start: no tray host; starting minimised");
+    show_minimised(&w)?;
     if cfg!(target_os = "linux") {
-        // On X11, GTK iconifies a window that isn't shown yet, so it appears
-        // minimised without flashing on screen. Wayland has no way to start
-        // minimised: GTK ignores this until the window is on screen, so
-        // minimise again right after it appears.
-        w.minimize()?;
-        w.show()?;
+        // Wayland has no way to start minimised: GTK ignores it until the
+        // window is on screen, so minimise again right after it appears.
         let (app, w) = (app.clone(), w.clone());
         std::thread::spawn(move || {
             for ms in [200, 1000] {
@@ -67,34 +71,55 @@ fn build_background_window(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
         });
-    } else {
-        // Windows and macOS keep a hidden window hidden when minimising it;
-        // show it without focus, then minimise.
-        w.show()?;
-        w.minimize()?;
     }
     Ok(())
 }
 
-/// Bring `w` to the front (restored if minimised).
-fn bring_forward(w: &WebviewWindow) {
+/// Show a hidden window minimised, without taking the focus.
+pub fn show_minimised(w: &WebviewWindow) -> tauri::Result<()> {
+    if cfg!(target_os = "linux") {
+        // On X11, GTK iconifies a window that isn't shown yet, so it appears
+        // minimised without flashing on screen.
+        w.minimize()?;
+        w.show()
+    } else {
+        // Windows and macOS keep a hidden window hidden when minimising it;
+        // show it without focus, then minimise.
+        w.show()?;
+        w.minimize()
+    }
+}
+
+/// Bring `w` to the front (restored if minimised or hidden).
+pub fn bring_forward(w: &WebviewWindow) {
     let _ = w.unminimize();
     let _ = w.show();
     let _ = w.set_focus();
 }
 
+/// The window to show or hand to AI clients: the one used last, or any.
+pub fn pick_window(app: &AppHandle) -> Option<WebviewWindow> {
+    let active = app.state::<AppState>().attach.active_window();
+    let windows = app.webview_windows();
+    windows.get(&active).cloned().or_else(|| windows.keys().min().and_then(|l| windows.get(l).cloned()))
+}
+
 /// Another `parvu` start handed us its files (or just wants the window).
 fn handle_second_start(app: &AppHandle, req: instance::Request) {
+    if req.quit {
+        tray::request_quit(app);
+        return;
+    }
     let state = app.state::<AppState>();
     if req.show || !req.files.is_empty() {
         state.background.store(false, Ordering::SeqCst);
     }
-    let label = {
-        let active = state.attach.active_window();
-        let windows = app.webview_windows();
-        if windows.contains_key(&active) { active } else { windows.keys().min().cloned().unwrap_or_else(|| "main".into()) }
-    };
+    if req.show {
+        // Also brings back a window hidden in the tray.
+        tray::show_app(app);
+    }
     if !req.files.is_empty() {
+        let Some(label) = pick_window(app).map(|w| w.label().to_string()) else { return };
         // Before the first window's UI asked for its start files, add them
         // there; after, the UI opens them on this event.
         let mut pending = crate::state::lock(&state.initial_files);
@@ -103,11 +128,6 @@ fn handle_second_start(app: &AppHandle, req: instance::Request) {
         } else {
             pending.extend(req.files.iter().cloned());
         }
-    }
-    if req.show
-        && let Some(w) = app.get_webview_window(&label)
-    {
-        bring_forward(&w);
     }
 }
 
@@ -190,10 +210,18 @@ fn main() {
         std::process::exit(mcp::run(args[1..].to_vec()));
     }
     let args = instance::AppArgs::parse(std::env::args_os().skip(1));
+    if args.quit {
+        // `parvu --quit`: only ever talks to a running ParVu.
+        match instance::send(&instance::Request { quit: true, ..Default::default() }) {
+            Ok(()) => println!("Asked ParVu to quit."),
+            Err(e) => println!("{e}"),
+        }
+        return;
+    }
     let initial_files: Vec<PathBuf> =
         args.files.iter().filter(|p| p.is_file()).map(|p| std::path::absolute(p).unwrap_or_else(|_| p.clone())).collect();
     // One ParVu per profile: a second start hands its files to the first.
-    let request = instance::Request { files: initial_files.clone(), show: !args.background };
+    let request = instance::Request { files: initial_files.clone(), show: !args.background, quit: false };
     let _instance_lock = match instance::claim(&request) {
         instance::Startup::Primary(lock) => lock,
         instance::Startup::Forwarded => {
@@ -218,6 +246,7 @@ fn main() {
         .setup(move |app| {
             let state = app.state::<AppState>();
             state.background.store(background, Ordering::SeqCst);
+            tray::start(app.handle());
             if background {
                 build_background_window(app.handle())?;
                 start_idle_quit(app.handle());
@@ -272,7 +301,8 @@ fn main() {
                     // it is a normal ParVu that stays until they close it.
                     let settled = STARTED.get().is_some_and(|t| t.elapsed() > SETTLE);
                     if settled && !window.is_minimized().unwrap_or(true) && window.is_visible().unwrap_or(false) {
-                        state.background.store(false, Ordering::SeqCst);
+                        let untouched = state.background.load(Ordering::SeqCst);
+                        state.background.store(instance::untouched_after(untouched, instance::Touch::Opened), Ordering::SeqCst);
                     }
                 }
                 _ => {}
@@ -340,6 +370,8 @@ fn main() {
             mcp_attach::mcp_status,
             mcp_attach::mcp_set_enabled,
             mcp_attach::mcp_decide,
+            tray::window_close_action,
+            tray::hide_to_tray,
             ai_assistant::ai_providers,
             ai_assistant::ai_save_provider,
             ai_assistant::ai_delete_provider,

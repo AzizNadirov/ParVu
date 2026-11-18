@@ -355,7 +355,8 @@ fn clients_allowed() -> bool {
     paths.settings_file().exists() && parvu_config::SettingsManager::with_paths(paths).settings().mcp_allow_clients
 }
 
-/// Start ParVu minimised (`--background`), detached from this process: its
+/// Start ParVu in the background (`--background`: hidden in the tray, or
+/// minimised without one), detached from this process: its
 /// output must not reach stdout (the MCP channel), and it must outlive the
 /// bridge.
 fn launch_app() -> Result<(), String> {

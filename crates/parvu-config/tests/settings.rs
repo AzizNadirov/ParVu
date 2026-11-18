@@ -35,6 +35,10 @@ fn settings_defaults() {
     assert_eq!(s.rows_per_page(), 100);
     assert_eq!(s.max_rows(), 100_000);
     assert_eq!(s.warning_criteria, WarningCriteria::Rows);
+    // The tray: kept running only while AI clients are on (off by default).
+    assert!(!s.mcp_allow_clients);
+    assert!(s.keep_running_in_tray);
+    assert!(!s.tray_notice_shown);
     // Missing keys take the model defaults.
     assert_eq!(Settings::from_json_lenient("{}").unwrap(), s);
 }
@@ -124,6 +128,21 @@ fn loads_python_written_file_and_round_trips_unknown_keys() {
     assert_eq!(out["user_app_settings_dir"], json!("/home/u/.ParVu"));
     assert_eq!(out["colour_browseButton"], json!("#8AFBF6"));
     assert_eq!(Settings::from_json_lenient(&s.to_json().unwrap()).unwrap(), s);
+}
+
+#[test]
+fn tray_settings_parse_and_fall_back() {
+    let s = Settings::from_json_lenient(r#"{"keep_running_in_tray": false, "tray_notice_shown": true}"#).unwrap();
+    assert!(!s.keep_running_in_tray);
+    assert!(s.tray_notice_shown);
+    // Files from older versions don't have them; a wrong type is dropped.
+    let s = Settings::from_json_lenient(PYTHON_WRITTEN).unwrap();
+    assert!(s.keep_running_in_tray && !s.tray_notice_shown);
+    let s = Settings::from_json_lenient(r#"{"keep_running_in_tray": "no", "mcp_allow_clients": true}"#).unwrap();
+    assert!(s.keep_running_in_tray && s.mcp_allow_clients);
+    let out: serde_json::Value = serde_json::from_str(&Settings::default().to_json().unwrap()).unwrap();
+    assert_eq!(out["keep_running_in_tray"], json!(true));
+    assert_eq!(out["tray_notice_shown"], json!(false));
 }
 
 #[test]

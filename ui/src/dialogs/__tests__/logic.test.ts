@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ColumnStats, FunctionDef, SearchHit } from "../../lib/api";
 import {
+  windowIsDirty,
   mcpClientSetup,
   SearchNavigator,
   buildAppendOp,
@@ -396,5 +397,19 @@ describe("mark duplicates", () => {
       name: "dup",
     });
     expect(buildMarkDuplicatesOp(["a"], [], "first", "  ")).toBeNull();
+  });
+});
+
+describe("windowIsDirty", () => {
+  const tab = (o: Partial<{ pending_edits: number; sheets_changed: boolean; origin: unknown; steps: unknown[] }> = {}) =>
+    ({ pending_edits: 0, sheets_changed: false, origin: null, steps: [], ...o }) as Parameters<typeof windowIsDirty>[0][number];
+  it("asks only when closing would lose something", () => {
+    expect(windowIsDirty([], true)).toBe(false);
+    expect(windowIsDirty([tab()], true)).toBe(false);
+    expect(windowIsDirty([tab(), tab({ pending_edits: 2 })], false)).toBe(true);
+    expect(windowIsDirty([tab({ sheets_changed: true })], false)).toBe(true);
+    expect(windowIsDirty([tab({ origin: { kind: "x" } })], false)).toBe(true);
+    expect(windowIsDirty([tab({ steps: [{ key: "k", args: {} }] })], true)).toBe(true);
+    expect(windowIsDirty([tab({ steps: [{ key: "k", args: {} }] })], false)).toBe(false);
   });
 });

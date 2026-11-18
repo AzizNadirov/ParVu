@@ -141,7 +141,7 @@ fi
 say "Build packages"
 apt_install build-essential pkg-config curl git ca-certificates file xz-utils \
   libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
-  libgtk-3-dev librsvg2-dev
+  libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
 
 say "Rust (at least $MIN_RUST)"
 [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"

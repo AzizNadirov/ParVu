@@ -701,6 +701,9 @@ export interface Settings {
   bug_report_email: string;
   enable_crash_reporting: boolean;
   mcp_allow_clients: boolean;
+  /** While AI clients are on, closing the last window hides it in the tray. */
+  keep_running_in_tray: boolean;
+  tray_notice_shown: boolean;
   detect_column_types: boolean;
   show_query_panel: boolean;
   query_panel_collapsed: boolean;
@@ -709,6 +712,13 @@ export interface Settings {
   show_ai_panel: boolean;
   date_order: "auto" | "day_first" | "month_first";
   [key: string]: unknown;
+}
+
+/** What closing a window does (tray.rs `close_action`). */
+export interface CloseDecision {
+  action: "hide" | "close" | "confirm";
+  /** First time ParVu hides in the tray: tell the user where it went. */
+  notice: boolean;
 }
 
 export interface Language {
@@ -1037,6 +1047,10 @@ export const api = {
   startExport: (id: number, options: ExportOptions) => call<number>("start_export", { id, options }),
   cancelExport: (job: number) => call<void>("cancel_export", { job }),
   mcpStatus: () => call<McpStatus>("mcp_status"),
+  /** What closing this window does; `dirty`: closing would lose something. */
+  windowCloseAction: (dirty: boolean) => call<CloseDecision>("window_close_action", { dirty }),
+  /** Hide this window; ParVu keeps running in the tray. */
+  hideToTray: () => call<void>("hide_to_tray"),
   mcpSetEnabled: (enabled: boolean) => call<McpStatus>("mcp_set_enabled", { enabled }),
   /** Answer an approval card; false when the request is gone. */
   mcpDecide: (id: number, approve: boolean) => call<boolean>("mcp_decide", { id, approve }),

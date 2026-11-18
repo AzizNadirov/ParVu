@@ -6,7 +6,7 @@
 #
 # Linux build dependencies (Debian/Ubuntu):
 #   sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
-#        libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
+#        libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
 # plus Rust (rustup) and Node.js 20+.
 #
 # The installer links DuckDB statically, compiled from C++ on the first build.
@@ -30,6 +30,15 @@ echo "==> Using $CARGO_BUILD_JOBS parallel build jobs"
 
 BETA=0
 [[ "${1:-}" == "--beta" ]] && BETA=1
+
+# Tauri finds the tray library (the deb's dependency) through pkg-config when
+# it bundles, after the long build; check it first.
+if [[ "$(uname -s)" == Linux* ]] \
+  && ! pkg-config --exists ayatana-appindicator3-0.1 2>/dev/null && ! pkg-config --exists appindicator3-0.1 2>/dev/null; then
+  echo "error: the tray icon needs libayatana-appindicator3-dev to build the installer:" >&2
+  echo "  sudo apt install libayatana-appindicator3-dev" >&2
+  exit 1
+fi
 
 echo "==> Installing UI dependencies"
 npm --prefix ui ci

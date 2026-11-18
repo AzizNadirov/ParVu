@@ -88,6 +88,13 @@ describe("settings form", () => {
     expect([v.show_query_panel, v.query_panel_collapsed, v.show_steps_panel, v.show_ai_panel]).toEqual([true, true, true, true]);
   });
 
+  it("keeps the tray choice, on by default", () => {
+    expect(settingsToForm(settings, "en", "x").keepInTray).toBe(true);
+    const f = settingsToForm({ ...settings, keep_running_in_tray: false }, "en", "x");
+    expect(f.keepInTray).toBe(false);
+    expect(formToValues({ ...f, keepInTray: true }).keep_running_in_tray).toBe(true);
+  });
+
   it("flags out-of-range numbers", () => {
     const f = settingsToForm(settings, "en", "x");
     expect(invalidNumericFields({ ...f, rowsPerPage: "5", sqlFontSize: "abc" })).toEqual(["rowsPerPage", "sqlFontSize"]);
