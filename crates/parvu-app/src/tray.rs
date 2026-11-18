@@ -81,13 +81,13 @@ pub fn start(app: &AppHandle) {
             .menu(&menu)
             .show_menu_on_left_click(false)
             .on_menu_event(|app, event| match event.id().as_ref() {
-                OPEN => show_app(app),
+                OPEN => show_app(app, crate::present::take_tray_token()),
                 QUIT => request_quit(app),
                 _ => {}
             })
             .on_tray_icon_event(|tray, event| {
                 if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                    show_app(tray.app_handle());
+                    show_app(tray.app_handle(), crate::present::take_tray_token());
                 }
             });
         // Linux writes the icon to a file for the indicator; keep it with
@@ -282,11 +282,12 @@ pub fn dirty(tabs: impl IntoIterator<Item = (bool, usize)>, warn_on_transforms: 
 // ------------------------------------------------------------- the actions
 
 /// "Open ParVu": bring the window up (the one used last), or open one.
-pub fn show_app(app: &AppHandle) {
+/// `token`: the activation token of the user's click or launch, if any.
+pub fn show_app(app: &AppHandle, token: Option<String>) {
     let state = app.state::<AppState>();
     state.background.store(false, Ordering::SeqCst);
     match crate::pick_window(app) {
-        Some(w) => crate::bring_forward(&w),
+        Some(w) => crate::present::bring_forward(&w, token),
         None => {
             let n = state.next_window.fetch_add(1, Ordering::Relaxed);
             if let Err(e) = crate::build_window(app, &format!("window-{n}")) {
@@ -332,7 +333,7 @@ pub fn request_quit(app: &AppHandle) {
         state.background.store(false, Ordering::SeqCst);
         for label in &plan.ask {
             if let Some(w) = app.get_webview_window(label) {
-                crate::bring_forward(&w);
+                crate::present::bring_forward(&w, crate::present::take_tray_token());
                 let _ = app.emit_to(label.as_str(), "quit-requested", ());
             }
         }

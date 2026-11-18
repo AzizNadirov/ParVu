@@ -118,6 +118,11 @@ pub struct Request {
     /// Quit, asking about unsaved edits first (`parvu --quit`).
     #[serde(default)]
     pub quit: bool,
+    /// The launcher's activation token (`XDG_ACTIVATION_TOKEN`), which lets
+    /// the running app bring its window forward on Wayland. Added in 1.0:
+    /// older apps ignore the field, and requests from older launchers lack it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation_token: Option<String>,
 }
 
 /// How this process starts.
@@ -368,7 +373,12 @@ mod tests {
         let s = seen.clone();
         serve_at(&control, move |r| s.lock().unwrap().push(r)).unwrap();
 
-        let req = Request { files: vec![PathBuf::from("/data/a.csv")], show: true, quit: false };
+        let req = Request {
+            files: vec![PathBuf::from("/data/a.csv")],
+            show: true,
+            quit: false,
+            activation_token: Some("token-1".into()),
+        };
         assert!(matches!(claim_at(&lock, &control, &req, Duration::from_secs(5)), Startup::Forwarded));
         assert_eq!(*seen.lock().unwrap(), [req]);
 
@@ -383,6 +393,34 @@ mod tests {
         // When the first one ends, the next start owns the lock.
         drop(held);
         assert!(matches!(claim_at(&lock, &control, &Request::default(), Duration::ZERO), Startup::Primary(Some(_))));
+    }
+
+    #[test]
+    fn requests_stay_compatible_across_versions() {
+        // A request from a launcher older than the activation token.
+        let old = r#"{"files":["/data/a.csv"],"show":true,"quit":false}"#;
+        let req: Request = serde_json::from_str(old).unwrap();
+        assert!(req.show && req.activation_token.is_none());
+        // Without a token, a new launcher sends exactly what old ones did.
+        let plain = Request { files: vec![PathBuf::from("/data/a.csv")], show: true, ..Default::default() };
+        assert_eq!(serde_json::to_string(&plain).unwrap(), old);
+        // An app older than the token reads a new request, ignoring it.
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct OldRequest {
+            #[serde(default)]
+            files: Vec<PathBuf>,
+            #[serde(default)]
+            show: bool,
+            #[serde(default)]
+            quit: bool,
+        }
+        let new = Request { activation_token: Some("tok".into()), ..plain };
+        let text = serde_json::to_string(&new).unwrap();
+        assert!(text.contains("\"activation_token\":\"tok\""));
+        let seen: OldRequest = serde_json::from_str(&text).unwrap();
+        assert!(seen.show && seen.files.len() == 1);
+        assert_eq!(serde_json::from_str::<Request>(&text).unwrap(), new);
     }
 
     #[test]
