@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.9]
+
+ParVu and AI clients: Claude Code no longer opens a ParVu window for every session. ParVu starts in the background only when an AI client uses it, keeps running in the tray when its window is closed, and runs as one instance. Several GNOME (Wayland) window problems are fixed. From this version ParVu is free for noncommercial use and needs a commercial license for commercial use.
+
 ### Fixed
 - **Claude Code no longer opens ParVu for every window.** Claude Code now checks each MCP server with a new kind of startup message, and ParVu took it for real work and opened a window each time. ParVu now answers every startup message itself and starts only when the AI first uses one of its tools.
 - On GNOME (Wayland), the minimise, maximise and close buttons of a ParVu that an AI client started in the background now respond on the first click.
