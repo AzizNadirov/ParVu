@@ -53,6 +53,8 @@ fn window_builder<'a>(app: &'a AppHandle, label: &str) -> WebviewWindowBuilder<'
 /// so it starts minimised instead, without taking the focus.
 fn build_background_window(app: &AppHandle) -> tauri::Result<()> {
     let w = window_builder(app, "main").visible(false).focused(false).build()?;
+    #[cfg(target_os = "linux")]
+    let_title_bar_buttons_click(&w);
     if tray::available(app) {
         tracing::info!("background start: window hidden, tray icon shown");
         return Ok(());
@@ -73,6 +75,25 @@ fn build_background_window(app: &AppHandle) -> tauri::Result<()> {
         });
     }
     Ok(())
+}
+
+/// On Wayland, tao 0.35 draws the title bar itself: a GTK header bar inside a
+/// `GtkEventBox` with `above_child` set, whose input window lies over the
+/// bar. In a window shown at once, the minimise / maximise / close buttons
+/// end up above it and get their clicks. In a window created hidden and shown
+/// later (the background start), the event box ends up on top (seen on GNOME
+/// 50): it takes every click on those buttons, which then reaches tao's
+/// window handler and stops there, so the buttons don't respond. With the box
+/// below its child, the buttons get their own clicks; clicks elsewhere on the
+/// bar (drag, double-click) still reach the window as before. Newer tao drops
+/// this title bar (tao#1218). No-op on X11, where the window manager draws it.
+#[cfg(target_os = "linux")]
+fn let_title_bar_buttons_click(w: &WebviewWindow) {
+    use gtk::prelude::*;
+    let Some(bar) = w.gtk_window().ok().and_then(|g| g.titlebar()) else { return };
+    if let Ok(event_box) = bar.downcast::<gtk::EventBox>() {
+        event_box.set_above_child(false);
+    }
 }
 
 /// Show a hidden window minimised, without taking the focus.

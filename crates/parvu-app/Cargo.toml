@@ -47,6 +47,7 @@ libc = "0.2"
 # StatusNotifier host (the top bar) is there. Both already come with Tauri.
 [target.'cfg(target_os = "linux")'.dependencies]
 gio = "0.18"
+gtk = "0.18"  # the title bar fix in main.rs (`let_title_bar_buttons_click`); comes with Tauri
 libloading = "0.7"
 
 [features]
