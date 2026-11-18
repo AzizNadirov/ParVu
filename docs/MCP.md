@@ -7,7 +7,7 @@ ParVu works with AI clients that speak the [Model Context Protocol](https://mode
 | Command | `parvu mcp --attach` | `parvu mcp --allow-dir <folder>` |
 | Tables | The tabs open in your ParVu window, with your filters and steps | Files the client opens itself |
 | Changes | Appear in your window after you approve them | Stay in the server's session |
-| ParVu window | Must be open, with AI → Connect an AI client switched on | Not needed |
+| ParVu window | Started for you when needed (minimised), with AI → Connect an AI client switched on | Not needed |
 
 ## Connect to the ParVu window
 
@@ -28,7 +28,20 @@ The client can list, describe, sample and query the open tables freely. When it 
 
 **Apply** adds a normal step to Applied Steps, which `Ctrl+Z` undoes. **Reject** tells the client no. When the client proposes a custom function or operation (`propose_custom_tool`), ParVu asks whether to open it in the custom tool editor, prefilled with the client's definition and examples; you read it, validate it and save it, or cancel. The client can't save it. Opening and saving files stays with you: in this mode the client has no `open_file` or `export` tool.
 
-If ParVu isn't running, `parvu mcp --attach` waits: it answers the client's startup itself, and opens ParVu only when the AI first uses a tool. Starting Claude Code (or a new VS Code window) therefore doesn't open ParVu, and the order you start things in doesn't matter. If ParVu is open with AI clients switched off, the client is told how to switch them on; no second window opens.
+### When ParVu isn't running
+
+`parvu mcp --attach` doesn't open ParVu when the client starts. Until the AI first uses a tool, it answers the client's startup itself (`server/discover`, `initialize`, the tool list, and "method not found" for features ParVu doesn't have), with the same answers the window gives. Starting Claude Code, or opening a new window of it, therefore doesn't open ParVu, and the order you start things in doesn't matter.
+
+At the first tool call the bridge starts ParVu **in the background**: minimised in the taskbar, without taking the focus from what you're doing. If several AI sessions call a tool at the same moment, one of them starts ParVu and the others wait for it (a lock file, `~/.ParVu/run/launch.lock`), so you get one ParVu, not one per session.
+
+- **Approvals:** when the AI wants to change a table or proposes a custom tool while the window is minimised or behind other windows, ParVu asks the system for your attention (the taskbar entry flashes or is marked urgent) but doesn't jump in front of your work. Open it to answer the card.
+- **Closing by itself:** a background ParVu you never opened closes 10 minutes after the last AI client disconnects. Once you bring its window up (or open a file in it), it is a normal ParVu that stays until you close it.
+- **AI clients switched off:** the bridge doesn't start ParVu; the tool call answers that AI clients are switched off and how to switch them on. If ParVu is open with AI clients switched off, the client is told the same. Your setting is never changed for you.
+- **ParVu closes while a client is connected:** requests waiting for it get an error, and the next tool call starts or reconnects ParVu. The client doesn't have to reconnect.
+
+Only one ParVu runs per user profile. Starting ParVu again (from the menu, a file manager or `parvu file.csv`) brings the running window to the front and opens the files there instead of starting a second copy. `parvu mcp` servers are separate processes and aren't affected.
+
+`parvu --background` starts ParVu the way the bridge does. With AI clients switched off it opens a normal window instead, since a hidden ParVu would serve nothing.
 
 While a client is connected, the status bar shows **AI clients: N**. With several ParVu windows open, the client works on the window you used last. Switching the setting off disconnects every client.
 
@@ -115,7 +128,11 @@ Logs go to ParVu's usual log folder (`~/.ParVu/logs`), never to the protocol str
 
 **`parvu mcp --attach`: "ParVu is open, but AI clients are not allowed".** In ParVu, switch on AI → Connect an AI client, then reconnect the server in your client (Claude Code: `/mcp`; Claude Desktop: restart it).
 
-**"ParVu did not start in time".** The bridge opens ParVu when it isn't running and waits up to 25 seconds. On a slow first start, open ParVu yourself and reconnect.
+**"AI clients are switched off in ParVu, so it was not started".** Open ParVu, switch on AI → Connect an AI client, then ask again; the client doesn't have to reconnect.
+
+**"ParVu did not start in time".** The bridge starts ParVu when it isn't running and waits up to 25 seconds. On a slow first start, open ParVu yourself and ask again.
+
+**A minimised ParVu appeared in the taskbar.** An AI session used a ParVu tool. It closes by itself 10 minutes after the last AI client disconnects, unless you opened it (`PARVU_BACKGROUND_IDLE_SECS` in the client's environment changes the delay).
 
 **The approval card says "An AI client".** The client didn't send its name; the change is the same.
 

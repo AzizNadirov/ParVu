@@ -344,7 +344,7 @@
   "dialog.connect_ai.error": "Başlatmaq mümkün olmadı: {error}",
   "dialog.connect_ai.intro": "Claude Desktop, Claude Code və ya başqa MCP klientinə öz Claude abunəliyiniz və ya Sİ hesabınızla bu pəncərədə açıq cədvəllərlə işləməyə icazə verin. Klient cədvəlləri oxuya bilər; hər dəyişiklik burada sizin təsdiqinizi tələb edir.",
   "dialog.connect_ai.listening": "Aktivdir. Qoşulmuş klientlər: {count}",
-  "dialog.connect_ai.note": "Klientdən istifadə edərkən ParVu-nu açıq saxlayın. Bir neçə pəncərə açıqdırsa, klient sonuncu istifadə etdiyiniz pəncərə ilə işləyir. Faylları yalnız siz açır və saxlayırsınız.",
+  "dialog.connect_ai.note": "ParVu-nu açıq saxlamaq lazım deyil: klient ilk dəfə alətdən istifadə edəndə ParVu kiçildilmiş açılır. Həmin pəncərəni heç açmasanız, sonuncu klient ayrıldıqdan 10 dəqiqə sonra özü bağlanır. Bir neçə pəncərə açıqdırsa, klient sonuncu istifadə etdiyiniz pəncərə ilə işləyir. Faylları yalnız siz açır və saxlayırsınız.",
   "dialog.connect_ai.off": "Söndürülüb. Sİ klientləri qoşula bilməz.",
   "dialog.connect_ai.other": "Digər MCP klientləri: bu əmrlə stdio serveri",
   "dialog.connect_ai.title": "Sİ klientinin qoşulması",

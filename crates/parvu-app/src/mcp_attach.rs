@@ -44,6 +44,31 @@ impl Attach {
     pub fn set_active_window(&self, label: &str) {
         *lock(&self.active_window) = label.to_string();
     }
+
+    pub fn active_window(&self) -> String {
+        lock(&self.active_window).clone()
+    }
+}
+
+/// How many AI clients are connected now.
+pub fn client_count(app: &AppHandle) -> usize {
+    app.state::<AppState>().attach.clients.load(Ordering::SeqCst)
+}
+
+/// Make sure the user sees a request waiting in `window`: when the window
+/// is minimised or in the background, ask the system to draw attention to
+/// it (the taskbar entry flashes or is marked urgent) without moving it in
+/// front of the user's work.
+fn call_attention(app: &AppHandle, window: &str) {
+    let Some(w) = app.get_webview_window(window) else { return };
+    let minimized = w.is_minimized().unwrap_or(false);
+    let focused = w.is_focused().unwrap_or(true);
+    if minimized || !focused {
+        tracing::info!("MCP: asking for attention to window {window} (minimised: {minimized}, focused: {focused})");
+        if let Err(e) = w.request_user_attention(Some(tauri::UserAttentionType::Critical)) {
+            tracing::warn!("MCP: could not request attention: {e}");
+        }
+    }
 }
 
 /// What the "Connect an AI client" dialog shows.
@@ -202,6 +227,7 @@ impl AttachHost for TauriHost {
         let (tx, rx) = oneshot::channel();
         lock(&state.attach.pending).insert(id, tx);
         let _ = self.app.emit_to(proposal.window.as_str(), "mcp-proposal", &proposal);
+        call_attention(&self.app, &proposal.window);
         let app = self.app.clone();
         let window = proposal.window.clone();
         Box::pin(async move {
@@ -231,6 +257,7 @@ impl AttachHost for TauriHost {
 
     fn offer_custom(&self, window: &str, offer: CustomOffer) {
         let _ = self.app.emit_to(window, "custom-proposal", &offer);
+        call_attention(&self.app, window);
     }
 }
 

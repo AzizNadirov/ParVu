@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ai_assistant;
+mod bridge;
 mod column_types;
 mod commands;
 mod custom;
@@ -9,6 +10,7 @@ mod custom_store;
 mod error;
 #[cfg(test)]
 mod excel_tests;
+mod instance;
 mod jobs;
 mod mcp;
 mod mcp_attach;
@@ -17,22 +19,119 @@ mod state;
 
 use std::path::PathBuf;
 
+use std::sync::atomic::Ordering;
+
 use parvu_config::{I18n, RecentsManager, SettingsManager, ThemeManager};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::state::{AppState, Config};
 
 const CRASH_MARKER: &str = "last_crash.txt";
 
+/// When this process started. Focus events in the first seconds of a
+/// background start come from the window appearing, not from the user.
+static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+const SETTLE: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// Create a top-level window. Every window loads the same UI and gets its own
 /// set of tabs.
 pub fn build_window(app: &AppHandle, label: &str) -> tauri::Result<()> {
+    window_builder(app, label).build()?;
+    Ok(())
+}
+
+fn window_builder<'a>(app: &'a AppHandle, label: &str) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("ParVu")
         .inner_size(1400.0, 900.0)
         .min_inner_size(900.0, 600.0)
-        .build()?;
+}
+
+/// The first window of a `--background` start: minimised, without taking
+/// the focus from what the user is doing.
+fn build_background_window(app: &AppHandle) -> tauri::Result<()> {
+    let w = window_builder(app, "main").visible(false).focused(false).build()?;
+    if cfg!(target_os = "linux") {
+        // On X11, GTK iconifies a window that isn't shown yet, so it appears
+        // minimised without flashing on screen. Wayland has no way to start
+        // minimised: GTK ignores this until the window is on screen, so
+        // minimise again right after it appears.
+        w.minimize()?;
+        w.show()?;
+        let (app, w) = (app.clone(), w.clone());
+        std::thread::spawn(move || {
+            for ms in [200, 1000] {
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+                if app.state::<AppState>().background.load(Ordering::SeqCst) {
+                    let _ = w.minimize();
+                }
+            }
+        });
+    } else {
+        // Windows and macOS keep a hidden window hidden when minimising it;
+        // show it without focus, then minimise.
+        w.show()?;
+        w.minimize()?;
+    }
     Ok(())
+}
+
+/// Bring `w` to the front (restored if minimised).
+fn bring_forward(w: &WebviewWindow) {
+    let _ = w.unminimize();
+    let _ = w.show();
+    let _ = w.set_focus();
+}
+
+/// Another `parvu` start handed us its files (or just wants the window).
+fn handle_second_start(app: &AppHandle, req: instance::Request) {
+    let state = app.state::<AppState>();
+    if req.show || !req.files.is_empty() {
+        state.background.store(false, Ordering::SeqCst);
+    }
+    let label = {
+        let active = state.attach.active_window();
+        let windows = app.webview_windows();
+        if windows.contains_key(&active) { active } else { windows.keys().min().cloned().unwrap_or_else(|| "main".into()) }
+    };
+    if !req.files.is_empty() {
+        // Before the first window's UI asked for its start files, add them
+        // there; after, the UI opens them on this event.
+        let mut pending = crate::state::lock(&state.initial_files);
+        if state.booted.load(Ordering::SeqCst) {
+            let _ = app.emit_to(label.as_str(), "open-files", &req.files);
+        } else {
+            pending.extend(req.files.iter().cloned());
+        }
+    }
+    if req.show
+        && let Some(w) = app.get_webview_window(&label)
+    {
+        bring_forward(&w);
+    }
+}
+
+/// Quit a background ParVu nobody opened once AI clients are gone a while.
+fn start_idle_quit(app: &AppHandle) {
+    let app = app.clone();
+    let grace = instance::idle_grace();
+    let step = (grace / 4).clamp(std::time::Duration::from_millis(250), std::time::Duration::from_secs(5));
+    let _ = std::thread::Builder::new().name("parvu-idle".into()).spawn(move || {
+        let mut clock = instance::IdleClock::new(grace);
+        loop {
+            std::thread::sleep(step);
+            let state = app.state::<AppState>();
+            let untouched = state.background.load(Ordering::SeqCst);
+            if !untouched {
+                return;
+            }
+            if clock.tick(std::time::Instant::now(), untouched, mcp_attach::client_count(&app)) {
+                tracing::info!("background start: no AI client for {grace:?} and the window was never opened; quitting");
+                app.exit(0);
+                return;
+            }
+        }
+    });
 }
 
 fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
@@ -82,6 +181,7 @@ fn load_config() -> Config {
 }
 
 fn main() {
+    STARTED.get_or_init(std::time::Instant::now);
     let _log_guard = init_logging();
     install_crash_hook();
     // `parvu mcp …`: an MCP server on stdin/stdout, without a window.
@@ -89,22 +189,51 @@ fn main() {
     if args.first().map(String::as_str) == Some("mcp") {
         std::process::exit(mcp::run(args[1..].to_vec()));
     }
-    let crash = take_crash_report();
+    let args = instance::AppArgs::parse(std::env::args_os().skip(1));
     let initial_files: Vec<PathBuf> =
-        std::env::args_os().skip(1).map(PathBuf::from).filter(|p| p.is_file()).collect();
-    tracing::info!("ParVu {} starting", env!("CARGO_PKG_VERSION"));
+        args.files.iter().filter(|p| p.is_file()).map(|p| std::path::absolute(p).unwrap_or_else(|_| p.clone())).collect();
+    // One ParVu per profile: a second start hands its files to the first.
+    let request = instance::Request { files: initial_files.clone(), show: !args.background };
+    let _instance_lock = match instance::claim(&request) {
+        instance::Startup::Primary(lock) => lock,
+        instance::Startup::Forwarded => {
+            tracing::info!("ParVu is already running; passed the start on to it");
+            return;
+        }
+    };
+    let sole = _instance_lock.is_some();
+    let crash = take_crash_report();
+    let config = load_config();
+    // A background start exists to serve AI clients. With them switched
+    // off it would serve nothing, so it opens as a normal window instead.
+    let background = args.background && config.settings.settings().mcp_allow_clients;
+    tracing::info!("ParVu {} starting{}", env!("CARGO_PKG_VERSION"), if background { " in the background" } else { "" });
     parvu_ai::init_tls();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState::new(load_config(), initial_files, crash))
-        .setup(|app| {
-            build_window(app.handle(), "main")?;
-            mcp::clear_stale_run_file();
-            mcp::mark_app_running();
+        .manage(AppState::new(config, initial_files, crash))
+        .setup(move |app| {
             let state = app.state::<AppState>();
+            state.background.store(background, Ordering::SeqCst);
+            if background {
+                build_background_window(app.handle())?;
+                start_idle_quit(app.handle());
+            } else {
+                build_window(app.handle(), "main")?;
+            }
+            if sole {
+                // No other ParVu of this profile can be listening.
+                mcp::clear_stale_run_file();
+            }
+            {
+                let app = app.handle().clone();
+                if let Err(e) = instance::serve(move |req| handle_second_start(&app, req)) {
+                    tracing::error!("single instance: {e}");
+                }
+            }
             state.attach.set_active_window("main");
             custom::start(app.handle());
             {
@@ -137,7 +266,15 @@ fn main() {
                     state.jobs.cancel_window(window.label());
                     state.drop_workspace(window.label())
                 }
-                tauri::WindowEvent::Focused(true) => state.attach.set_active_window(window.label()),
+                tauri::WindowEvent::Focused(true) => {
+                    state.attach.set_active_window(window.label());
+                    // The user brought a background window up: from now on
+                    // it is a normal ParVu that stays until they close it.
+                    let settled = STARTED.get().is_some_and(|t| t.elapsed() > SETTLE);
+                    if settled && !window.is_minimized().unwrap_or(true) && window.is_visible().unwrap_or(false) {
+                        state.background.store(false, Ordering::SeqCst);
+                    }
+                }
                 _ => {}
             }
         })
@@ -227,7 +364,7 @@ fn main() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 mcp_attach::stop(app);
-                mcp::clear_app_running();
+                instance::clear_control_file();
             }
         });
 }

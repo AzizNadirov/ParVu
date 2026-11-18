@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Claude Code no longer opens ParVu for every window.** Claude Code now checks each MCP server with a new kind of startup message, and ParVu took it for real work and opened a window each time. ParVu now answers every startup message itself and starts only when the AI first uses one of its tools.
+
+### Added
+- **ParVu starts in the background for AI clients.** When an AI client needs ParVu and it isn't running, ParVu starts minimised instead of in front of your work. If several AI sessions need it at once, only one ParVu starts. A ParVu started this way that you never open closes by itself 10 minutes after the last AI client disconnects. When the AI asks to change a table while ParVu is minimised, its taskbar entry asks for your attention. With AI clients switched off, ParVu isn't started at all and the AI is told how to switch them on.
+- **One ParVu at a time.** Opening ParVu or a file while ParVu is already running brings the running window forward and opens the file there, instead of starting a second copy.
+
 ### Changed
 - **New license: free for noncommercial use.** From this version ParVu is licensed under the PolyForm Noncommercial License 1.0.0. Personal use, study, research, charities, schools and government institutions use it for free; use at work, in paid projects or in commercial products needs a commercial license (see `COMMERCIAL.md`). Earlier versions keep the terms they were published with.
 
