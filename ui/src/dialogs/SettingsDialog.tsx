@@ -25,6 +25,7 @@ export interface SettingsForm {
   maxRows: string;
   saveHistory: boolean;
   warnTransforms: boolean;
+  keepInTray: boolean;
   copySample: string;
   memoryLimit: string;
   language: string;
@@ -70,6 +71,7 @@ export function settingsToForm(s: Settings, language: string, theme: string): Se
     maxRows: String(toInt(s.max_rows, 1000)),
     saveHistory: isTruthySetting(s.save_file_history),
     warnTransforms: !!s.warn_on_exit_with_transforms,
+    keepInTray: s.keep_running_in_tray ?? true,
     copySample: String(toInt(s.copy_tuple_sample_size, 500)),
     memoryLimit: String(toInt(s.query_memory_limit_mb, 1024)),
     language: s.current_language || language,
@@ -119,6 +121,7 @@ export function formToValues(f: SettingsForm): Partial<Settings> {
     default_sql_query: f.defaultQuery.trim(),
     default_limit: String(n("defaultLimit")),
     warn_on_exit_with_transforms: f.warnTransforms,
+    keep_running_in_tray: f.keepInTray,
     copy_tuple_sample_size: n("copySample"),
     query_memory_limit_mb: n("memoryLimit"),
     enable_crash_reporting: f.crashReporting,
@@ -275,6 +278,7 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
       <fieldset>
         <legend>{t("settings.group.exit")}</legend>
         {check("warnTransforms", t("settings.label.warn_transforms"))}
+        {check("keepInTray", t("settings.label.keep_in_tray"), t("settings.tooltip.keep_in_tray"))}
       </fieldset>
       <fieldset>
         <legend>{t("settings.group.copy")}</legend>

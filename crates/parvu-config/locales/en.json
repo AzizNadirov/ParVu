@@ -344,7 +344,7 @@
   "dialog.connect_ai.error": "Could not start: {error}",
   "dialog.connect_ai.intro": "Let Claude Desktop, Claude Code or another MCP client work with the tables open in this window, using your own Claude subscription or AI account. The client can read the tables; every change needs your approval here.",
   "dialog.connect_ai.listening": "On. Connected clients: {count}",
-  "dialog.connect_ai.note": "ParVu doesn't have to be open: when the client first uses a tool, ParVu starts minimised. If you never open that window, it closes itself 10 minutes after the last client disconnects. With several windows open, the client works on the one you used last. Only you open and save files.",
+  "dialog.connect_ai.note": "ParVu doesn't have to be open: when the client first uses a tool, ParVu starts in the background, with only its icon in the top bar (minimised where there is no tray). If you never open that window, it closes itself 10 minutes after the last client disconnects. Closing the window keeps ParVu in the tray while AI clients are on (see Settings). With several windows open, the client works on the one you used last. Only you open and save files.",
   "dialog.connect_ai.off": "Off. AI clients can't connect.",
   "dialog.connect_ai.other": "Other MCP clients: a stdio server with this command",
   "dialog.connect_ai.title": "Connect an AI client",
@@ -1791,5 +1791,13 @@
   "custom.steps.fixed_values": "Values it worked out from this table (bin edges, the number of parts) stay as they are.",
   "custom.steps.column_written": "a step writes this column, so it stays fixed",
   "custom.steps.column_reserved": "a hidden column; stays fixed",
-  "dialog.group_by.custom": "Custom functions"
+  "dialog.group_by.custom": "Custom functions",
+  "tray.open": "Open ParVu",
+  "tray.quit": "Quit ParVu",
+  "tray.status_on": "AI clients: on, {count} connected",
+  "tray.status_off": "AI clients: off",
+  "tray.hidden_title": "ParVu keeps running",
+  "tray.hidden_message": "ParVu is still running in the top bar (the notification area on Windows), so AI clients can reach it. To bring the window back, click the ParVu icon and choose Open ParVu, or start ParVu again. To quit, choose Quit ParVu in the icon's menu or File → Exit. You can turn this off in Settings → General → Exit Behavior.",
+  "settings.label.keep_in_tray": "Keep running in the tray when the window is closed (while AI clients are on)",
+  "settings.tooltip.keep_in_tray": "Closing the last window hides it; ParVu stays in the top bar for AI clients, with your tabs as they were. Quit from the icon's menu."
 }

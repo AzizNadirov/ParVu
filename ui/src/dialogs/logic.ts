@@ -38,8 +38,21 @@ import type {
   CustomParam,
   ExampleTable,
   FnOutput,
+  TabSummary,
 } from "../lib/api";
 import type { Translate } from "../lib/i18n";
+
+// ---------------------------------------------------------------- closing
+
+/** Closing the window would lose something, so it asks first: unsaved cell
+ *  edits, sheet changes or table results, or applied steps when the user
+ *  wants that warning. Mirrors `tray::dirty` in the app. */
+export function windowIsDirty(
+  tabs: Pick<TabSummary, "pending_edits" | "sheets_changed" | "origin" | "steps">[],
+  warnOnTransforms: boolean,
+): boolean {
+  return tabs.some((x) => x.pending_edits > 0 || x.sheets_changed || !!x.origin || (warnOnTransforms && x.steps.length > 0));
+}
 
 // ---------------------------------------------------------------- operations
 

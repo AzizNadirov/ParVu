@@ -204,6 +204,11 @@ pub struct Settings {
     // AI clients
     /// Let AI clients (MCP, `parvu mcp --attach`) connect to the running app.
     pub mcp_allow_clients: bool,
+    /// While AI clients are on, closing the last window hides it and ParVu
+    /// keeps running in the tray (the top bar), for the clients.
+    pub keep_running_in_tray: bool,
+    /// The user was told once where ParVu went when it first hid in the tray.
+    pub tray_notice_shown: bool,
 
     // Column types
     /// Detect the column types of CSV files when they open.
@@ -269,6 +274,8 @@ impl Default for Settings {
             bug_report_email: "eziznadirov@gmail.com".into(),
             enable_crash_reporting: true,
             mcp_allow_clients: false,
+            keep_running_in_tray: true,
+            tray_notice_shown: false,
             detect_column_types: true,
             date_order: DateOrderSetting::Auto,
             show_query_panel: true,
@@ -597,6 +604,8 @@ fn known_keys() -> Vec<&'static str> {
         "bug_report_email",
         "enable_crash_reporting",
         "mcp_allow_clients",
+        "keep_running_in_tray",
+        "tray_notice_shown",
         "detect_column_types",
         "date_order",
         "show_query_panel",

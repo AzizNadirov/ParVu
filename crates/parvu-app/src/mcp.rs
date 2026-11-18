@@ -58,7 +58,8 @@ Runs ParVu as an MCP server on stdin/stdout for AI clients.
   FILE              files to open at start (always allowed)
   --attach          connect to the ParVu window instead (AI → Connect an AI
                     client must be switched on there); the first tool call
-                    starts ParVu minimised when it isn't running";
+                    starts ParVu in the background (in the tray) when it
+                    isn't running";
 
 /// How long an approval card waits for the user.
 pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(600);

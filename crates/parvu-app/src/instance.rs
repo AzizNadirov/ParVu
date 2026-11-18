@@ -9,9 +9,12 @@
 //!   user), then exits. `parvu mcp …` never takes part: `main` handles it first.
 //! * Bridges that need ParVu take `~/.ParVu/run/launch.lock` before starting
 //!   it, so several AI sessions opening at once start one ParVu, not several.
-//! * `parvu --background` starts with the window minimised. Until the user
-//!   brings it up, it quits by itself a while after the last AI client leaves
-//!   ([`IdleClock`]).
+//! * `parvu --background` starts with the window hidden, only the tray icon
+//!   showing (minimised where there is no tray; see `tray.rs`). Until the
+//!   user brings it up, it quits by itself a while after the last AI client
+//!   leaves ([`IdleClock`], [`untouched_after`]).
+//! * `parvu --quit` asks the running ParVu to quit, as its tray menu's
+//!   "Quit ParVu" does.
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -26,8 +29,10 @@ use crate::mcp::{self, RunInfo};
 /// Command-line options of the app (not of `parvu mcp`).
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct AppArgs {
-    /// `--background`: start minimised, for AI clients (see `bridge.rs`).
+    /// `--background`: start hidden, for AI clients (see `bridge.rs`).
     pub background: bool,
+    /// `--quit`: ask the running ParVu to quit, then exit.
+    pub quit: bool,
     pub files: Vec<PathBuf>,
 }
 
@@ -39,6 +44,7 @@ impl AppArgs {
         for a in args {
             match a.to_str() {
                 Some("--background") => out.background = true,
+                Some("--quit") => out.quit = true,
                 Some(s) if s.starts_with("--") => tracing::warn!("ignoring unknown option {s}"),
                 _ => out.files.push(PathBuf::from(a)),
             }
@@ -109,6 +115,9 @@ pub struct Request {
     /// which only need ParVu to be running.
     #[serde(default)]
     pub show: bool,
+    /// Quit, asking about unsaved edits first (`parvu --quit`).
+    #[serde(default)]
+    pub quit: bool,
 }
 
 /// How this process starts.
@@ -146,6 +155,14 @@ fn claim_at(lock: &Path, control: &Path, request: &Request, wait: Duration) -> S
         }
         std::thread::sleep(Duration::from_millis(200));
     }
+}
+
+/// Hand `request` to the running ParVu. Fails when none runs.
+pub fn send(request: &Request) -> Result<(), String> {
+    if !is_locked(&instance_lock_file()) {
+        return Err("ParVu is not running".into());
+    }
+    forward(&control_file(), request)
 }
 
 /// Send `request` to the app listening per `control`.
@@ -214,6 +231,27 @@ pub fn clear_control_file() {
     }
 }
 
+/// Something that happens to the window of a background start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Touch {
+    /// The user brought it up (tray, a second `parvu`, clicking it).
+    Opened,
+    /// The user closed it into the tray: they want ParVu to keep running.
+    ClosedToTray,
+    /// ParVu showed it (minimised) for an approval card.
+    ShownForApproval,
+}
+
+/// Whether ParVu is still an untouched background start after `touch`: only
+/// those quit by themselves when idle ([`IdleClock`]). Showing a card isn't
+/// the user's doing, so it changes nothing.
+pub fn untouched_after(untouched: bool, touch: Touch) -> bool {
+    match touch {
+        Touch::Opened | Touch::ClosedToTray => false,
+        Touch::ShownForApproval => untouched,
+    }
+}
+
 /// How long a background ParVu nobody opened stays after the last AI client
 /// leaves: `PARVU_BACKGROUND_IDLE_SECS`, 10 minutes by default.
 pub fn idle_grace() -> Duration {
@@ -261,6 +299,35 @@ mod tests {
         assert!(a.background);
         assert_eq!(a.files, [PathBuf::from("a.csv"), PathBuf::from("dir/b.parquet")]);
         assert!(!parse(&["--backgroundx"]).background);
+        let a = parse(&["--quit"]);
+        assert!(a.quit && !a.background && a.files.is_empty());
+    }
+
+    #[test]
+    fn closed_to_tray_after_use_never_idle_quits() {
+        let grace = Duration::from_secs(600);
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+
+        // A background start nobody opened: an approval card doesn't count.
+        let untouched = untouched_after(true, Touch::ShownForApproval);
+        assert!(untouched);
+        let mut c = IdleClock::new(grace);
+        assert!(!c.tick(at(0), untouched, 0));
+        assert!(c.tick(at(600), untouched, 0));
+
+        // Opened, used, then closed into the tray: stays until Quit.
+        let untouched = untouched_after(untouched_after(true, Touch::Opened), Touch::ClosedToTray);
+        assert!(!untouched);
+        let mut c = IdleClock::new(grace);
+        assert!(!c.tick(at(0), untouched, 0));
+        assert!(!c.tick(at(100_000), untouched, 0));
+
+        // A normal start closed into the tray stays too, and closing a
+        // background window into the tray keeps it as well.
+        assert!(!untouched_after(false, Touch::ClosedToTray));
+        assert!(!untouched_after(true, Touch::ClosedToTray));
+        assert!(!untouched_after(false, Touch::ShownForApproval));
     }
 
     #[test]
@@ -301,7 +368,7 @@ mod tests {
         let s = seen.clone();
         serve_at(&control, move |r| s.lock().unwrap().push(r)).unwrap();
 
-        let req = Request { files: vec![PathBuf::from("/data/a.csv")], show: true };
+        let req = Request { files: vec![PathBuf::from("/data/a.csv")], show: true, quit: false };
         assert!(matches!(claim_at(&lock, &control, &req, Duration::from_secs(5)), Startup::Forwarded));
         assert_eq!(*seen.lock().unwrap(), [req]);
 

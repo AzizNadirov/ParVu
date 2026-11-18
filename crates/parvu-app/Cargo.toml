@@ -17,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 parvu-core = { workspace = true, features = ["schema"] }
 parvu-dsl.workspace = true
 parvu-config.workspace = true
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-opener = "2"
@@ -43,6 +43,11 @@ getrandom = "0.3"
 windows-sys = { version = "0.61", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_System_SystemInformation"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
+# Tray icon (src/tray.rs): whether the appindicator library loads and a
+# StatusNotifier host (the top bar) is there. Both already come with Tauri.
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.18"
+libloading = "0.7"
 
 [features]
 default = []

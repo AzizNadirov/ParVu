@@ -118,7 +118,7 @@ Requirements: [Rust](https://rustup.rs/) 1.89 or newer and Node.js 22.12 or newe
 
 ```bash
 sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
-     libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
+     libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
 ```
 
 `./install.sh` installs all of these (Rust and Node.js only if missing or too old), builds the `.deb` and installs it; `./install.sh --beta` does the same for `parvu-next`.

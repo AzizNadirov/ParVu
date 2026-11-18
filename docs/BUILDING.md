@@ -7,7 +7,7 @@
 - **Linux (Debian/Ubuntu):**
   ```bash
   sudo apt install build-essential libwebkit2gtk-4.1-dev libsoup-3.0-dev \
-       libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev
+       libjavascriptcoregtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
   ```
 - **Windows:** Visual Studio Build Tools with the C++ workload, and Git for Windows (for `bash`). WebView2 ships with Windows 10 and 11.
 
@@ -26,6 +26,8 @@ The script installs the UI packages, runs the UI and Rust tests, and builds the 
 | Windows | `target/release/bundle/nsis/ParVu_<version>_x64-setup.exe` |
 
 Windows builds only the NSIS installer, because MSI does not accept pre-release versions such as `1.0.0-alpha.1`.
+
+On Linux the deb depends on `libayatana-appindicator3-1` for the tray icon. Tauri adds that dependency itself when it bundles, and finds the library through `pkg-config`, so building the installer needs `libayatana-appindicator3-dev` (`build.sh` checks for it before the long build). Everyday `cargo` builds and tests don't need it: ParVu loads the library at run time and runs without a tray icon when it's missing.
 
 On Linux the pre-release version is written into the deb as `1.0.0~alpha.1`. With a tilde dpkg ranks it below `1.0.0`, so the stable release upgrades it; Tauri's own `1.0.0-alpha.1` would rank above it.
 

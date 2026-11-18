@@ -46,6 +46,8 @@ pub struct AppState {
     pub pending_crash: Mutex<Option<String>>,
     /// AI clients connected through `parvu mcp --attach`.
     pub attach: crate::mcp_attach::Attach,
+    /// The tray icon and its menu.
+    pub tray: crate::tray::Tray,
     /// The built-in AI assistant's chats and running questions.
     pub assistant: crate::ai_assistant::Assistant,
     /// Custom functions and operations (`~/.ParVu/custom`).
@@ -73,6 +75,7 @@ impl AppState {
             background: AtomicBool::new(false),
             pending_crash: Mutex::new(pending_crash),
             attach: Default::default(),
+            tray: Default::default(),
             assistant: Default::default(),
             custom: Mutex::new(crate::custom_store::CustomStore::open(&crate::custom_store::CustomStore::default_dir())),
             custom_library: Mutex::new(Default::default()),

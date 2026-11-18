@@ -225,6 +225,7 @@ pub async fn set_language(app: AppHandle, state: State<'_, AppState>, code: Stri
     })
     .await?;
     let _ = app.emit("language-changed", &code);
+    crate::tray::refresh(&app);
     Ok(change)
 }
 
