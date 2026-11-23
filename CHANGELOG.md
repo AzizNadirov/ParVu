@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Readable status bar text in Excel Material.** The "Read-only" hint and the unsaved-edits warning used colours meant for the window's background, so on Excel Material's green status bar they were nearly invisible. They now use the status bar's own text colour.
+- **Group By calculations keep a tidy layout.** Each calculation shows its function, column and ✕ on one line and its name below, instead of wrapping the ✕ onto a line of its own.
+
 ### Added
 - **The AI assistant remembers each file's conversation.** Open a file again and the assistant panel shows its earlier conversation (each Excel sheet has its own), and follow-up questions carry on from it. Conversations stay on your computer, in `~/.ParVu/ai/chats`; New conversation deletes a file's saved one. Turn it off, or delete all saved conversations, in Settings → General → AI Assistant. See [docs/AI.md](docs/AI.md#conversations-are-remembered-per-file).
 

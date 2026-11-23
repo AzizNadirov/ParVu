@@ -294,6 +294,11 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
 #portal .gdg-style { font-family: var(--pv-layout-table-font-family), sans-serif; border-radius: var(--md-shape-xs); }
 
 /* AI clients connected (status bar) */
+/* Text in the status bar takes the bar's own colour: the surface colours
+   (.muted, the warning colour) can vanish on a coloured bar such as Excel
+   Material's green one. */
+.status-bar .muted { color: color-mix(in srgb, var(--pv-colors-status-foreground) 80%, var(--pv-colors-status-background)); }
+.status-bar .warn-text { color: var(--pv-colors-status-foreground); font-weight: 600; }
 .status-bar .pv-ai-chip { min-height: 20px; padding: 0 8px; color: inherit; font-weight: 500; }
 
 /* ---------- AI assistant panel ---------- */

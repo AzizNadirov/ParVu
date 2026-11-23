@@ -317,3 +317,20 @@ button.pv-icon-btn:hover:not(:disabled) { background: var(--md-hover); }
 .pv-custom-preview { max-height: 240px; }
 .pv-custom-value { padding: 6px 0; font-size: 1.1em; }
 .pv-dialog-custom-editor .tabs-strip button { display: inline-flex; gap: 4px; align-items: center; }
+
+/* Group By calculations: function, column and ✕ on the first line, the
+   result name (and a custom function's values) below, so the ✕ never
+   wraps onto a line of its own in the dialog's narrow right column. */
+.pv-agg-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.pv-agg-row:last-child { border-bottom: none; }
+.pv-agg-row > select, .pv-agg-row > input, .pv-agg-row > .pv-hint { min-width: 0; width: 100%; }
+.pv-agg-row > .pv-rule-name { flex: none; width: 100%; }
+.pv-agg-row > .pv-agg-remove { grid-column: 3; grid-row: 1; }
+.pv-agg-row > .pv-agg-alias { grid-column: 1 / span 2; }
