@@ -10,6 +10,10 @@
 //! * One chat history per tab, in memory. Each question runs as a task that
 //!   streams `ai-event`s to its window and ends with `ai-finished`;
 //!   `ai_cancel` stops it.
+//! * With the `remember_ai_chats` setting on, a file tab's conversation is
+//!   also saved per file (`chat_store.rs`): the UI calls `ai_save_chat` after
+//!   each run with its transcript, and `ai_load_chat` when the panel first
+//!   shows the tab, which puts the saved history back for the next question.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -25,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
+use crate::chat_store::{ChatKey, ChatStore, SavedChat};
 use crate::error::{ApiError, ApiResult};
 use crate::mcp::ParvuMcp;
 use crate::state::{AppState, lock};
@@ -417,6 +422,8 @@ pub async fn ai_ask(
     let run_id = state.assistant.next_run.fetch_add(1, Ordering::SeqCst) + 1;
     let key = (label.clone(), tab_id.unwrap_or(0));
     let mut history = lock(&state.assistant.chats).get(&key).cloned().unwrap_or_default();
+    // An answer cut off mid tool call would make the provider refuse the next request.
+    crate::chat_store::repair_history(&mut history);
     let app2 = app.clone();
 
     let task = tauri::async_runtime::spawn(async move {
@@ -459,15 +466,136 @@ pub fn ai_cancel(app: AppHandle, window: WebviewWindow, run_id: u64, tab_id: Opt
     true
 }
 
-/// Forget the conversation of a tab.
+/// Forget the conversation of a tab, and its saved copy.
 #[tauri::command(rename_all = "snake_case")]
-pub fn ai_clear_chat(app: AppHandle, window: WebviewWindow, tab_id: Option<u64>) {
+pub async fn ai_clear_chat(app: AppHandle, window: WebviewWindow, tab_id: Option<u64>) -> ApiResult<()> {
+    let label = window.label().to_string();
+    blocking(move || {
+        let state = app.state::<AppState>();
+        lock(&state.assistant.chats).remove(&(label.clone(), tab_id.unwrap_or(0)));
+        if let Some(key) = chat_key(&app, &label, tab_id) {
+            chat_store(&app).0.delete(&key);
+        }
+    })
+    .await
+}
+
+// ---------------------------------------------------------------- saved chats
+
+/// The saved-chats folder, and whether saving is on (`remember_ai_chats`).
+fn chat_store(app: &AppHandle) -> (ChatStore, bool) {
     let state = app.state::<AppState>();
-    lock(&state.assistant.chats).remove(&(window.label().to_string(), tab_id.unwrap_or(0)));
+    let cfg = lock(&state.config);
+    (ChatStore::new(cfg.settings.paths().ai_chats_dir()), cfg.settings.settings().remember_ai_chats)
+}
+
+/// What a tab's conversation is saved under: its file (and sheet). `None`
+/// for a result tab not saved to a file yet.
+fn chat_key(app: &AppHandle, window: &str, tab_id: Option<u64>) -> Option<ChatKey> {
+    let ws = app.state::<AppState>().workspace(window).ok()?;
+    let s = lock(&ws).summary(tab_id?).ok()?;
+    tab_chat_key(&s.path, s.origin.is_some(), s.stored_sheet.as_deref())
+}
+
+fn tab_chat_key(path: &std::path::Path, is_result: bool, sheet: Option<&str>) -> Option<ChatKey> {
+    (!is_result && !path.as_os_str().is_empty()).then(|| ChatKey::new(path, sheet))
+}
+
+/// A saved conversation, for the panel.
+#[derive(Debug, Serialize)]
+pub struct LoadedChat {
+    /// The transcript as the UI saved it.
+    pub display: Value,
+    pub updated_ms: i64,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+}
+
+/// The saved conversation of a tab's file, if any (and saving is on). Its
+/// history becomes the tab's, unless the tab already has one.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn ai_load_chat(app: AppHandle, window: WebviewWindow, tab_id: u64) -> ApiResult<Option<LoadedChat>> {
+    let label = window.label().to_string();
+    blocking(move || {
+        let (store, enabled) = chat_store(&app);
+        if !enabled {
+            return None;
+        }
+        let saved = store.load(&chat_key(&app, &label, Some(tab_id))?)?;
+        let state = app.state::<AppState>();
+        let mut chats = lock(&state.assistant.chats);
+        let mine = chats.entry((label, tab_id)).or_default();
+        if mine.is_empty() {
+            *mine = saved.history;
+        }
+        Some(LoadedChat { display: saved.display, updated_ms: saved.updated_ms, provider: saved.provider, model: saved.model })
+    })
+    .await
+}
+
+/// Save a tab's conversation for its file: the history the model saw and
+/// `display`, the panel's transcript. False when nothing was saved (saving
+/// is off, or the tab has no file yet).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn ai_save_chat(app: AppHandle, window: WebviewWindow, tab_id: u64, display: Value, provider_id: Option<String>) -> ApiResult<bool> {
+    let label = window.label().to_string();
+    blocking(move || {
+        let (store, enabled) = chat_store(&app);
+        let Some(key) = chat_key(&app, &label, Some(tab_id)) else { return Ok(false) };
+        let history = lock(&app.state::<AppState>().assistant.chats).get(&(label, tab_id)).cloned().unwrap_or_default();
+        let model = provider_id.as_deref().and_then(|id| load_providers().providers.into_iter().find(|p| p.id == id)).map(|p| p.model);
+        save_chat(&store, enabled, &key, SavedChat::new(&key, history, display, provider_id, model))
+    })
+    .await?
+}
+
+fn save_chat(store: &ChatStore, enabled: bool, key: &ChatKey, chat: SavedChat) -> ApiResult<bool> {
+    if !enabled {
+        return Ok(false);
+    }
+    store.save(key, chat).map_err(|e| ApiError::new("ai", format!("Saving the AI conversation: {e}")))?;
+    Ok(true)
+}
+
+/// How many conversations are saved.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn ai_saved_chats(app: AppHandle) -> ApiResult<usize> {
+    blocking(move || chat_store(&app).0.count()).await
+}
+
+/// Delete every saved conversation; returns how many were deleted.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn ai_delete_saved_chats(app: AppHandle) -> ApiResult<usize> {
+    blocking(move || chat_store(&app).0.delete_all()).await
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn saving_is_off_writes_nothing() {
+        use crate::chat_store::{ChatStore, SavedChat};
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("a.csv");
+        std::fs::write(&file, "a\n1\n").unwrap();
+        let store = ChatStore::new(dir.path().join("chats"));
+        let key = super::tab_chat_key(&file, false, None).unwrap();
+        let chat = || SavedChat::new(&key, vec![parvu_ai::Message::user_text("q")], serde_json::json!({"items": []}), None, None);
+        assert!(!super::save_chat(&store, false, &key, chat()).unwrap());
+        assert!(!dir.path().join("chats").exists());
+        assert_eq!(store.count(), 0);
+        assert!(super::save_chat(&store, true, &key, chat()).unwrap());
+        assert_eq!(store.count(), 1);
+    }
+
+    #[test]
+    fn only_file_tabs_have_a_saved_chat() {
+        let p = std::path::Path::new("/data/book.xlsx");
+        assert!(super::tab_chat_key(std::path::Path::new(""), false, None).is_none());
+        assert!(super::tab_chat_key(p, true, None).is_none(), "a result tab not saved yet");
+        let k = super::tab_chat_key(p, false, Some("Q1")).unwrap();
+        assert_eq!(k.sheet.as_deref(), Some("Q1"));
+    }
+
     #[test]
     fn a_hanging_keychain_probe_counts_as_no_keychain() {
         let short = std::time::Duration::from_millis(100);

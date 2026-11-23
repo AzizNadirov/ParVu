@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **The AI assistant remembers each file's conversation.** Open a file again and the assistant panel shows its earlier conversation (each Excel sheet has its own), and follow-up questions carry on from it. Conversations stay on your computer, in `~/.ParVu/ai/chats`; New conversation deletes a file's saved one. Turn it off, or delete all saved conversations, in Settings → General → AI Assistant. See [docs/AI.md](docs/AI.md#conversations-are-remembered-per-file).
+
 ### Changed
 - **Excel Material is the default theme.** New installs start in Excel Material. If you already use ParVu, your chosen theme stays as it is.
 

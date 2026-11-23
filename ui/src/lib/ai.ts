@@ -2,7 +2,7 @@
 // backend's streamed events into a transcript.
 // @ts-ignore -- marked 4 ships no type declarations
 import { marked } from "marked";
-import type { AgentEvent, AiStop, AiUsage, Cell, ProviderConfig } from "./api";
+import type { AgentEvent, AiStop, AiUsage, Cell, ProviderConfig, SavedDisplay } from "./api";
 import { formatRows } from "./copy";
 
 export interface ProviderPreset {
@@ -72,6 +72,8 @@ export interface ChatState {
   usage: AiUsage;
   /** Dollars; null when any call had no known price. */
   cost: number | null;
+  /** The first `count` items came back from the file's saved conversation. */
+  restored?: { count: number; updatedMs: number };
 }
 
 export const emptyChat = (): ChatState => ({
@@ -151,6 +153,88 @@ export function finishRun(s: ChatState, error: string | null, cancelled: boolean
     ...updateLast(s, (a) => ({ ...a, done: true, error: error ?? undefined, cancelled: cancelled || undefined })),
     runId: null,
   };
+}
+
+// ---------- saved conversations (per file, ai_assistant.rs `ai_save_chat`)
+
+/** What is saved with the file: the finished items and the totals. */
+export function chatToSave(s: ChatState): SavedDisplay {
+  return {
+    items: s.items.filter((it) => it.kind === "user" || it.done),
+    usage: s.usage,
+    cost: s.cost,
+  };
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+function restorePart(p: unknown): AssistantPart | null {
+  if (!isObj(p)) return null;
+  switch (p.type) {
+    case "text":
+    case "thinking":
+      return typeof p.text === "string" ? { type: p.type, text: p.text } : null;
+    case "fallback":
+      return typeof p.from === "string" && typeof p.to === "string" ? { type: "fallback", from: p.from, to: p.to } : null;
+    case "tool": {
+      if (typeof p.id !== "string" || typeof p.name !== "string") return null;
+      const tool: Extract<AssistantPart, { type: "tool" }> = { type: "tool", id: p.id, name: p.name };
+      if (p.input !== undefined) tool.input = p.input;
+      if (typeof p.result === "string") tool.result = p.result;
+      if (typeof p.isError === "boolean") tool.isError = p.isError;
+      return tool;
+    }
+  }
+  return null;
+}
+
+function restoreItem(it: unknown): ChatItem | null {
+  if (!isObj(it)) return null;
+  if (it.kind === "user") return typeof it.text === "string" ? { kind: "user", text: it.text } : null;
+  if (it.kind !== "assistant" || !Array.isArray(it.parts)) return null;
+  const parts = it.parts.map(restorePart).filter((p): p is AssistantPart => p !== null);
+  const item: Extract<ChatItem, { kind: "assistant" }> = { kind: "assistant", parts, done: true };
+  if (isObj(it.stop) && typeof it.stop.type === "string") item.stop = it.stop as AiStop;
+  if (typeof it.error === "string") item.error = it.error;
+  // Saved while running: it can't go on.
+  if (it.cancelled === true || it.done !== true) item.cancelled = true;
+  return item;
+}
+
+/**
+ * A chat from a saved transcript (`display` of ai_load_chat), or `null` when
+ * it holds nothing to show. Anything malformed is skipped rather than
+ * trusted: the file may come from another version of ParVu.
+ */
+export function restoreChat(display: unknown, updatedMs: number): ChatState | null {
+  if (!isObj(display) || !Array.isArray(display.items)) return null;
+  const items = display.items.map(restoreItem).filter((it): it is ChatItem => it !== null);
+  if (!items.length) return null;
+  const u = isObj(display.usage) ? display.usage : {};
+  return {
+    items,
+    runId: null,
+    usage: {
+      input_tokens: num(u.input_tokens),
+      output_tokens: num(u.output_tokens),
+      cache_read_tokens: num(u.cache_read_tokens),
+      cache_write_tokens: num(u.cache_write_tokens),
+    },
+    cost: display.cost === null ? null : num(display.cost),
+    restored: { count: items.length, updatedMs },
+  };
+}
+
+/**
+ * Where the panel marks the restored conversation: the label row goes
+ * before item `before` = 0, and a plain rule after the restored items
+ * (`after`) once newer ones follow. `null` for a chat that wasn't restored.
+ */
+export function restoredDivider(s: ChatState): { updatedMs: number; after: number | null } | null {
+  if (!s.restored || s.restored.count === 0) return null;
+  const count = Math.min(s.restored.count, s.items.length);
+  return { updatedMs: s.restored.updatedMs, after: count < s.items.length ? count : null };
 }
 
 /** "1.2k tokens · $0.0040" */

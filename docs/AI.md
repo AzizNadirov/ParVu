@@ -40,6 +40,17 @@ Queries opened in a new tab are checked like the assistant's own: one SELECT ove
 
 Each tab has its own conversation. The ↺ button starts a new one. The panel shows the tokens used and, for Claude models, the estimated cost.
 
+### Conversations are remembered per file
+
+When you open a file again (from File → Open, the recent files, or the tabs restored at startup), the panel shows its earlier conversation under a line **Earlier conversation · date**, and the assistant remembers it: a follow-up question such as "and by month?" carries on from there. An Excel workbook has one conversation per sheet. Several tabs on the same file share it (the one that finished last is saved).
+
+- A result tab (group by, pivot, `ai_result`…) has no conversation saved until you save it to a file with **Save As**; its conversation then goes with the new file.
+- The ↺ button (New conversation) also deletes the saved one.
+- Only the latest 50 questions of a file are kept, and about 1 MB; older questions are dropped first.
+- To stop saving, turn off **Settings → General → AI Assistant → Remember AI conversations per file**. ParVu then asks whether to delete the conversations already saved. **Delete all saved conversations** there deletes them at any time.
+
+**Where they are kept:** in `~/.ParVu/ai/chats`, one file per data file, on your computer only. They contain your questions, the answers and the results of the assistant's queries, so they hold excerpts of your data. They are never sent anywhere, except that a remembered conversation goes to your provider with your next question about that file, as within a session.
+
 **What is sent to the provider:**
 - your question;
 - the active table's name, columns and first three rows;

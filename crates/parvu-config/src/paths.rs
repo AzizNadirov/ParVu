@@ -102,6 +102,17 @@ impl AppPaths {
         self.base.join("custom")
     }
 
+    /// `ai/` (not created): AI providers (`providers.json`) and saved chats.
+    pub fn ai_dir(&self) -> PathBuf {
+        self.base.join("ai")
+    }
+
+    /// `ai/chats/` (not created): the assistant's conversations, one JSON
+    /// file per data file (or Excel sheet).
+    pub fn ai_chats_dir(&self) -> PathBuf {
+        self.ai_dir().join("chats")
+    }
+
     /// `logs/`, created if missing (like Python `get_log_dir`).
     pub fn ensure_logs_dir(&self) -> std::io::Result<PathBuf> {
         let dir = self.logs_dir();

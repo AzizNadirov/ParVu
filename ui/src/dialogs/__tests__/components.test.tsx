@@ -95,6 +95,14 @@ describe("settings form", () => {
     expect(formToValues({ ...f, keepInTray: true }).keep_running_in_tray).toBe(true);
   });
 
+  it("remembers AI conversations unless turned off", () => {
+    const { remember_ai_chats: _, ...older } = settings;
+    expect(settingsToForm(older as typeof settings, "en", "x").rememberAiChats).toBe(true);
+    const f = settingsToForm({ ...settings, remember_ai_chats: false }, "en", "x");
+    expect(f.rememberAiChats).toBe(false);
+    expect(formToValues({ ...f, rememberAiChats: true }).remember_ai_chats).toBe(true);
+  });
+
   it("flags out-of-range numbers", () => {
     const f = settingsToForm(settings, "en", "x");
     expect(invalidNumericFields({ ...f, rowsPerPage: "5", sqlFontSize: "abc" })).toEqual(["rowsPerPage", "sqlFontSize"]);

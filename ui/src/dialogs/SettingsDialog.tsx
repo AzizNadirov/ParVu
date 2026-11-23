@@ -48,6 +48,7 @@ export interface SettingsForm {
   queryCollapsed: boolean;
   showSteps: boolean;
   showAi: boolean;
+  rememberAiChats: boolean;
 }
 
 /** [form field, min, max] for every numeric input. */
@@ -94,6 +95,7 @@ export function settingsToForm(s: Settings, language: string, theme: string): Se
     queryCollapsed: s.query_panel_collapsed ?? true,
     showSteps: s.show_steps_panel ?? false,
     showAi: s.show_ai_panel ?? false,
+    rememberAiChats: s.remember_ai_chats ?? true,
   };
 }
 
@@ -137,6 +139,7 @@ export function formToValues(f: SettingsForm): Partial<Settings> {
     query_panel_collapsed: f.queryCollapsed,
     show_steps_panel: f.showSteps,
     show_ai_panel: f.showAi,
+    remember_ai_chats: f.rememberAiChats,
   };
 }
 
@@ -149,6 +152,8 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
   const [themes, setThemes] = useState<ThemeDetails[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Saved AI conversations (null until counted). */
+  const [savedChats, setSavedChats] = useState<number | null>(null);
 
   const reloadThemes = async () => {
     try {
@@ -159,7 +164,19 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
   };
   useEffect(() => {
     reloadThemes();
+    api.aiSavedChats().then(setSavedChats, () => setSavedChats(null));
   }, []);
+
+  const deleteSavedChats = async (question: string): Promise<void> => {
+    if (!(await ui.confirm(t("settings.ai_chats.delete_title"), question))) return;
+    try {
+      const n = await api.aiDeleteSavedChats();
+      setSavedChats(0);
+      ui.status(t("settings.ai_chats.deleted", { count: n }), 4000);
+    } catch (e) {
+      await ui.alert(t("settings.ai_chats.delete_title"), errorMessage(e), "error");
+    }
+  };
 
   const set = <K extends keyof SettingsForm>(k: K, v: SettingsForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   const invalid = invalidNumericFields(form);
@@ -183,6 +200,11 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
       }
       a.onSettings(saved);
       close();
+      // Turned off: offer to delete what was saved so far.
+      if (ui.settings.remember_ai_chats !== false && !form.rememberAiChats) {
+        const count = await api.aiSavedChats().catch(() => 0);
+        if (count > 0) await deleteSavedChats(t("settings.ai_chats.off_confirm", { count }));
+      }
     } catch (e) {
       setBusy(false);
       await ui.alert(t("settings.error.save_failed"), t("settings.error.save_failed_msg", { error: errorMessage(e) }), "error");
@@ -274,6 +296,23 @@ function SettingsDialog({ ui, close, a }: { ui: Ui; close: () => void; a: Callba
         {check("showSteps", t("settings.label.show_steps"))}
         {check("showAi", t("settings.label.show_ai"))}
         <div className="pv-hint">{t("settings.hint.view")}</div>
+      </fieldset>
+      <fieldset>
+        <legend>{t("settings.group.ai")}</legend>
+        {check("rememberAiChats", t("settings.label.remember_ai_chats"), t("settings.tooltip.remember_ai_chats"))}
+        <div className="row" style={{ marginTop: 6 }}>
+          <span className="muted small grow">
+            {savedChats === null ? "" : t("settings.ai_chats.count", { count: savedChats })}
+          </span>
+          <button
+            disabled={!savedChats}
+            onClick={() =>
+              savedChats && void deleteSavedChats(t("settings.ai_chats.delete_confirm", { count: savedChats }))
+            }
+          >
+            {t("settings.ai_chats.delete_all")}
+          </button>
+        </div>
       </fieldset>
       <fieldset>
         <legend>{t("settings.group.exit")}</legend>

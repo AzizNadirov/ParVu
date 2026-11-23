@@ -707,6 +707,8 @@ export interface Settings {
   /** While AI clients are on, closing the last window hides it in the tray. */
   keep_running_in_tray: boolean;
   tray_notice_shown: boolean;
+  /** Save the assistant's conversation of each file (~/.ParVu/ai/chats). */
+  remember_ai_chats: boolean;
   detect_column_types: boolean;
   show_query_panel: boolean;
   query_panel_collapsed: boolean;
@@ -928,6 +930,22 @@ export type AgentEvent =
   | { type: "usage"; usage: AiUsage; model: string; cost_usd: number | null }
   | { type: "done"; stop: AiStop };
 
+/** A chat transcript as saved with the file (lib/ai.ts `chatToSave`). */
+export interface SavedDisplay {
+  items: unknown[];
+  usage: AiUsage;
+  cost: number | null;
+}
+
+/** A saved conversation (ai_assistant.rs `LoadedChat`). */
+export interface SavedChatView {
+  /** The transcript as saved; checked by lib/ai.ts `restoreChat`. */
+  display: unknown;
+  updated_ms: number;
+  provider: string | null;
+  model: string | null;
+}
+
 export interface AiRunEvent {
   run_id: number;
   tab_id: number | null;
@@ -1066,7 +1084,15 @@ export const api = {
   aiAsk: (providerId: string, tabId: number | null, question: string) =>
     call<number>("ai_ask", { provider_id: providerId, tab_id: tabId, question }),
   aiCancel: (runId: number, tabId: number | null) => call<boolean>("ai_cancel", { run_id: runId, tab_id: tabId }),
+  /** Forgets the tab's conversation and deletes its saved copy. */
   aiClearChat: (tabId: number | null) => call<void>("ai_clear_chat", { tab_id: tabId }),
+  /** The saved conversation of the tab's file; null when none (or saving is off). */
+  aiLoadChat: (tabId: number) => call<SavedChatView | null>("ai_load_chat", { tab_id: tabId }),
+  /** Save the tab's conversation for its file; false when not saved (setting off, no file). */
+  aiSaveChat: (tabId: number, display: SavedDisplay, providerId: string | null) =>
+    call<boolean>("ai_save_chat", { tab_id: tabId, display, provider_id: providerId }),
+  aiSavedChats: () => call<number>("ai_saved_chats"),
+  aiDeleteSavedChats: () => call<number>("ai_delete_saved_chats"),
 
   customList: () => call<CustomListing>("custom_list"),
   /** Run every check without saving; `editing` is the name it had when opened. */
