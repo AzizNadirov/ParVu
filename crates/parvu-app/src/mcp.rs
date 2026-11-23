@@ -98,8 +98,11 @@ impl Options {
     }
 }
 
+/// `~` is the user's home. In a snap, `$HOME` is the snap's own folder
+/// (`~/snap/parvu/<revision>`) and `$SNAP_REAL_HOME` the user's.
 fn expand_home(p: &str) -> PathBuf {
-    match (p.strip_prefix("~/").or(if p == "~" { Some("") } else { None }), dirs::home_dir()) {
+    let home = std::env::var_os("SNAP_REAL_HOME").filter(|h| !h.is_empty()).map(PathBuf::from).or_else(dirs::home_dir);
+    match (p.strip_prefix("~/").or(if p == "~" { Some("") } else { None }), home) {
         (Some(rest), Some(home)) => home.join(rest),
         _ => PathBuf::from(p),
     }

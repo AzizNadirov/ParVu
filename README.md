@@ -125,6 +125,11 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --prebuilt   # latest release
   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash                    # build from source
   ```
+- **Ubuntu and other Linux with snaps**: install ParVu from the App Center, or
+  ```bash
+  sudo snap install parvu
+  ```
+  The snap keeps its settings apart from the deb and opens files in your home folder; see [RELEASES.md](RELEASES.md#snap-ubuntu-app-center).
 - **Windows**: download and run `ParVu_<version>_x64-setup.exe`. It adds a Start menu entry and file associations.
 
 See [RELEASES.md](RELEASES.md) for details.

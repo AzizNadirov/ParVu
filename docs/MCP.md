@@ -179,3 +179,4 @@ Logs are in `~/.ParVu/logs`; start the server with `PARVU_LOG=debug` in the clie
 
 - A standalone `parvu mcp` process has its own tables. To work with the tabs in your window, use `parvu mcp --attach` (above).
 - On Windows the installed program is a GUI application; MCP over stdio has not been tested there yet.
+- With the snap (`sudo snap install parvu`) the commands are the same: `parvu` is `/snap/bin/parvu`. ParVu's files, `run/mcp.json` and the logs included, are in `~/snap/parvu/current/.ParVu`, and allowed folders must be in your home folder (or in `/media` and `/mnt` after `sudo snap connect parvu:removable-media`). See [RELEASES.md](../RELEASES.md#snap-ubuntu-app-center).

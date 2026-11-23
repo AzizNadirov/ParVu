@@ -1,0 +1,83 @@
+# ParVu as a snap (Snap Store / Ubuntu App Center).
+#
+# The snap repackages the released .deb, so it runs the same binary as the
+# deb. CI (.github/workflows/snap.yml) downloads the release's deb, checks it
+# against SHA256SUMS.txt and puts it at snap/local/parvu.deb before building.
+# Build by hand the same way: copy a deb there and run `snapcraft pack`.
+#
+# The version comes from the deb; versions with a "-" (1.1.0-beta.1) get
+# grade devel, others stable. See docs/BUILDING.md (The snap).
+name: parvu
+title: ParVu
+summary: View and query Parquet, CSV, JSON and Excel files
+description: |
+  ParVu views and queries large Parquet, CSV, JSON and Excel files with
+  DuckDB, without loading them into memory. Filter, sort, clean, reshape and
+  edit tables without SQL, or use full DuckDB SQL; add formula columns,
+  charts and conditional formatting, and save to Parquet, CSV, JSON, Excel or
+  Markdown.
+
+  An MCP server (`parvu mcp`) lets Claude and other AI clients work on the
+  tables open in ParVu; every change they make is approved in ParVu first.
+
+  ParVu can open files in your home folder and, with the removable-media
+  interface, in /media and /mnt. To keep AI API keys in the system keychain,
+  run: snap connect parvu:password-manager-service
+website: https://github.com/AzizNadirov/ParVu
+source-code: https://github.com/AzizNadirov/ParVu
+issues: https://github.com/AzizNadirov/ParVu/issues
+license: PolyForm-Noncommercial-1.0.0
+icon: crates/parvu-app/icons/icon.png
+base: core24
+confinement: strict
+adopt-info: parvu
+platforms:
+  amd64:
+
+apps:
+  parvu:
+    command: usr/bin/parvu
+    desktop: usr/share/applications/parvu.desktop
+    # gnome adds desktop, desktop-legacy, gsettings, opengl, wayland, x11,
+    # the GNOME 46 runtime (WebKitGTK 4.1, libsoup 3, ayatana-appindicator)
+    # and the layout that puts WebKit's helper processes where it looks.
+    extensions: [gnome]
+    plugs:
+      - home                      # files in $HOME (not hidden ones)
+      - removable-media           # /media, /mnt (manual connect)
+      - network                   # AI providers; MCP bridge to the window
+      - network-bind              # localhost listeners: single instance, MCP
+      - password-manager-service  # Secret Service for AI keys (manual connect)
+      - unity7                    # StatusNotifierItem: the tray icon
+
+parts:
+  parvu:
+    plugin: nil
+    source: snap/local
+    build-packages: [dpkg]
+    override-build: |
+      set -eu
+      deb="$CRAFT_PART_SRC/parvu.deb"
+      [ -f "$deb" ] || { echo "error: put the release .deb at snap/local/parvu.deb" >&2; exit 1; }
+      dpkg-deb -x "$deb" "$CRAFT_PART_INSTALL"
+
+      # 1.0.0~alpha.1 in the deb is 1.0.0-alpha.1 everywhere else.
+      version=$(dpkg-deb -f "$deb" Version | tr '~' '-')
+      craftctl set version="$version"
+      case "$version" in
+        *-*) craftctl set grade=devel ;;
+        *)   craftctl set grade=stable ;;
+      esac
+
+      # One desktop file under a fixed name, with the icon by path (snapd
+      # only exports icons named by path inside the snap).
+      cd "$CRAFT_PART_INSTALL/usr/share/applications"
+      for f in *.desktop; do [ "$f" = parvu.desktop ] || mv "$f" parvu.desktop; done
+      icon=/usr/share/icons/hicolor/512x512/apps/parvu.png
+      [ -f "$CRAFT_PART_INSTALL$icon" ] || { echo "error: no $icon in the deb" >&2; exit 1; }
+      sed -i "s|^Icon=.*|Icon=\${SNAP}$icon|" parvu.desktop
+      cat parvu.desktop
+    prime:
+      # The deb's MIME definitions can't be registered from a snap.
+      - -usr/share/mime
+      - -usr/share/doc

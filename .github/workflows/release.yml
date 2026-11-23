@@ -59,6 +59,14 @@ jobs:
     with:
       ref: refs/tags/${{ needs.check-version.outputs.tag }}
 
+  # The Snap Store package, built from the published deb (snap.yml).
+  snap:
+    needs: [check-version, publish]
+    uses: ./.github/workflows/snap.yml
+    with:
+      tag: ${{ needs.check-version.outputs.tag }}
+    secrets: inherit
+
   publish:
     needs: package
     runs-on: ubuntu-24.04
