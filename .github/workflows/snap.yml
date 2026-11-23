@@ -9,6 +9,8 @@ name: Snap
 # of an existing release by hand:
 #   gh workflow run Snap -f tag=v1.0.0
 on:
+  push:  # TEMPORARY: validate the build on the snap branch
+    branches: [snap]
   workflow_dispatch:
     inputs:
       tag:
@@ -29,7 +31,7 @@ permissions:
   contents: read
 
 env:
-  TAG: ${{ inputs.tag }}
+  TAG: ${{ inputs.tag || 'v1.0.0-alpha.11' }}  # TEMPORARY default for push
 
 jobs:
   snap:
@@ -85,7 +87,7 @@ jobs:
         run: |
           echo "::notice title=Snap not published::The SNAPCRAFT_STORE_CREDENTIALS secret is not set, so the snap was built (artifact parvu-snap) but not published to the ${{ steps.channel.outputs.channel }} channel."
       - uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1.2.0
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && github.event_name != 'push'
         with:
           snap: ${{ steps.build.outputs.snap }}
           release: ${{ steps.channel.outputs.channel }}
