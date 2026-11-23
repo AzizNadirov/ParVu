@@ -3475,7 +3475,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-ai"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 dependencies = [
  "eventsource-stream",
  "futures-util",
@@ -3490,7 +3490,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-app"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 dependencies = [
  "chrono",
  "dirs 7.0.0",
@@ -3524,7 +3524,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-config"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 dependencies = [
  "dirs 7.0.0",
  "serde",
@@ -3536,7 +3536,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-core"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 dependencies = [
  "calamine",
  "chrono",
@@ -3553,7 +3553,7 @@ dependencies = [
 
 [[package]]
 name = "parvu-dsl"
-version = "1.0.0-alpha.9"
+version = "1.0.0-alpha.10"
 dependencies = [
  "pest",
  "pest_derive",
