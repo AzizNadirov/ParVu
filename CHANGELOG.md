@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.11]
+
+The AI assistant remembers each file's conversation, Excel Material is the default theme, and ParVu feels quicker: switching tabs no longer runs their queries again. Plus readability and layout fixes in Excel Material.
+
 ### Added
 - **The AI assistant remembers each file's conversation.** Open a file again and the assistant panel shows its earlier conversation (each Excel sheet has its own), and follow-up questions carry on from it. Conversations stay on your computer, in `~/.ParVu/ai/chats`; New conversation deletes a file's saved one. Turn it off, or delete all saved conversations, in Settings → General → AI Assistant. See [docs/AI.md](docs/AI.md#conversations-are-remembered-per-file).
 
@@ -9,6 +13,8 @@
 - **Excel Material is the default theme.** New installs start in Excel Material. If you already use ParVu, your chosen theme stays as it is.
 
 ### Fixed
+- **Readable status bar text in Excel Material.** The "Read-only" hint and the unsaved-edits warning used colours meant for the window's background, so on Excel Material's green status bar they were nearly invisible. They now use the status bar's own text colour.
+- **Group By calculations keep a tidy layout.** Each calculation shows its function, column and ✕ on one line and its name below, instead of wrapping the ✕ onto a line of its own.
 - **Switching tabs no longer runs their queries again.** Going back to a tab showed its page by running the tab's query again, which on a big table with steps (a Group By, for example) took seconds every time. A tab that hasn't changed now shows its page at once, and colour scales aren't recomputed either.
 - **"Open in new tab" in the AI assistant shows that it's working.** The query runs again for the new tab, which can take a while on a big table; the button now shows a spinner and "Opening…" until the tab opens, and can't start the same run twice.
 

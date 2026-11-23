@@ -60,7 +60,7 @@ function GroupByDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nul
           <div className="pv-section-title">{t("dialog.group_by.aggregations")}</div>
           <div className="pv-rules">
             {aggs.map((g, i) => (
-              <div key={i} className="row">
+              <div key={i} className="pv-agg-row">
                 <select
                   value={aggChoice(g)}
                   onChange={(e) => setAggs((l) => l.map((x, j) => (j === i ? withAggChoice(x, e.target.value) : x)))}
@@ -111,12 +111,17 @@ function GroupByDialog({ ui, close, a }: { ui: Ui; close: Closer<Operation | nul
                   ))}
                 <input
                   type="text"
-                  className="pv-rule-name"
+                  className="pv-rule-name pv-agg-alias"
                   placeholder={t("dialog.group_by.alias")}
                   value={g.alias ?? ""}
                   onChange={(e) => update(i, { alias: e.target.value })}
                 />
-                <button className="pv-icon-btn" title={t("btn.remove")} onClick={() => setAggs((l) => l.filter((_, j) => j !== i))}>
+                <button
+                  className="pv-icon-btn pv-agg-remove"
+                  title={t("btn.remove")}
+                  aria-label={t("btn.remove")}
+                  onClick={() => setAggs((l) => l.filter((_, j) => j !== i))}
+                >
                   <Icon name="close" />
                 </button>
               </div>
