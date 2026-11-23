@@ -94,7 +94,15 @@ Remove it with `sudo snap remove parvu` (add `--purge` to delete its data in `~/
 
 ## Windows
 
-Run `ParVu_X.Y.Z_x64-setup.exe` and follow the wizard. It adds a Start menu entry and registers ParVu for Parquet, CSV, JSON and Excel files. Uninstall from **Settings → Apps**.
+With the Windows Package Manager:
+
+```powershell
+winget install AzizNadirov.ParVu
+```
+
+`winget upgrade AzizNadirov.ParVu` installs new versions. WinGet gets stable releases only, and a new version appears there after Microsoft's review of the submission, usually within a day or two of the release.
+
+Or run `ParVu_X.Y.Z_x64-setup.exe` and follow the wizard. It adds a Start menu entry and registers ParVu for Parquet, CSV, JSON and Excel files. Uninstall from **Settings → Apps**.
 
 ParVu uses Microsoft Edge WebView2, which is part of Windows 10 and 11. If it is missing, the installer downloads it.
 

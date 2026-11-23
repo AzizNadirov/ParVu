@@ -143,7 +143,7 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
   sudo snap install parvu
   ```
   The snap keeps its settings apart from the deb and opens files in your home folder; see [RELEASES.md](RELEASES.md#snap-ubuntu-app-center).
-- **Windows**: download and run `ParVu_<version>_x64-setup.exe`. It adds a Start menu entry and file associations.
+- **Windows**: `winget install AzizNadirov.ParVu`, or download and run `ParVu_<version>_x64-setup.exe`. It adds a Start menu entry and file associations.
 
 See [RELEASES.md](RELEASES.md) for details.
 

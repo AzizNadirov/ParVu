@@ -1,0 +1,64 @@
+name: WinGet
+
+# Opens a PR at microsoft/winget-pkgs that adds a new stable release of
+# ParVu (package AzizNadirov.ParVu), from the release's Windows installer.
+# Pre-releases (tags with a "-") are skipped.
+#
+# Needs the secret WINGET_TOKEN: a classic GitHub token with the
+# "public_repo" scope of the account that has a fork of microsoft/winget-pkgs
+# (AzizNadirov/winget-pkgs). Without it the job only prints a notice.
+#
+# Called by release.yml after the release is published. By hand:
+#   gh workflow run WinGet -f tag=v1.0.1
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable release to submit, e.g. v1.0.1
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Published release to submit
+        required: true
+        type: string
+    secrets:
+      WINGET_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  winget:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ inputs.tag }}
+      # Secrets can't be tested in "if:"; an empty variable means none is set.
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Stable releases only
+        id: check
+        run: |
+          if [[ "$TAG" == *-* ]]; then
+            echo "::notice::$TAG is a pre-release; WinGet gets stable releases only."
+            echo "submit=false" >> "$GITHUB_OUTPUT"
+          elif [[ -z "$WINGET_TOKEN" ]]; then
+            echo "::notice::No WINGET_TOKEN secret: not submitting $TAG to WinGet."
+            echo "submit=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "submit=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Submit to WinGet
+        if: steps.check.outputs.submit == 'true'
+        # vedantmgoyal9/winget-releaser v2
+        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54
+        with:
+          identifier: AzizNadirov.ParVu
+          release-tag: ${{ inputs.tag }}
+          installers-regex: '_x64-setup\.exe$'
+          release-notes-url: https://github.com/AzizNadirov/ParVu/releases/tag/${{ inputs.tag }}
+          max-versions-to-keep: 5
+          fork-user: AzizNadirov
+          token: ${{ secrets.WINGET_TOKEN }}

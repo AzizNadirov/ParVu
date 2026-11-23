@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- **ParVu in the Windows Package Manager.** Install it with `winget install AzizNadirov.ParVu` and update it with `winget upgrade`.
+
+### Changed
+- **A smaller Linux package.** The `.deb` is now compressed with xz, like the pre-releases already were: about 25 MB to download instead of 37 MB.
+
+### Added
 - **APT repository for Ubuntu and Debian.** Add it once and `sudo apt upgrade` installs new ParVu versions with your other updates. Pre-releases have their own `beta` suite. The repository is signed; setup steps are in [RELEASES.md](RELEASES.md#apt-repository-recommended) and at https://aziznadirov.github.io/ParVu/apt/. `install.sh --apt` sets it up for you.
 - **ParVu in the Snap Store.** On Ubuntu, install ParVu from the App Center or with `sudo snap install parvu` (pre-releases: `--beta`); it updates itself. The snap keeps its own settings in `~/snap/parvu`, opens files in your home folder (and in `/media` and `/mnt` once you allow removable media), and needs `sudo snap connect parvu:password-manager-service` to keep AI keys in the keychain. See [RELEASES.md](RELEASES.md#snap-ubuntu-app-center).
 
