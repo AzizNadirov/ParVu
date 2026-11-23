@@ -38,6 +38,28 @@ The `parvu` command also runs an MCP server for Claude Code, Claude Desktop and 
 
 Beta packages are named `parvu-next` and install next to `parvu`, so you can try a new version without removing the current one. Start the beta with `parvu-next`; it has its own menu entry. Both share `~/.ParVu`. Remove the beta with `sudo apt remove parvu-next`.
 
+## Snap (Ubuntu App Center)
+
+```bash
+sudo snap install parvu            # stable releases
+sudo snap install parvu --beta     # pre-releases (1.1.0-beta.1 and so on)
+parvu
+```
+
+or search for ParVu in the App Center. The snap runs the same program as the deb, inside the snap sandbox, and updates itself.
+
+- **AI keys in the keychain:** the snap can use the system keychain only after you allow it once:
+  ```bash
+  sudo snap connect parvu:password-manager-service
+  ```
+  Without it, ParVu reads keys from environment variables (see [docs/AI.md](docs/AI.md)).
+- **Files ParVu can open:** those in your home folder, except hidden files and folders (such as `~/.local`), and, after `sudo snap connect parvu:removable-media`, those in `/media` and `/mnt`. A file you pick elsewhere in the Open dialog is passed in by the desktop's file portal.
+- **Settings and data:** the snap keeps its own `~/.ParVu` in `~/snap/parvu/current/.ParVu`, so it doesn't share settings, recent files, themes or custom tools with the deb. To take them over, close the snap's ParVu and copy the folder: `cp -a ~/.ParVu/. ~/snap/parvu/current/.ParVu/`. Logs are in `~/snap/parvu/current/.ParVu/logs/`.
+- **AI clients:** `parvu mcp --attach` and `parvu mcp --allow-dir <folder>` work as with the deb, through `/snap/bin/parvu` (see [docs/MCP.md](docs/MCP.md)). Allowed folders must be in your home folder, or in `/media` or `/mnt` with removable-media.
+- **File types:** the snap registers ParVu for CSV, JSON and Excel files. Ubuntu doesn't know the Parquet file type by itself (the deb adds it), so "Open With" may not offer ParVu for `.parquet` files; open them from ParVu or drop them onto its window.
+
+Remove it with `sudo snap remove parvu` (add `--purge` to delete its data in `~/snap/parvu` too). The deb and the snap can be installed together; in a terminal, `parvu` then runs the deb (`/usr/bin` comes before `/snap/bin` on the `PATH`), and `/snap/bin/parvu` the snap.
+
 ## Windows
 
 Run `ParVu_X.Y.Z_x64-setup.exe` and follow the wizard. It adds a Start menu entry and registers ParVu for Parquet, CSV, JSON and Excel files. Uninstall from **Settings → Apps**.
@@ -79,6 +101,8 @@ Releases are built and published by GitHub Actions (`.github/workflows/release.y
    git push origin v1.0.0
    ```
 3. The workflow checks that the tag matches the version, runs the tests, builds the deb and the Windows installer, and publishes a GitHub release with both files, `SHA256SUMS.txt`, and the changelog section as notes. The notes start with install commands for the release's own files. Versions with a `-` (such as `1.1.0-beta.1`) are marked as pre-releases once a stable 1.x release exists; until then each alpha or beta becomes the Latest release, so the releases page doesn't point at the 0.x Python app. A tag that doesn't match the version fails before anything is built.
+
+4. After publishing, the workflow builds the snap from the release's deb (`.github/workflows/snap.yml`) and publishes it to the Snap Store: the `stable` channel for versions without a `-`, `beta` for pre-releases. Without the `SNAPCRAFT_STORE_CREDENTIALS` secret it only builds the snap and keeps it as the run artifact `parvu-snap`. To build or publish the snap of an existing release again: `gh workflow run Snap -f tag=v1.0.0`.
 
 Re-running a failed release workflow replaces the files of the existing release. To build installers locally, see [docs/BUILDING.md](docs/BUILDING.md).
 

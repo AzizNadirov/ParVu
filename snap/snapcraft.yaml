@@ -73,7 +73,7 @@ parts:
       # only exports icons named by path inside the snap).
       cd "$CRAFT_PART_INSTALL/usr/share/applications"
       for f in *.desktop; do [ "$f" = parvu.desktop ] || mv "$f" parvu.desktop; done
-      icon=/usr/share/icons/hicolor/128x128/apps/parvu.png
+      icon=/usr/share/icons/hicolor/512x512/apps/parvu.png
       [ -f "$CRAFT_PART_INSTALL$icon" ] || { echo "error: no $icon in the deb" >&2; exit 1; }
       sed -i "s|^Icon=.*|Icon=\${SNAP}$icon|" parvu.desktop
       cat parvu.desktop
