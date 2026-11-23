@@ -3,7 +3,8 @@ name: Release
 # Pushing a tag such as v1.0.0 or v1.0.0-alpha.1 tests, builds both
 # installers and publishes them as a GitHub release. Versions with a "-"
 # are marked as pre-releases. The notes come from that version's section in
-# CHANGELOG.md, followed by SHA-256 checksums.
+# CHANGELOG.md, followed by SHA-256 checksums. Last, apt.yml rebuilds the
+# APT repository on GitHub Pages.
 #
 # To retry a release with the current version of this workflow (re-running a
 # failed run uses the workflow file of the tagged commit), start it by hand:
@@ -151,3 +152,16 @@ jobs:
           else
             gh release create "$TAG" dist/* --verify-tag --title "ParVu ${TAG#v}" --notes-file notes.md "${flags[@]}"
           fi
+
+  # Updates the APT repository on GitHub Pages. It runs after the release is
+  # published and nothing depends on it, so a failure here (for example a
+  # missing APT_SIGNING_KEY secret) leaves the release in place; fix the
+  # cause and run "APT repository" by hand.
+  apt:
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/apt.yml
+    secrets: inherit

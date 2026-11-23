@@ -1,0 +1,134 @@
+name: APT repository
+
+# Builds the signed APT repository from the GitHub releases and deploys it to
+# GitHub Pages at https://aziznadirov.github.io/ParVu/apt/.
+#
+# release.yml calls this after publishing a release (a release made with
+# GITHUB_TOKEN doesn't trigger "release: published" workflows). Run it by hand
+# to rebuild the repository, e.g. after editing or deleting a release:
+#   gh workflow run "APT repository"
+#
+# Needs the secret APT_SIGNING_KEY: the ASCII-armoured private key, without a
+# passphrase, whose public key is packaging/apt/parvu-archive-keyring.asc and
+# whose fingerprint is APT_KEY_FINGERPRINT below. Generator:
+# packaging/apt/build_repo.py.
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      APT_SIGNING_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  # The repository signing key. Also in RELEASES.md and install.sh.
+  APT_KEY_FINGERPRINT: 1E388778760398FC6DFC2827E7FEC775800FCADB
+  KEEP_VERSIONS: 3
+
+jobs:
+  # Builds and signs the site. No environment here, so a missing secret is
+  # reported by the first step, not by the environment's rules.
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Signing key is configured
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          if [ -z "$APT_SIGNING_KEY" ]; then
+            echo "::error::The secret APT_SIGNING_KEY is not set, so the APT repository was not updated (the GitHub release itself is already published). Add the ASCII-armoured private signing key as a repository secret and run this workflow again: gh workflow run \"APT repository\""
+            exit 1
+          fi
+          if ! [[ "$APT_KEY_FINGERPRINT" =~ ^[0-9A-F]{40}$ ]]; then
+            echo "::error::APT_KEY_FINGERPRINT in .github/workflows/apt.yml is \"$APT_KEY_FINGERPRINT\", not a 40-digit fingerprint. Commit the real public key and fingerprint first (see RELEASES.md)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Generator tests
+        run: python3 -m unittest discover -s packaging/apt
+
+      - name: Import the signing key
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          GNUPGHOME="$RUNNER_TEMP/gnupg"
+          install -d -m 0700 "$GNUPGHOME"
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          printf '%s\n' "$APT_SIGNING_KEY" | gpg --homedir "$GNUPGHOME" --batch --quiet --import
+          secret=$(gpg --homedir "$GNUPGHOME" --batch --with-colons --list-secret-keys \
+                   | awk -F: '$1=="sec"{p=1;next} $1=="fpr"&&p{print $10;p=0}')
+          if [ -z "$secret" ]; then
+            echo "::error::APT_SIGNING_KEY does not contain a private key."
+            exit 1
+          fi
+          if [ "$secret" != "$APT_KEY_FINGERPRINT" ]; then
+            echo "::error::APT_SIGNING_KEY holds the key(s) $(echo $secret), but the repository's key is $APT_KEY_FINGERPRINT. Nothing was published."
+            exit 1
+          fi
+          echo "Signing key $secret"
+
+      - name: Choose releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' > releases.jsonl
+          python3 packaging/apt/build_repo.py plan --releases releases.jsonl --keep "$KEEP_VERSIONS" > plan.json
+          cat plan.json
+
+      - name: Download and verify the packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -r '.releases[] | "\(.tag) \(.asset)"' plan.json | while read -r tag asset; do
+            dir="debs/$tag"
+            mkdir -p "$dir"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$dir" \
+              --pattern "$asset" --pattern SHA256SUMS.txt
+            if [ ! -s "$dir/SHA256SUMS.txt" ]; then
+              echo "::error::Release $tag has no SHA256SUMS.txt."
+              exit 1
+            fi
+            sum=$(sha256sum "$dir/$asset" | cut -d' ' -f1)
+            if ! grep -Eq "^$sum [ *]?$asset\$" "$dir/SHA256SUMS.txt"; then
+              echo "::error::$asset does not match the checksum in the SHA256SUMS.txt of release $tag."
+              exit 1
+            fi
+            echo "$tag: $asset $sum OK"
+          done
+
+      - name: Build and sign the repository
+        run: |
+          python3 packaging/apt/build_repo.py build --plan plan.json --debs debs --out site \
+            --public-key packaging/apt/parvu-archive-keyring.asc \
+            --fingerprint "$APT_KEY_FINGERPRINT" --gnupghome "$GNUPGHOME"
+          for suite in site/apt/dists/*/; do
+            gpg --homedir "$GNUPGHOME" --batch --verify "$suite/InRelease"
+            gpg --homedir "$GNUPGHOME" --batch --verify "$suite/Release.gpg" "$suite/Release"
+          done
+          rm -rf "$GNUPGHOME" debs
+          du -ah site | sort -h | tail -20
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}apt/
+    # One deployment at a time, and a running one is never cancelled.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
