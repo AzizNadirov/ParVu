@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.0-alpha.10]
+
+Keep what the AI assistant runs: copy its SQL, open its full result in a new tab to save or export, or edit the query in the SQL editor. Also fixes a blank window at startup on desktops without a keyring.
+
 ### Fixed
 - **ParVu no longer hangs at startup on desktops without a keyring.** Checking whether API keys can be stored in the system keychain could wait forever when no keyring service was running, leaving the window blank. The check now gives up after 3 seconds (keys then come from environment variables) and never runs on the window's main thread.
 
