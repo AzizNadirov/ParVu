@@ -13,11 +13,9 @@ ParVu can open data files straight from the file manager.
 
 ## Linux (Ubuntu/Debian)
 
-Installing the `.deb` package registers ParVu for these types and adds a Parquet MIME type, so ParVu appears under **Open With**:
+Installing ParVu with apt (from the APT repository or a downloaded `.deb`, see [RELEASES.md](../RELEASES.md#linux)) registers it for these types and adds a Parquet MIME type, so ParVu appears under **Open With**.
 
-```bash
-sudo dpkg -i parvu_<version>_amd64.deb
-```
+The snap registers ParVu for CSV, JSON and Excel files. A snap can't add MIME types, so `.parquet` files only offer ParVu when the system already knows the Parquet type (for example after installing the deb once); in the snap the desktop file is `parvu_parvu.desktop`.
 
 ### Make ParVu the default
 
