@@ -77,7 +77,27 @@ Never ship a build made without `bundled-duckdb`: it depends on a DuckDB library
 
 - **Every push to `main` or `rust-*` branches, and pull requests:** UI checks, clippy and the Rust tests (including `parvu-app`), with the prebuilt DuckDB (a few minutes). The Rust build cache also keeps the downloaded DuckDB library (`target/duckdb-download`); without it a restored cache fails to link on Windows.
 - **`main` and manual runs** (`gh workflow run CI --ref <branch>`): also builds the Linux and Windows installers (`package.yml`), and on Linux installs the `.deb` and starts the app with an empty home directory. The installers are uploaded as run artifacts.
-- **`v*` tags** (`release.yml`): the same tests and installers, published as a GitHub release. See [RELEASES.md](../RELEASES.md#building-a-release).
+- **`v*` tags** (`release.yml`): the same tests and installers, published as a GitHub release, then the snap (`snap.yml`, below). See [RELEASES.md](../RELEASES.md#building-a-release).
+
+## The snap
+
+The snap (`snap/snapcraft.yaml`) is not built from source: it repackages the release's `.deb`, so it runs exactly the binary the deb installs.
+
+- **Base and runtime:** `core24` with the `gnome` extension. The GNOME 46 runtime (`gnome-46-2404`) provides GTK 3, WebKitGTK 4.1, libsoup 3 and `libayatana-appindicator3` (the tray icon), so the snap stages no libraries; the extension also adds the layout that lets WebKit find its helper processes, `GTK_USE_PORTAL=1` (file dialogs go through the desktop portal) and the `desktop`, `desktop-legacy`, `gsettings`, `opengl`, `wayland` and `x11` plugs.
+- **Other plugs:** `home`, `removable-media` (manual connect), `network` (AI providers), `network-bind` (the `127.0.0.1` listeners for the single instance and for AI clients), `password-manager-service` (the keychain, manual connect) and `unity7` (the tray icon's StatusNotifier D-Bus calls).
+- **Version and grade** come from the deb: `1.0.0~alpha.1` becomes `1.0.0-alpha.1`, versions with a `-` get grade `devel`, others `stable`.
+- **The desktop entry** is the deb's, with the icon given by path inside the snap. The deb's Parquet MIME type is left out: a snap can't register MIME types.
+- **Data:** under strict confinement `$HOME` is `~/snap/parvu/<revision>`, so ParVu's `~/.ParVu` is there. `parvu mcp --attach`, started through `/snap/bin/parvu`, sees the same `$HOME`, so it finds the window's `run/mcp.json`. `~` in `parvu mcp` paths means the real home (`$SNAP_REAL_HOME`).
+
+`.github/workflows/snap.yml` runs after each release (from `release.yml`) or by hand (`gh workflow run Snap -f tag=v1.0.0`). It downloads the release's deb, checks it against `SHA256SUMS.txt`, saves it as `snap/local/parvu.deb`, builds with `snapcore/action-build` (snapcraft in LXD), checks that the snap's version matches the tag, uploads the `.snap` as the artifact `parvu-snap` and, when the `SNAPCRAFT_STORE_CREDENTIALS` secret is set, publishes it to `stable` (no `-` in the tag) or `beta`.
+
+To build it locally (snapcraft needs LXD or Multipass):
+
+```bash
+cp parvu_1.0.0_amd64.deb snap/local/parvu.deb
+snapcraft pack
+sudo snap install --dangerous ./parvu_1.0.0_amd64.snap
+```
 
 ## Packaging files
 
@@ -88,5 +108,6 @@ Never ship a build made without `bundled-duckdb`: it depends on a DuckDB library
 | `crates/parvu-app/tauri.next.conf.json` | Overrides for the `parvu-next` beta |
 | `crates/parvu-app/packaging/` | Desktop entries, MIME type for Parquet, `postinst`/`postrm` |
 | `crates/parvu-app/icons/` | App icons |
+| `snap/snapcraft.yaml` | The snap, made from the release's deb |
 
 The version is set in `Cargo.toml` (`workspace.package.version`), `crates/parvu-app/tauri.conf.json` and `ui/package.json`.

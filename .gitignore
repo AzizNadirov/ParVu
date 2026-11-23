@@ -39,3 +39,7 @@ logs/
 *~
 .DS_Store
 __pycache__/
+
+# Snap
+/snap/local/*.deb
+*.snap
