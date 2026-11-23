@@ -13,7 +13,7 @@ ParVu features a comprehensive theme system that allows you to customize:
 
 ParVu comes with 6 built-in themes. The interface follows Material Design 3 in all of them; a theme sets the colours, fonts and sizes, and the Material surfaces, outlines and state colours are derived from those.
 
-### Material Light (Default)
+### Material Light
 - Material Design 3 baseline light colours (purple primary)
 - Roboto and Roboto Mono, bundled with the app
 
@@ -26,7 +26,7 @@ ParVu comes with 6 built-in themes. The interface follows Material Design 3 in a
 - Blue and green accents
 - Optimized for long viewing sessions
 
-### Excel Material
+### Excel Material (Default)
 - Excel's green in Material Design 3: green-tinted surfaces, tonal buttons, a green status bar
 - Light green column headers, Calibri in the table and dense rows, like a spreadsheet
 - Called "Excel" before 1.0.0; settings that name "Excel" open this theme

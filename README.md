@@ -233,10 +233,10 @@ Settings are stored in `~/.ParVu/settings/settings.json` and can be changed in F
 
 ### Themes
 
-- **Material Light** - default; Material Design 3 light colours with Roboto
+- **Material Light** - Material Design 3 light colours with Roboto
 - **Material Dark** - Material Design 3 dark colours
 - **ParVu Light** - the original light theme
-- **Excel Material** - Excel green in Material Design 3, with dense rows
+- **Excel Material** - default; Excel green in Material Design 3, with dense rows
 - **Jupyter** - the look of JupyterLab: white surfaces, its blue and orange, its code colours
 - **ParVu Black** - dark theme
 
