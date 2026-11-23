@@ -51,7 +51,7 @@ import { isDark } from "./lib/chart";
 import { DATE_FILTERS, EXTRACT_FNS, fnLabelKey, hasTime, isDateFamily, previewValues, TEXT_FNS, type FnName } from "./lib/colfn";
 import { applyThemeCss, resolvedColor } from "./lib/theme";
 import { UiContext, type Closer, type MessageButton, type Ui } from "./lib/ui";
-import { formatRows, pythonTuple } from "./lib/copy";
+import { formatRows, pythonTuple, selectionMarkdown, type MarkdownCopy } from "./lib/copy";
 import type { ExprSchema } from "./lib/exprComplete";
 import { Dialog } from "./components/Dialog";
 import { MenuBar, PopupMenu, type MenuEntry } from "./components/PopupMenu";
@@ -1313,16 +1313,31 @@ export function App({ boot }: { boot: Bootstrap }) {
   };
 
   const cellMenu = (row: number, col: number): MenuEntry[] => {
-    const copy = (format: "tsv" | "csv" | "markdown", headers = false) => {
+    const copy = (format: "tsv" | "csv", headers = false) => {
       // Read the selection when the item is chosen: a right-click outside
       // the selection selects the clicked cell, and that state isn't in
       // place yet while the menu is being built.
       const sel = grid.current?.selection();
       if (!sel) return;
       void copyText(
-        formatRows(sel.rows, format, headers || format === "markdown" ? sel.columns : undefined),
+        formatRows(sel.rows, format, headers ? sel.columns : undefined),
         t("status.copied_cells", { rows: sel.rows.length, cols: sel.columns.length }),
       );
+    };
+    /** The selection as a Markdown table; row numbers are absolute (page offset + row). */
+    const copyMarkdown = (mode: MarkdownCopy) => {
+      const sel = grid.current?.selection();
+      const range = grid.current?.selectionRange();
+      if (!sel || !range || !page) return;
+      const md = selectionMarkdown(page, range, sel, mode, isNumericType);
+      const counts = { rows: sel.rows.length, cols: sel.columns.length, first: md.first, last: md.last };
+      const done =
+        mode === "row_numbers"
+          ? t("status.copied_markdown_row_numbers", counts)
+          : mode === "no_header"
+            ? t("status.copied_markdown_no_header", counts)
+            : t("status.copied_markdown", counts);
+      void copyText(md.text, done);
     };
     const value = page?.rows[row]?.[col] ?? null;
     const column = page?.columns[col]?.name ?? "";
@@ -1333,7 +1348,14 @@ export function App({ boot }: { boot: Bootstrap }) {
         icon: "paste",
         submenu: [
           { label: t("context.copy_csv"), onSelect: () => copy("csv") },
-          { label: t("context.copy_markdown"), onSelect: () => copy("markdown") },
+          {
+            label: t("context.copy_markdown"),
+            submenu: [
+              { label: t("context.copy_markdown_table"), onSelect: () => copyMarkdown("table") },
+              { label: t("context.copy_markdown_row_numbers"), onSelect: () => copyMarkdown("row_numbers") },
+              { label: t("context.copy_markdown_no_header"), onSelect: () => copyMarkdown("no_header") },
+            ],
+          },
           { label: t("context.copy_with_headers"), onSelect: () => copy("tsv", true) },
         ],
       },

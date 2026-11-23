@@ -419,6 +419,28 @@ fn export_options() {
 }
 
 #[test]
+fn markdown_export() {
+    let (d, _p, ws, id) = setup(3, "parquet");
+    let mut o = ExportOptions::for_path(d.path().join("o.md"));
+    assert_eq!(o.format, ExportFormat::Markdown);
+    o.columns = vec![
+        ColumnSpec { name: "id".into(), source_type: "BIGINT".into(), include: true, cast_to: String::new() },
+        ColumnSpec { name: "name".into(), source_type: "VARCHAR".into(), include: true, cast_to: String::new() },
+        ColumnSpec { name: "day".into(), source_type: "DATE".into(), include: true, cast_to: String::new() },
+    ];
+    o.date_format = "%d/%m/%Y".into();
+    o.row_numbers = true;
+    assert_eq!(ws.export(id, &o).unwrap(), 3);
+    let text = std::fs::read_to_string(&o.path).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "| # | id | name | day |");
+    // A formatted date is text, so it is left-aligned.
+    assert_eq!(lines[1], "| ---: | ---: | --- | --- |");
+    assert_eq!(lines[2], "| 1 | 0 | name_0 | 01/01/2024 |");
+    assert_eq!(lines.len(), 5);
+}
+
+#[test]
 fn stats_unique_tuple_and_search() {
     let (_d, _p, mut ws, id) = setup(100, "parquet");
     let s = ws.column_stats(id, "id").unwrap();

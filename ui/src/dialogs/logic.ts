@@ -198,9 +198,9 @@ export function statsRows(s: ColumnStats): [string, string][] {
 
 // ---------------------------------------------------------------- export
 
-export type ExportFileType = "csv" | "tsv" | "parquet" | "json" | "jsonl" | "xlsx";
+export type ExportFileType = "csv" | "tsv" | "parquet" | "json" | "jsonl" | "xlsx" | "md";
 
-export const EXPORT_FILE_TYPES: ExportFileType[] = ["csv", "tsv", "parquet", "json", "jsonl", "xlsx"];
+export const EXPORT_FILE_TYPES: ExportFileType[] = ["csv", "tsv", "parquet", "json", "jsonl", "xlsx", "md"];
 
 const EXT_TO_TYPE: Record<string, ExportFileType> = {
   csv: "csv",
@@ -211,6 +211,8 @@ const EXT_TO_TYPE: Record<string, ExportFileType> = {
   jsonl: "jsonl",
   ndjson: "jsonl",
   xlsx: "xlsx",
+  md: "md",
+  markdown: "md",
 };
 
 export function fileExtension(path: string): string {
@@ -236,6 +238,8 @@ export function exportFormatOf(type: ExportFileType): ExportFormat {
       return "json";
     case "xlsx":
       return "excel";
+    case "md":
+      return "markdown";
   }
 }
 
@@ -288,11 +292,20 @@ export interface ExportFormState {
   includeHeader: boolean;
   quoting: Quoting;
   compression: string;
+  /** Markdown: a first column with row numbers. */
+  rowNumbers: boolean;
 }
 
 /** Date formatting only shapes text output, and only matters with temporal columns. */
 export function datesApplicable(type: ExportFileType, columns: { dtype: string }[]): boolean {
   return type !== "parquet" && columns.some((c) => isTemporal(c.dtype));
+}
+
+/** Markdown tables this long make a big, unreadable file: ask first. */
+export const MARKDOWN_LARGE_ROWS = 100_000;
+
+export function markdownTooLong(type: ExportFileType, rows: number | null): boolean {
+  return type === "md" && rows !== null && rows > MARKDOWN_LARGE_ROWS;
 }
 
 export function exportValidation(s: ExportFormState): "no_path" | "no_columns" | null {
@@ -321,6 +334,7 @@ export function buildExportOptions(s: ExportFormState): ExportOptions {
     quoting: s.quoting,
     compression: s.compression,
     json_lines: s.type === "jsonl",
+    row_numbers: s.type === "md" && s.rowNumbers,
   };
 }
 
@@ -340,6 +354,7 @@ export function initialExportState(
     includeHeader: true,
     quoting: "needed",
     compression: defaultCompression,
+    rowNumbers: false,
   };
 }
 

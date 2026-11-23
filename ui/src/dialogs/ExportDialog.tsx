@@ -20,6 +20,7 @@ import {
   fileTypeForPath,
   initialExportState,
   isTemporal,
+  markdownTooLong,
   withExtension,
 } from "./logic";
 import type { ExportFileType, ExportFormState } from "./logic";
@@ -41,6 +42,7 @@ const TYPE_LABEL_KEYS: Record<ExportFileType, string> = {
   json: "dialog.export.type.json",
   jsonl: "dialog.export.type.jsonl",
   xlsx: "dialog.export.type.xlsx",
+  md: "dialog.export.type.md",
 };
 
 const TYPE_EXTENSIONS: Record<ExportFileType, string[]> = {
@@ -50,6 +52,7 @@ const TYPE_EXTENSIONS: Record<ExportFileType, string[]> = {
   json: ["json"],
   jsonl: ["jsonl", "ndjson"],
   xlsx: ["xlsx"],
+  md: ["md", "markdown"],
 };
 
 /**
@@ -91,6 +94,7 @@ function ExportDialog({ ui, close, a }: { ui: Ui; close: Closer<ExportFinished |
   const [phase, setPhase] = useState<Phase>({ kind: "form" });
   const [error, setError] = useState<string | null>(null);
   const [pendingEdits, setPendingEdits] = useState(0);
+  const [totalRows, setTotalRows] = useState<number | null>(null);
   const sub = useRef<Awaited<ReturnType<typeof subscribeExport>> | null>(null);
   const pathRef = useAutoFocus<HTMLInputElement>(true);
   const jobRef = useRef<number | null>(null);
@@ -98,7 +102,10 @@ function ExportDialog({ ui, close, a }: { ui: Ui; close: Closer<ExportFinished |
   useEffect(() => {
     api
       .tabSummary(a.tabId)
-      .then((sum) => setPendingEdits(sum.pending_edits))
+      .then((sum) => {
+        setPendingEdits(sum.pending_edits);
+        setTotalRows(sum.total_rows);
+      })
       .catch(() => undefined);
     return () => {
       // Closed while still running (e.g. the window went away): stop the job too.
@@ -148,6 +155,11 @@ function ExportDialog({ ui, close, a }: { ui: Ui; close: Closer<ExportFinished |
   const start = async () => {
     if (invalid || running) return;
     setError(null);
+    if (
+      markdownTooLong(s.type, totalRows) &&
+      !(await ui.confirm(t("dialog.export.markdown_large_title"), t("dialog.export.markdown_large_msg", { rows: totalRows ?? 0 })))
+    )
+      return;
     const options = buildExportOptions(s);
     setPhase({ kind: "running", job: null, percent: null, cancelling: false });
     try {
@@ -382,6 +394,19 @@ function ExportDialog({ ui, close, a }: { ui: Ui; close: Closer<ExportFinished |
             </label>
           )}
           {s.type === "xlsx" && <div className="pv-hint">{t("dialog.export.excel_hint")}</div>}
+          {s.type === "md" && (
+            <>
+              <label className="row">
+                <input type="checkbox" checked={s.includeHeader} onChange={(e) => set("includeHeader", e.target.checked)} />
+                {t("dialog.export.header")}
+              </label>
+              <label className="row">
+                <input type="checkbox" checked={s.rowNumbers} onChange={(e) => set("rowNumbers", e.target.checked)} />
+                {t("dialog.export.row_numbers")}
+              </label>
+              <div className="pv-hint">{t("dialog.export.markdown_hint")}</div>
+            </>
+          )}
         </fieldset>
       </fieldset>
       {error && <div className="error-text">{t("error.export_error_msg", { error })}</div>}

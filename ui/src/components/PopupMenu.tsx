@@ -24,14 +24,21 @@ export interface PopupMenuProps {
   onClose: () => void;
   /** Keep the menu open when this element is clicked (the menu-bar title). */
   anchor?: HTMLElement | null;
+  /** A submenu opened from the keyboard starts on its first item. */
+  startActive?: boolean;
+  /** ArrowLeft in a submenu: back to the parent menu. */
+  onBack?: () => void;
 }
 
-export function PopupMenu({ x, y, items, onClose, anchor }: PopupMenuProps) {
+export function PopupMenu({ x, y, items, onClose, anchor, startActive, onBack }: PopupMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
   const [openSub, setOpenSub] = useState<number | null>(null);
+  const [subByKey, setSubByKey] = useState(false);
   const [subPos, setSubPos] = useState({ x: 0, y: 0 });
-  const [active, setActive] = useState(-1);
+  const [active, setActive] = useState(() =>
+    startActive ? items.findIndex((it) => it.type !== "separator" && !it.disabled) : -1,
+  );
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -77,13 +84,24 @@ export function PopupMenu({ x, y, items, onClose, anchor }: PopupMenuProps) {
       const next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
       const wrapped = (next + selectable.length) % Math.max(1, selectable.length);
       setActive(selectable[wrapped]?.i ?? -1);
-    } else if (e.key === "Enter" && active >= 0) {
+    } else if ((e.key === "Enter" || e.key === "ArrowRight") && active >= 0) {
       e.preventDefault();
       const it = items[active];
-      if (it.type !== "separator" && it.onSelect && !it.submenu) {
+      if (it.type === "separator" || it.disabled) return;
+      if (it.submenu) {
+        // Open the submenu from the keyboard, next to its item.
+        const el = ref.current?.querySelectorAll<HTMLElement>(":scope > .menu-item, :scope > .menu-sep")[active];
+        const r = el?.getBoundingClientRect();
+        if (r) setSubPos({ x: r.right - 2, y: r.top - 4 });
+        setSubByKey(true);
+        setOpenSub(active);
+      } else if (e.key === "Enter" && it.onSelect) {
         onClose();
         it.onSelect();
       }
+    } else if (e.key === "ArrowLeft" && onBack) {
+      e.preventDefault();
+      onBack();
     }
   };
 
@@ -114,6 +132,7 @@ export function PopupMenu({ x, y, items, onClose, anchor }: PopupMenuProps) {
                 if (it.submenu && !it.disabled) {
                   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   setSubPos({ x: r.right - 2, y: r.top - 4 });
+                  setSubByKey(false);
                   setOpenSub(i);
                 } else {
                   setOpenSub(null);
@@ -141,11 +160,17 @@ export function PopupMenu({ x, y, items, onClose, anchor }: PopupMenuProps) {
       </div>
       {openSub !== null && items[openSub].type !== "separator" && (items[openSub] as { submenu?: MenuEntry[] }).submenu && (
         <PopupMenu
+          key={openSub}
           x={subPos.x}
           y={subPos.y}
           items={(items[openSub] as { submenu: MenuEntry[] }).submenu}
           onClose={onClose}
           anchor={ref.current}
+          startActive={subByKey}
+          onBack={() => {
+            setOpenSub(null);
+            ref.current?.focus();
+          }}
         />
       )}
     </>

@@ -112,6 +112,8 @@ While no transform is applied, you can type into any cell. Edited cells are high
 - `Ctrl+S` saves edits and transforms back into the file (a result tab asks where to save it).
 - File → Save As (`Ctrl+Shift+S`) writes a new Parquet, CSV, JSON or Excel file.
 - File → Export (`Ctrl+E`) writes the current result with options: columns, types, date formats, delimiter, compression.
+- Export also writes a **Markdown table** (`.md`), the pipe table GitHub shows, with number columns right-aligned. Options: include the header, and include row numbers (a first column `#`). A Markdown table always has a header line, so without the header that line is left blank. Markdown suits small tables: above 100,000 rows ParVu asks before writing.
+- Right-click a selection → **Copy As → Copy as Markdown** copies it as the same kind of table: **Markdown table**, **with row numbers** (the rows' numbers in the whole table, not on the page) or **without header**.
 
 ## Language and theme
 
