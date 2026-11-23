@@ -24,7 +24,7 @@ permissions:
 
 env:
   # The repository signing key. Also in RELEASES.md and install.sh.
-  APT_KEY_FINGERPRINT: FINGERPRINT_TBD
+  APT_KEY_FINGERPRINT: 1E388778760398FC6DFC2827E7FEC775800FCADB
   KEEP_VERSIONS: 3
 
 jobs:

@@ -33,7 +33,7 @@ NODE_SERIES="22"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/parvu"
 APT_URL="https://aziznadirov.github.io/ParVu/apt"
 # The APT repository's signing key. Also in RELEASES.md and .github/workflows/apt.yml.
-APT_KEY_FINGERPRINT="FINGERPRINT_TBD"
+APT_KEY_FINGERPRINT="1E388778760398FC6DFC2827E7FEC775800FCADB"
 APT_KEYRING="/etc/apt/keyrings/parvu-archive-keyring.gpg"
 APT_SOURCES="/etc/apt/sources.list.d/parvu.sources"
 

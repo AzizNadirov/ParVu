@@ -30,7 +30,7 @@ sudo apt update && sudo apt install parvu
 The repository is signed with the key
 
 ```
-FINGERPRINT_TBD
+1E388778760398FC6DFC2827E7FEC775800FCADB
 ```
 
 Check it with `gpg --show-keys /etc/apt/keyrings/parvu-archive-keyring.gpg`.
