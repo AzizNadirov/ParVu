@@ -1815,5 +1815,15 @@
   "tray.hidden_title": "ParVu işləməyə davam edir",
   "tray.hidden_message": "ParVu yuxarı paneldə (Windows-da bildiriş sahəsində) işləməyə davam edir ki, Sİ klientləri ona qoşula bilsin. Pəncərəni qaytarmaq üçün ParVu ikonuna klikləyib «ParVu-nu aç» seçin və ya ParVu-nu yenidən başladın. Çıxmaq üçün ikonun menyusunda «ParVu-dan çıx» və ya Fayl → Çıxış seçin. Bunu Parametrlər → Ümumi → Çıxış davranışı bölməsində söndürə bilərsiniz.",
   "settings.label.keep_in_tray": "Pəncərə bağlananda trey-də işləməyə davam et (Sİ klientləri aktiv olanda)",
-  "settings.tooltip.keep_in_tray": "Sonuncu pəncərəni bağlamaq onu gizlədir; ParVu Sİ klientləri üçün yuxarı paneldə qalır, tablar olduğu kimi saxlanılır. Çıxış ikonun menyusundandır."
+  "settings.tooltip.keep_in_tray": "Sonuncu pəncərəni bağlamaq onu gizlədir; ParVu Sİ klientləri üçün yuxarı paneldə qalır, tablar olduğu kimi saxlanılır. Çıxış ikonun menyusundandır.",
+  "ai.panel.earlier": "Əvvəlki söhbət · {date}",
+  "settings.group.ai": "Sİ köməkçisi",
+  "settings.label.remember_ai_chats": "Hər fayl üçün Sİ söhbətlərini yadda saxla",
+  "settings.tooltip.remember_ai_chats": "Faylı yenidən açanda köməkçi ilə söhbəti geri gəlir. Söhbətlər, içindəki məlumat parçaları ilə birlikdə, yalnız bu kompüterdə, ~/.ParVu/ai/chats qovluğunda saxlanılır.",
+  "settings.ai_chats.count": "Saxlanılmış söhbətlər: {count}",
+  "settings.ai_chats.delete_all": "Bütün saxlanılmış söhbətləri sil",
+  "settings.ai_chats.delete_title": "Saxlanılmış söhbətləri sil",
+  "settings.ai_chats.delete_confirm": "Bütün saxlanılmış Sİ söhbətləri ({count}) silinsin? Bunu geri qaytarmaq olmaz.",
+  "settings.ai_chats.off_confirm": "Sİ söhbətləri artıq saxlanılmayacaq. İndiyədək saxlanılmış söhbətlər ({count}) də silinsin?",
+  "settings.ai_chats.deleted": "Silinmiş saxlanılmış söhbətlər: {count}."
 }

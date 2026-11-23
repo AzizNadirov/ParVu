@@ -209,6 +209,9 @@ pub struct Settings {
     pub keep_running_in_tray: bool,
     /// The user was told once where ParVu went when it first hid in the tray.
     pub tray_notice_shown: bool,
+    /// Keep the built-in assistant's conversation of each file in
+    /// `~/.ParVu/ai/chats`, so reopening the file brings it back.
+    pub remember_ai_chats: bool,
 
     // Column types
     /// Detect the column types of CSV files when they open.
@@ -276,6 +279,7 @@ impl Default for Settings {
             mcp_allow_clients: false,
             keep_running_in_tray: true,
             tray_notice_shown: false,
+            remember_ai_chats: true,
             detect_column_types: true,
             date_order: DateOrderSetting::Auto,
             show_query_panel: true,
@@ -606,6 +610,7 @@ fn known_keys() -> Vec<&'static str> {
         "mcp_allow_clients",
         "keep_running_in_tray",
         "tray_notice_shown",
+        "remember_ai_chats",
         "detect_column_types",
         "date_order",
         "show_query_panel",

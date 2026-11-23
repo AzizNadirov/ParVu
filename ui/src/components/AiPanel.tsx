@@ -11,6 +11,7 @@ import {
   answerText,
   looksLikeKey,
   markdownSegments,
+  restoredDivider,
   sqlEditBlocker,
   toolCallLabel,
   toolResultCopyText,
@@ -295,6 +296,7 @@ export function AiPanel(props: {
   const [sending, setSending] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
   const running = chat.runId !== null;
+  const divider = restoredDivider(chat);
   const noProviders = !!providers && providers.providers.length === 0;
 
   useEffect(() => {
@@ -369,7 +371,13 @@ export function AiPanel(props: {
             {props.tabName ? t("ai.panel.empty", { table: props.tabName }) : t("ai.panel.empty_no_table")}
           </div>
         )}
-        {chat.items.map((item, i) =>
+        {chat.items.map((item, i) => [
+          divider && i === 0 && (
+            <div key="earlier" className="ai-divider muted small" role="separator">
+              {t("ai.panel.earlier", { date: new Date(divider.updatedMs).toLocaleString() })}
+            </div>
+          ),
+          divider && i === divider.after && <hr key="earlier-end" className="ai-divider-end" />,
           item.kind === "user" ? (
             <div key={i} className="ai-msg ai-user">
               {item.text}
@@ -401,7 +409,7 @@ export function AiPanel(props: {
               )}
             </div>
           ),
-        )}
+        ])}
       </div>
       <footer className="ai-input col">
         <textarea

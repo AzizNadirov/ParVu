@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ai_assistant;
+mod chat_store;
 mod bridge;
 mod column_types;
 mod commands;
@@ -350,6 +351,10 @@ fn main() {
             ai_assistant::ai_ask,
             ai_assistant::ai_cancel,
             ai_assistant::ai_clear_chat,
+            ai_assistant::ai_load_chat,
+            ai_assistant::ai_save_chat,
+            ai_assistant::ai_saved_chats,
+            ai_assistant::ai_delete_saved_chats,
             custom::custom_list,
             custom::custom_validate,
             custom::custom_save,

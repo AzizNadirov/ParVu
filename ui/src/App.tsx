@@ -59,7 +59,7 @@ import { DataGrid, isNumericType, type GridHandle } from "./components/DataGrid"
 import { QueryEditor, type EditorMode } from "./components/QueryEditor";
 import { Pagination, StepsPanel, TabBar, Welcome, stepText } from "./components/Panels";
 import { AiPanel, type AiActions } from "./components/AiPanel";
-import { applyEvent, emptyChat, finishRun, startRun, type ChatState } from "./lib/ai";
+import { applyEvent, chatToSave, emptyChat, finishRun, restoreChat, startRun, type ChatState } from "./lib/ai";
 import type { FormatRule } from "./lib/format";
 import {
   SearchPanel,
@@ -280,6 +280,50 @@ export function App({ boot }: { boot: Bootstrap }) {
   const pageRequest = useRef(0);
 
   const activeTab = tabs.find((x) => x.id === active) ?? null;
+
+  // Saved AI conversations (per file, ai_assistant.rs): loaded when the
+  // panel first shows a file tab, saved after each run ends.
+  /** Tabs whose saved conversation was looked up, with the file it was for. */
+  const chatLoaded = useRef(new Map<number, string>());
+  /** Tabs whose run just ended: save once the finished chat is in state. */
+  const chatsToSave = useRef(new Set<number>());
+  const aiProviderRef = useRef(aiProvider);
+  aiProviderRef.current = aiProvider;
+  const saveChat = useCallback((id: number, c: ChatState | undefined) => {
+    if (!c || c.runId !== null || !c.items.length) return;
+    void api.aiSaveChat(id, chatToSave(c), aiProviderRef.current).catch((e) => console.warn("saving the AI chat:", e));
+  }, []);
+  useEffect(() => {
+    if (!aiOpen || !activeTab) return;
+    const { id, path } = activeTab;
+    if (!path || activeTab.origin) return; // a result not saved to a file yet
+    const before = chatLoaded.current.get(id);
+    if (before === path) return;
+    chatLoaded.current.set(id, path);
+    // A result tab just saved (Save As): its conversation goes with the new file.
+    if (before === "" && chats[id]?.items.length) {
+      saveChat(id, chats[id]);
+      return;
+    }
+    void api
+      .aiLoadChat(id)
+      .then((saved) => {
+        const restored = saved && restoreChat(saved.display, saved.updated_ms);
+        if (restored) setChats((all) => (all[id]?.items.length ? all : { ...all, [id]: restored }));
+      })
+      .catch((e) => console.warn("loading the AI chat:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the panel or the tab's file changes
+  }, [aiOpen, activeTab?.id, activeTab?.path, activeTab?.origin]);
+  useEffect(() => {
+    // A result tab, until saved, is remembered with no file.
+    for (const t of tabs) if (t.origin && !chatLoaded.current.has(t.id)) chatLoaded.current.set(t.id, "");
+  }, [tabs]);
+  useEffect(() => {
+    for (const id of [...chatsToSave.current]) {
+      chatsToSave.current.delete(id);
+      saveChat(id, chats[id]);
+    }
+  }, [chats, saveChat]);
   const sourceKey = activeTab ? `${activeTab.id}:${activeTab.path}:${activeTab.steps.length}` : "";
   useEffect(() => {
     if (!activeTab) {
@@ -2235,11 +2279,12 @@ export function App({ boot }: { boot: Bootstrap }) {
       getCurrentWindow().listen<AiRunEvent>("ai-event", (e) =>
         updateChat(e.payload.tab_id ?? 0, (c) => (c.runId === e.payload.run_id ? applyEvent(c, e.payload.event) : c)),
       ),
-      getCurrentWindow().listen<AiRunFinished>("ai-finished", (e) =>
+      getCurrentWindow().listen<AiRunFinished>("ai-finished", (e) => {
+        if (e.payload.tab_id !== null) chatsToSave.current.add(e.payload.tab_id);
         updateChat(e.payload.tab_id ?? 0, (c) =>
           c.runId === e.payload.run_id ? finishRun(c, e.payload.error, e.payload.cancelled) : c,
-        ),
-      ),
+        );
+      }),
       listen<number>("mcp-clients", (e) => setAiClients(e.payload)),
       // Custom tools changed (any window), or some need attention after an update.
       listen("custom-changed", () => {

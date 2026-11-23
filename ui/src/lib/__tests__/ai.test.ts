@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   PROVIDER_PRESETS,
   applyEvent,
+  chatToSave,
   emptyChat,
   finishRun,
   looksLikeKey,
   providerFromPreset,
   providerProblem,
+  restoreChat,
+  restoredDivider,
   startRun,
   toolCallLabel,
   usageLabel,
@@ -182,5 +185,81 @@ describe("AI results and SQL actions", () => {
     expect(spans.map((s) => s.text).join("")).toBe(sql);
     expect(spans.find((s) => s.text === "SELECT")?.cls).toContain("tok-keyword");
     expect(spans.find((s) => s.text === "'x'")?.cls).toContain("tok-string");
+  });
+});
+
+describe("saved conversations", () => {
+  const finished = () => {
+    let s = startRun(emptyChat(), "How many rows?", 3);
+    s = applyEvent(s, { type: "tool_call", id: "t1", name: "query", input: { sql: "SELECT COUNT(*) FROM sales" } });
+    s = applyEvent(s, { type: "tool_result", id: "t1", preview: '{"columns":["n"],"rows":[[5]]}', is_error: false });
+    s = applyEvent(s, { type: "delta", delta: { type: "text", text: "There are 5." } });
+    s = applyEvent(s, { type: "usage", usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 1, cache_write_tokens: 0 }, model: "m", cost_usd: 0.25 });
+    s = applyEvent(s, { type: "done", stop: { type: "end_turn" } });
+    s = finishRun(s, null, false);
+    s = startRun(s, "And by region?", 4);
+    return finishRun(s, "Network error", false);
+  };
+
+  it("restores the transcript as it was saved (through JSON)", () => {
+    const s = finished();
+    const saved = JSON.parse(JSON.stringify(chatToSave(s)));
+    const back = restoreChat(saved, 1_700_000_000_000)!;
+    expect(back.items).toEqual(s.items);
+    expect(back.usage).toEqual(s.usage);
+    expect(back.cost).toBe(0.25);
+    expect(back.runId).toBeNull();
+    expect(back.restored).toEqual({ count: 4, updatedMs: 1_700_000_000_000 });
+    // Restored tool calls keep what the actions need: name, input, result.
+    const a = back.items[1];
+    expect(a.kind === "assistant" && a.parts[0]).toEqual({
+      type: "tool",
+      id: "t1",
+      name: "query",
+      input: { sql: "SELECT COUNT(*) FROM sales" },
+      result: '{"columns":["n"],"rows":[[5]]}',
+      isError: false,
+    });
+    const err = back.items[3];
+    expect(err.kind === "assistant" && err.error).toBe("Network error");
+  });
+
+  it("saves only finished replies", () => {
+    const s = startRun(finished(), "Still running", 9);
+    const saved = chatToSave(s);
+    expect(saved.items).toHaveLength(5);
+    expect((saved.items[4] as { kind: string }).kind).toBe("user");
+  });
+
+  it("skips anything malformed instead of trusting the file", () => {
+    expect(restoreChat(null, 0)).toBeNull();
+    expect(restoreChat({ items: "no" }, 0)).toBeNull();
+    expect(restoreChat({ items: [] }, 0)).toBeNull();
+    expect(restoreChat({ items: [{ kind: "robot" }, 5, { kind: "user", text: 7 }] }, 0)).toBeNull();
+    const back = restoreChat(
+      {
+        items: [
+          { kind: "user", text: "q" },
+          { kind: "assistant", done: false, parts: [{ type: "text", text: "half" }, { type: "tool" }, { type: "weird" }] },
+        ],
+        usage: "x",
+        cost: "y",
+      },
+      5,
+    )!;
+    expect(back.items[1]).toEqual({ kind: "assistant", parts: [{ type: "text", text: "half" }], done: true, cancelled: true });
+    expect(back.usage).toEqual({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 });
+    expect(back.cost).toBe(0);
+    expect(restoreChat({ items: [{ kind: "user", text: "q" }], cost: null }, 0)!.cost).toBeNull();
+  });
+
+  it("marks where the earlier conversation ends", () => {
+    expect(restoredDivider(finished())).toBeNull();
+    const back = restoreChat(chatToSave(finished()), 42)!;
+    expect(restoredDivider(back)).toEqual({ updatedMs: 42, after: null });
+    const more = finishRun(startRun(back, "Next?", 11), null, false);
+    expect(restoredDivider(more)).toEqual({ updatedMs: 42, after: 4 });
+    // The new chat after "New conversation" has no divider.
+    expect(restoredDivider(emptyChat())).toBeNull();
   });
 });

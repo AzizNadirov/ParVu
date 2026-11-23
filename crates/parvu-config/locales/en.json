@@ -1815,5 +1815,15 @@
   "tray.hidden_title": "ParVu keeps running",
   "tray.hidden_message": "ParVu is still running in the top bar (the notification area on Windows), so AI clients can reach it. To bring the window back, click the ParVu icon and choose Open ParVu, or start ParVu again. To quit, choose Quit ParVu in the icon's menu or File → Exit. You can turn this off in Settings → General → Exit Behavior.",
   "settings.label.keep_in_tray": "Keep running in the tray when the window is closed (while AI clients are on)",
-  "settings.tooltip.keep_in_tray": "Closing the last window hides it; ParVu stays in the top bar for AI clients, with your tabs as they were. Quit from the icon's menu."
+  "settings.tooltip.keep_in_tray": "Closing the last window hides it; ParVu stays in the top bar for AI clients, with your tabs as they were. Quit from the icon's menu.",
+  "ai.panel.earlier": "Earlier conversation · {date}",
+  "settings.group.ai": "AI Assistant",
+  "settings.label.remember_ai_chats": "Remember AI conversations per file",
+  "settings.tooltip.remember_ai_chats": "Reopening a file brings back its conversation with the assistant. Conversations, including the data excerpts in them, are kept only on this computer, in ~/.ParVu/ai/chats.",
+  "settings.ai_chats.count": "Saved conversations: {count}",
+  "settings.ai_chats.delete_all": "Delete all saved conversations",
+  "settings.ai_chats.delete_title": "Delete saved conversations",
+  "settings.ai_chats.delete_confirm": "Delete all {count} saved AI conversations? This can't be undone.",
+  "settings.ai_chats.off_confirm": "AI conversations will no longer be saved. Also delete the conversations saved so far ({count})?",
+  "settings.ai_chats.deleted": "Deleted {count} saved conversations."
 }

@@ -314,6 +314,9 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
 .ai-messages { flex: 1 1 auto; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .ai-empty { margin: auto 0; text-align: center; gap: 8px; align-items: center; }
 .ai-msg { max-width: 100%; overflow-wrap: anywhere; }
+.ai-divider { display: flex; align-items: center; gap: 8px; text-align: center; }
+.ai-divider::before, .ai-divider::after { content: ""; flex: 1 1 auto; border-top: 1px solid var(--md-outline-variant); }
+.ai-divider-end { width: 100%; border: 0; border-top: 1px solid var(--md-outline-variant); margin: 2px 0; }
 .ai-user {
   align-self: flex-end; max-width: 85%;
   background: var(--md-primary-container); color: var(--md-on-surface);
