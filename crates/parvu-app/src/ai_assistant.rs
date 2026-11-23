@@ -77,15 +77,43 @@ fn keychain_entry(id: &str) -> Option<keyring::Entry> {
     keyring::Entry::new(KEYCHAIN_SERVICE, &format!("ai/{id}")).ok()
 }
 
+/// How long the keychain probe may take. Without a Secret Service the
+/// D-Bus calls behind it can wait indefinitely.
+const KEYCHAIN_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// Whether a system keychain works: a lookup of an entry that doesn't
 /// exist must answer "no entry" (without a Secret Service, for example,
-/// setting up the store succeeds but every lookup fails). Checked once.
+/// setting up the store succeeds but every lookup fails). Checked once, on
+/// its own thread with a time limit: a probe that doesn't answer in time
+/// counts as no keychain.
 pub fn keychain_available() -> bool {
     static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *AVAILABLE.get_or_init(|| {
-        keyring::Entry::store_status().is_ok()
-            && keychain_entry("__probe__").is_some_and(|e| matches!(e.get_password(), Ok(_) | Err(keyring::Error::NoEntry)))
+        probe_with_timeout(KEYCHAIN_PROBE_TIMEOUT, || {
+            keyring::Entry::store_status().is_ok()
+                && keychain_entry("__probe__")
+                    .is_some_and(|e| matches!(e.get_password(), Ok(_) | Err(keyring::Error::NoEntry)))
+        })
     })
+}
+
+/// Run `probe` on a separate thread; `false` if it doesn't finish within
+/// `timeout` (the thread is left to finish or hang on its own).
+fn probe_with_timeout(timeout: std::time::Duration, probe: impl FnOnce() -> bool + Send + 'static) -> bool {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let spawned = std::thread::Builder::new().name("keychain-probe".into()).spawn(move || {
+        let _ = tx.send(probe());
+    });
+    if spawned.is_err() {
+        return false;
+    }
+    match rx.recv_timeout(timeout) {
+        Ok(ok) => ok,
+        Err(_) => {
+            tracing::warn!("the system keychain did not answer within {timeout:?}; API keys can't be stored there");
+            false
+        }
+    }
 }
 
 fn key_for(cfg: &ProviderConfig) -> (Option<Secret>, KeySource) {
@@ -132,15 +160,26 @@ fn providers_info() -> ProvidersInfo {
     ProvidersInfo { providers, keychain: keychain_available() }
 }
 
+// The provider commands talk to the system keychain (D-Bus on Linux), which
+// can be slow or hang: they are async and do the work on the blocking pool,
+// never on the window's main thread.
 #[tauri::command(rename_all = "snake_case")]
-pub fn ai_providers() -> ProvidersInfo {
-    providers_info()
+pub async fn ai_providers() -> ApiResult<ProvidersInfo> {
+    blocking(providers_info).await
+}
+
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> ApiResult<T> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| ApiError::new("app", e.to_string()))
 }
 
 /// Add or replace a provider. `key`, when given, goes to the keychain only;
 /// an empty string removes the stored key.
 #[tauri::command(rename_all = "snake_case")]
-pub fn ai_save_provider(config: ProviderConfig, key: Option<String>, make_default: bool) -> ApiResult<ProvidersInfo> {
+pub async fn ai_save_provider(config: ProviderConfig, key: Option<String>, make_default: bool) -> ApiResult<ProvidersInfo> {
+    blocking(move || save_provider(config, key, make_default)).await?
+}
+
+fn save_provider(config: ProviderConfig, key: Option<String>, make_default: bool) -> ApiResult<ProvidersInfo> {
     let id = config.id.trim().to_string();
     if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
         return Err(ApiError::new("ai", "The provider id may use letters, digits, '-' and '_'."));
@@ -169,7 +208,11 @@ pub fn ai_save_provider(config: ProviderConfig, key: Option<String>, make_defaul
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn ai_delete_provider(id: String) -> ApiResult<ProvidersInfo> {
+pub async fn ai_delete_provider(id: String) -> ApiResult<ProvidersInfo> {
+    blocking(move || delete_provider(id)).await?
+}
+
+fn delete_provider(id: String) -> ApiResult<ProvidersInfo> {
     let mut f = load_providers();
     f.providers.retain(|p| p.id != id);
     if f.default.as_deref() == Some(id.as_str()) {
@@ -421,4 +464,20 @@ pub fn ai_cancel(app: AppHandle, window: WebviewWindow, run_id: u64, tab_id: Opt
 pub fn ai_clear_chat(app: AppHandle, window: WebviewWindow, tab_id: Option<u64>) {
     let state = app.state::<AppState>();
     lock(&state.assistant.chats).remove(&(window.label().to_string(), tab_id.unwrap_or(0)));
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_hanging_keychain_probe_counts_as_no_keychain() {
+        let short = std::time::Duration::from_millis(100);
+        assert!(super::probe_with_timeout(short, || true));
+        assert!(!super::probe_with_timeout(short, || false));
+        let start = std::time::Instant::now();
+        assert!(!super::probe_with_timeout(short, || {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            true
+        }));
+        assert!(start.elapsed() < std::time::Duration::from_secs(2), "the caller doesn't wait for a hung probe");
+    }
 }
