@@ -12,6 +12,23 @@ A fast desktop application for viewing and querying large Parquet, CSV, JSON and
 
 Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.ParVu` settings, recent files and themes, so upgrading needs no migration. The rewrite is described in [plans/RUST_REWRITE_PLAN.md](plans/RUST_REWRITE_PLAN.md).
 
+## Screenshots
+
+![ParVu with a 50,000-row sales table open](docs/images/screenshot-main.png)
+
+<table>
+  <tr>
+    <td width="33%"><a href="docs/images/screenshot-sql.png"><img src="docs/images/screenshot-sql.png" alt="An SQL query grouping sales by region and product"/></a></td>
+    <td width="33%"><a href="docs/images/screenshot-ai-assistant.png"><img src="docs/images/screenshot-ai-assistant.png" alt="The AI assistant answering a question about the sales table"/></a></td>
+    <td width="33%"><a href="docs/images/screenshot-chart.png"><img src="docs/images/screenshot-chart.png" alt="A stacked bar chart of revenue by product, split by region"/></a></td>
+  </tr>
+  <tr>
+    <td align="center">SQL with syntax highlighting and completion</td>
+    <td align="center">The AI assistant, with the queries it ran</td>
+    <td align="center">Charts from any column</td>
+  </tr>
+</table>
+
 ## Features
 
 ### File Support
