@@ -38,3 +38,7 @@ logs/
 *.swo
 *~
 .DS_Store
+
+# Snap
+/snap/local/*.deb
+*.snap

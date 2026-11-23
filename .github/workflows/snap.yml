@@ -1,0 +1,91 @@
+name: Snap
+
+# Builds the snap from a published release's .deb (snap/snapcraft.yaml) and
+# publishes it to the Snap Store: channel "stable" for versions without a "-",
+# "beta" for pre-releases. Without the SNAPCRAFT_STORE_CREDENTIALS secret it
+# only builds; the .snap is always uploaded as the artifact "parvu-snap".
+#
+# Called by release.yml after the release is published. To (re)build the snap
+# of an existing release by hand:
+#   gh workflow run Snap -f tag=v1.0.0
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release whose .deb to package, e.g. v1.0.0
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Published release whose .deb to package
+        required: true
+        type: string
+    secrets:
+      SNAPCRAFT_STORE_CREDENTIALS:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  snap:
+    runs-on: ubuntu-24.04
+    env:
+      # Secrets can't be tested in "if:"; an empty variable means none is set.
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the release's deb
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dl snap/local
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dl --pattern 'parvu_*_amd64.deb' --pattern SHA256SUMS.txt
+          (cd dl && sha256sum --check --ignore-missing --strict SHA256SUMS.txt)
+          debs=(dl/parvu_*_amd64.deb)
+          if [ "${#debs[@]}" -ne 1 ]; then
+            echo "::error::Expected one parvu_*_amd64.deb in release $TAG, found ${#debs[@]}"
+            exit 1
+          fi
+          # The deb must be the one checksummed above.
+          grep -q " ${debs[0]#dl/}\$" dl/SHA256SUMS.txt
+          mv "${debs[0]}" snap/local/parvu.deb
+          dpkg-deb -f snap/local/parvu.deb Package Version
+      - uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79 # v1.3.0
+        id: build
+      - name: Check the snap
+        env:
+          SNAP_FILE: ${{ steps.build.outputs.snap }}
+        run: |
+          ls -l "$SNAP_FILE"
+          unsquashfs -cat "$SNAP_FILE" meta/snap.yaml
+          unsquashfs -cat "$SNAP_FILE" meta/gui/parvu.desktop
+          unsquashfs -l "$SNAP_FILE" | grep -E 'usr/bin/parvu$'
+          # The snap's version is the release's.
+          version=$(unsquashfs -cat "$SNAP_FILE" meta/snap.yaml | sed -n 's/^version: //p' | tr -d "'\"")
+          if [ "$version" != "${TAG#v}" ]; then
+            echo "::error::Snap version $version does not match the tag $TAG"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parvu-snap
+          path: ${{ steps.build.outputs.snap }}
+          if-no-files-found: error
+      - name: Choose the channel
+        id: channel
+        run: |
+          if [[ "$TAG" == *-* ]]; then echo "channel=beta" >> "$GITHUB_OUTPUT"; else echo "channel=stable" >> "$GITHUB_OUTPUT"; fi
+      - name: No store credentials
+        if: env.SNAPCRAFT_STORE_CREDENTIALS == ''
+        run: |
+          echo "::notice title=Snap not published::The SNAPCRAFT_STORE_CREDENTIALS secret is not set, so the snap was built (artifact parvu-snap) but not published to the ${{ steps.channel.outputs.channel }} channel."
+      - uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1.2.0
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: ${{ steps.channel.outputs.channel }}
