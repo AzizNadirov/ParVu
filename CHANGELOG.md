@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Gemini 3 models in the AI assistant.** After the first tool call (for example a query), Gemini 3 answered with "Function call is missing a thought_signature". ParVu now sends each call's signature back with the conversation.
+
 ## [1.0.0-alpha.9]
 
 ParVu and AI clients: Claude Code no longer opens a ParVu window for every session. ParVu starts in the background only when an AI client uses it, keeps running in the tray when its window is closed, and runs as one instance. Several GNOME (Wayland) window problems are fixed. From this version ParVu is free for noncommercial use and needs a commercial license for commercial use.

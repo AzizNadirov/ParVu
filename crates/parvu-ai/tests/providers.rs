@@ -122,7 +122,7 @@ async fn anthropic_streams_text_thinking_and_tool_calls() {
     assert_eq!(turn.content[1], Block::Text { text: "Let me check.".into() });
     assert_eq!(
         turn.content[2],
-        Block::ToolUse { id: "toolu_1".into(), name: "query".into(), input: json!({"sql": "SELECT 1"}), invalid: None }
+        Block::ToolUse { id: "toolu_1".into(), name: "query".into(), input: json!({"sql": "SELECT 1"}), invalid: None, extra: None }
     );
     let Block::Raw { value, .. } = &turn.content[0] else { panic!() };
     assert_eq!((value["thinking"].as_str(), value["signature"].as_str()), (Some("Need totals."), Some("sig1")));
@@ -199,7 +199,7 @@ async fn anthropic_retries_overload_and_echoes_fallback_history() {
             content: vec![
                 Block::Raw { provider: "anthropic".into(), value: json!({"type": "thinking", "thinking": "a", "signature": "s"}) },
                 Block::Text { text: "partial".into() },
-                Block::ToolUse { id: "t0".into(), name: "x".into(), input: json!({}), invalid: None },
+                Block::ToolUse { id: "t0".into(), name: "x".into(), input: json!({}), invalid: None, extra: None },
                 Block::Raw { provider: "anthropic".into(), value: json!({"type": "fallback", "from": {"model": "a"}, "to": {"model": "b"}}) },
                 Block::Raw { provider: "anthropic".into(), value: json!({"type": "thinking", "thinking": "b", "signature": "t"}) },
                 Block::Text { text: "after".into() },
@@ -240,7 +240,7 @@ async fn openai_compatible_streams_tool_calls_and_skips_anthropic_blocks() {
             role: Role::Assistant,
             content: vec![
                 Block::Raw { provider: "anthropic".into(), value: json!({"type": "thinking"}) },
-                Block::ToolUse { id: "c1".into(), name: "list_tables".into(), input: json!({}), invalid: None },
+                Block::ToolUse { id: "c1".into(), name: "list_tables".into(), input: json!({}), invalid: None, extra: None },
             ],
         },
         Message { role: Role::User, content: vec![Block::ToolResult { tool_use_id: "c1".into(), content: "[]".into(), is_error: false }] },
@@ -250,7 +250,7 @@ async fn openai_compatible_streams_tool_calls_and_skips_anthropic_blocks() {
     assert_eq!(t.stop, Stop::ToolUse);
     assert_eq!((t.usage.input_tokens, t.usage.output_tokens), (50, 9));
     assert_eq!(t.content[0], Block::Text { text: "Checking".into() });
-    assert_eq!(t.content[1], Block::ToolUse { id: "call_a".into(), name: "query".into(), input: json!({"sql": "SELECT 2"}), invalid: None });
+    assert_eq!(t.content[1], Block::ToolUse { id: "call_a".into(), name: "query".into(), input: json!({"sql": "SELECT 2"}), invalid: None, extra: None });
 
     let (headers, body) = f.seen.lock().unwrap()[0].clone();
     assert!(!headers.iter().any(|(k, _)| k == "authorization"), "local servers get no key");
@@ -283,6 +283,41 @@ fn tool_turn(id: &str) -> String {
     ];
     ev.extend(end("tool_use", 10));
     sse(&ev)
+}
+
+#[tokio::test]
+async fn openai_format_keeps_gemini_thought_signatures() {
+    // Gemini's OpenAI endpoint puts a thought signature in each function
+    // call's `extra_content`; Gemini 3 refuses a history that drops it.
+    let sig = json!({"google": {"thought_signature": "c2lnLTE="}});
+    let chunks = [
+        json!({"choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
+            {"index": 0, "id": "f1", "type": "function", "function": {"name": "query", "arguments": "{\"sql\":\"SELECT 1\"}"},
+             "extra_content": sig}]}}]}),
+        json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}),
+    ];
+    let body: String = chunks.iter().map(|c| format!("data: {c}\n\n")).collect::<String>() + "data: [DONE]\n\n";
+    let f = fake(vec![(200, body.clone()), (200, body)]).await;
+    let p = Provider::new(ProviderConfig::ollama("gemini", "gemini-3"), None).unwrap().with_base_url(format!("{}/v1", f.url));
+    let tools = [ToolSpec { name: "query".into(), description: "SQL".into(), input_schema: json!({"type": "object"}) }];
+
+    let first = [Message::user_text("hi")];
+    let t = p.send(&Request { system: "sys", messages: &first, tools: &tools }, &|_| {}).await.unwrap();
+    let Block::ToolUse { extra, .. } = &t.content[0] else { panic!("{:?}", t.content) };
+    assert_eq!(extra.as_ref(), Some(&sig), "the signature is kept with the call");
+
+    // The next request sends the call back with its signature.
+    let history = [
+        Message::user_text("hi"),
+        Message { role: Role::Assistant, content: t.content.clone() },
+        Message { role: Role::User, content: vec![Block::ToolResult { tool_use_id: "f1".into(), content: "1".into(), is_error: false }] },
+    ];
+    p.send(&Request { system: "sys", messages: &history, tools: &tools }, &|_| {}).await.unwrap();
+    let (_, sent) = f.seen.lock().unwrap()[1].clone();
+    assert_eq!(sent["messages"][2]["tool_calls"][0]["extra_content"], sig);
+    // Calls without one get no `extra_content` key at all.
+    let (_, sent0) = f.seen.lock().unwrap()[0].clone();
+    assert!(sent0["messages"].as_array().unwrap().iter().all(|m| m.get("tool_calls").is_none()));
 }
 
 #[tokio::test]

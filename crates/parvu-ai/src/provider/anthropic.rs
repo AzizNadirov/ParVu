@@ -243,8 +243,8 @@ pub(super) async fn send(p: &Provider, req: &Request<'_>, on_delta: &(dyn Fn(Del
             Part::Tool { id, name, json } => {
                 let src = if json.trim().is_empty() { "{}" } else { json.as_str() };
                 match serde_json::from_str::<Value>(src) {
-                    Ok(input @ Value::Object(_)) => Block::ToolUse { id, name, input, invalid: None },
-                    _ => Block::ToolUse { id, name, input: json!({}), invalid: Some(json) },
+                    Ok(input @ Value::Object(_)) => Block::ToolUse { id, name, input, invalid: None, extra: None },
+                    _ => Block::ToolUse { id, name, input: json!({}), invalid: Some(json), extra: None },
                 }
             }
             Part::Other(value) => Block::Raw { provider: PROVIDER.into(), value },

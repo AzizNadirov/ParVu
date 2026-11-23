@@ -25,6 +25,11 @@ pub enum Block {
         /// not validated by the provider); `input` is then `{}`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         invalid: Option<String>,
+        /// Provider data that must go back with this call unchanged, e.g.
+        /// the `extra_content` (Gemini's `thought_signature`) of an
+        /// OpenAI-format tool call.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        extra: Option<Value>,
     },
     ToolResult {
         tool_use_id: String,

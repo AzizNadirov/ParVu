@@ -67,11 +67,19 @@ fn message_json(m: &Message) -> Vec<Value> {
                 .content
                 .iter()
                 .filter_map(|b| match b {
-                    Block::ToolUse { id, name, input, .. } => Some(json!({
-                        "id": id,
-                        "type": "function",
-                        "function": { "name": name, "arguments": input.to_string() },
-                    })),
+                    Block::ToolUse { id, name, input, extra, .. } => {
+                        let mut call = json!({
+                            "id": id,
+                            "type": "function",
+                            "function": { "name": name, "arguments": input.to_string() },
+                        });
+                        // Gemini 3 refuses a history whose function calls lost
+                        // their `thought_signature` (in `extra_content`).
+                        if let Some(extra) = extra {
+                            call["extra_content"] = extra.clone();
+                        }
+                        Some(call)
+                    }
                     _ => None,
                 })
                 .collect();
@@ -89,6 +97,8 @@ struct Call {
     id: String,
     name: String,
     args: String,
+    /// `extra_content` of the call (Gemini: `{"google": {"thought_signature": …}}`).
+    extra: Option<Value>,
 }
 
 pub(super) async fn send(p: &Provider, req: &Request<'_>, on_delta: &(dyn Fn(Delta) + Send + Sync)) -> Result<Turn> {
@@ -154,6 +164,9 @@ pub(super) async fn send(p: &Provider, req: &Request<'_>, on_delta: &(dyn Fn(Del
                     }
                 }
                 c.args.push_str(tc["function"]["arguments"].as_str().unwrap_or(""));
+                if let Some(e) = tc.get("extra_content").filter(|e| !e.is_null()) {
+                    merge(c.extra.get_or_insert_with(|| json!({})), e);
+                }
             }
         }
         if let Some(f) = choice["finish_reason"].as_str() {
@@ -172,8 +185,8 @@ pub(super) async fn send(p: &Provider, req: &Request<'_>, on_delta: &(dyn Fn(Del
         let id = if c.id.is_empty() { format!("call_{i}") } else { c.id };
         let src = if c.args.trim().is_empty() { "{}" } else { c.args.as_str() };
         content.push(match serde_json::from_str::<Value>(src) {
-            Ok(input @ Value::Object(_)) => Block::ToolUse { id, name: c.name, input, invalid: None },
-            _ => Block::ToolUse { id, name: c.name, input: json!({}), invalid: Some(c.args) },
+            Ok(input @ Value::Object(_)) => Block::ToolUse { id, name: c.name, input, invalid: None, extra: c.extra },
+            _ => Block::ToolUse { id, name: c.name, input: json!({}), invalid: Some(c.args), extra: c.extra },
         });
     }
     let has_calls = content.iter().any(|b| matches!(b, Block::ToolUse { .. }));
@@ -186,4 +199,17 @@ pub(super) async fn send(p: &Provider, req: &Request<'_>, on_delta: &(dyn Fn(Del
         Some(other) => Stop::Other { reason: other.to_string() },
     };
     Ok(Turn { content, stop, usage, model })
+}
+
+/// Merge a streamed `extra_content` piece into what was received so far
+/// (objects key by key; anything else replaces).
+fn merge(into: &mut Value, piece: &Value) {
+    match (into, piece) {
+        (Value::Object(a), Value::Object(b)) => {
+            for (k, v) in b {
+                merge(a.entry(k.clone()).or_insert(Value::Null), v);
+            }
+        }
+        (slot, v) => *slot = v.clone(),
+    }
 }
