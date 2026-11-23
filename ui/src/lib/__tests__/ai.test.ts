@@ -68,3 +68,119 @@ describe("AI assistant logic", () => {
     expect(looksLikeKey("SELECT * FROM sk")).toBe(false);
   });
 });
+
+import {
+  answerText,
+  isSqlBlock,
+  markdownSegments,
+  quoteIdent,
+  sqlEditBlocker,
+  sqlIdentifiers,
+  tableToTsv,
+  toolResultCopyText,
+  toolResultSql,
+  toolResultTable,
+} from "../ai";
+import { sqlSpans } from "../sqlHighlight";
+
+describe("AI results and SQL actions", () => {
+  const rows = JSON.stringify({
+    columns: ["region", "note"],
+    types: ["VARCHAR", "VARCHAR"],
+    rows: [["north", "a\tb"], ["south", null]],
+    truncated: true,
+  });
+
+  it("reads tool results as tables", () => {
+    expect(toolResultTable("query", rows)).toEqual({
+      columns: ["region", "note"],
+      rows: [["north", "a\tb"], ["south", null]],
+      truncated: true,
+    });
+    const described = JSON.stringify({ table: "sales", rows: 6, columns: [{ name: "id", type: "INTEGER" }], steps: [] });
+    expect(toolResultTable("describe_table", described)?.rows).toEqual([["id", "INTEGER"]]);
+    const stats = JSON.stringify({ column: "qty", row_count: 6, mean: 4.25, min: null });
+    expect(toolResultTable("column_stats", stats)?.rows).toEqual([["column", "qty"], ["row_count", "6"], ["mean", "4.25"], ["min", null]]);
+    // Cut short for the model, an error, or not JSON: no table.
+    expect(toolResultTable("query", rows.slice(0, 30) + " …[truncated]")).toBeNull();
+    expect(toolResultTable("query", "Unknown table \"x\".")).toBeNull();
+    expect(toolResultTable("query", undefined)).toBeNull();
+  });
+
+  it("copies results as TSV, or the text as it is", () => {
+    const t = toolResultTable("query", rows)!;
+    expect(tableToTsv(t)).toBe("region\tnote\nnorth\ta b\nsouth\t");
+    expect(toolResultCopyText("query", rows)).toBe("region\tnote\nnorth\ta b\nsouth\t");
+    expect(toolResultCopyText("undo", "Undone.")).toBe("Undone.");
+  });
+
+  it("builds SQL for results that can open in a new tab", () => {
+    expect(toolResultSql("query", { sql: " SELECT 1 ", max_rows: 10 })).toBe("SELECT 1");
+    expect(toolResultSql("query", { sql: "" })).toBeNull();
+    expect(toolResultSql("value_counts", { table: 'my "t"', column: "Region", k: 5 })).toBe(
+      'SELECT "Region" AS value, COUNT(*) AS count FROM "my ""t""" GROUP BY ALL ORDER BY count DESC, value',
+    );
+    expect(toolResultSql("sample_rows", { table: "sales", n: 5 })).toBe('SELECT * FROM "sales" LIMIT 5');
+    expect(toolResultSql("sample_rows", { table: "sales", mode: "random", n: 500 })).toContain("reservoir(100 ROWS)");
+    expect(toolResultSql("describe_table", { table: "sales" })).toBeNull();
+    expect(quoteIdent('a"b')).toBe('"a""b"');
+  });
+
+  it("finds SQL code blocks", () => {
+    expect(isSqlBlock("sql", "anything")).toBe(true);
+    expect(isSqlBlock("DuckDB", "x")).toBe(true);
+    expect(isSqlBlock("python", "select = 1")).toBe(false);
+    expect(isSqlBlock("", "  WITH t AS (SELECT 1) SELECT * FROM t")).toBe(true);
+    expect(isSqlBlock("", "FROM sales SELECT region")).toBe(true);
+    expect(isSqlBlock(undefined, "region | total")).toBe(false);
+    const segs = markdownSegments("Total by region:\n\n```sql\nSELECT region FROM sales\n```\n\nAnd:\n\n```python\nprint(1)\n```\n");
+    expect(segs.map((s) => s.kind)).toEqual(["md", "code", "md", "code"]);
+    expect(segs[1]).toEqual({ kind: "code", lang: "sql", text: "SELECT region FROM sales", sql: true });
+    expect(segs[3]).toMatchObject({ kind: "code", lang: "python", sql: false });
+    expect(segs[0]).toMatchObject({ kind: "md" });
+    expect((segs[0] as { source: string }).source).toContain("Total by region:");
+    // Raw HTML stays in the prose segment, for the safe renderer.
+    expect(markdownSegments("<img src=x onerror=alert(1)>")).toEqual([{ kind: "md", source: "<img src=x onerror=alert(1)>" }]);
+  });
+
+  it("lets SQL into the editor only when its tables have no steps", () => {
+    const tabs = [
+      { name: "sales", steps: [{ key: "step.filter" }] },
+      { name: "Regions", steps: [] },
+    ];
+    expect(sqlIdentifiers(`SELECT "Sales"."a b", x FROM t -- sales\nWHERE y = 'sales' /* sales */`)).toEqual([
+      "select",
+      "sales",
+      "a b",
+      "x",
+      "from",
+      "t",
+      "where",
+      "y",
+    ]);
+    expect(sqlEditBlocker("SELECT * FROM regions", tabs)).toBeNull();
+    expect(sqlEditBlocker("SELECT * FROM SALES s JOIN regions USING (region)", tabs)).toBe("sales");
+    expect(sqlEditBlocker('SELECT * FROM "sales"', tabs)).toBe("sales");
+    expect(sqlEditBlocker("SELECT 'sales' AS name FROM regions", tabs)).toBeNull();
+    expect(sqlEditBlocker("SELECT 1", [])).toBeNull();
+  });
+
+  it("copies an answer's text", () => {
+    expect(
+      answerText([
+        { type: "thinking", text: "hmm" },
+        { type: "text", text: "First.\n" },
+        { type: "tool", id: "1", name: "query" },
+        { type: "text", text: "```sql\nSELECT 1\n```" },
+      ]),
+    ).toBe("First.\n\n```sql\nSELECT 1\n```");
+  });
+
+  it("splits SQL into highlighted spans without losing text", () => {
+    const sql = "SELECT region, 'x' AS s FROM sales -- note\nWHERE qty > 3";
+    const spans = sqlSpans(sql);
+    expect(spans.map((s) => s.text).join("")).toBe(sql);
+    expect(spans.find((s) => s.text === "SELECT")?.cls).toContain("tok-keyword");
+    expect(spans.find((s) => s.text === "'x'")?.cls).toContain("tok-string");
+  });
+});

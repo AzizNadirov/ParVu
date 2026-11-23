@@ -9,6 +9,8 @@ import { applyEvent, emptyChat, finishRun, startRun } from "../../lib/ai";
 const invoke = vi.fn(async (cmd: string, _args?: Record<string, unknown>): Promise<unknown> => (cmd === "ai_ask" ? 42 : null));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (cmd: string, args?: Record<string, unknown>) => invoke(cmd, args) }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(async () => undefined) }));
+const writeText = vi.fn(async (_s: string) => undefined);
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({ writeText: (s: string) => writeText(s) }));
 
 import { AiPanel, SafeMarkdown } from "../AiPanel";
 
@@ -16,6 +18,7 @@ const ui = {
   t: (k: string, args?: Record<string, unknown>) => (args ? `${k}${JSON.stringify(args)}` : k),
   alert: vi.fn(async () => undefined),
   confirm: vi.fn(async () => false),
+  status: vi.fn(),
 } as unknown as Ui;
 
 const providers: ProvidersInfo = {
@@ -52,6 +55,7 @@ function panel(over: Partial<Parameters<typeof AiPanel>[0]> = {}) {
 afterEach(() => {
   cleanup();
   invoke.mockClear();
+  writeText.mockClear();
 });
 
 describe("AiPanel", () => {
@@ -107,5 +111,75 @@ describe("AiPanel", () => {
     const root = document.querySelector(".ai-md")!;
     expect(root.querySelector("img, script")).toBeNull();
     expect(root.textContent).toContain("<img src=x");
+  });
+
+  describe("actions on the assistant's SQL and results", () => {
+    const sql = "SELECT region, COUNT(*) AS n FROM sales GROUP BY ALL";
+    const result = JSON.stringify({ columns: ["region", "n"], types: ["VARCHAR", "BIGINT"], rows: [["north", "3"], ["south", null]], truncated: false });
+    function answered(text = "Done.\n\n```sql\nSELECT 1 FROM regions\n```\n\n```python\nprint('<b>hi</b>')\n```") {
+      let chat = startRun(emptyChat(), "q", 9);
+      chat = applyEvent(chat, { type: "tool_call", id: "t", name: "query", input: { sql, max_rows: 100 } });
+      chat = applyEvent(chat, { type: "tool_result", id: "t", preview: result, is_error: false });
+      chat = applyEvent(chat, { type: "delta", delta: { type: "text", text } });
+      return finishRun(chat, null, false);
+    }
+    const tab = (name: string, steps: number) => ({ name, steps: Array.from({ length: steps }, () => ({ key: "step.filter", args: {} })) }) as never;
+
+    it("shows the full SQL and the result table, with working buttons", async () => {
+      const actions = { tabs: [tab("sales", 0)], openSql: vi.fn(), editSql: vi.fn() };
+      panel({ chat: answered(), actions });
+      const details = document.querySelector("details.ai-tool") as HTMLDetailsElement;
+      await act(async () => {
+        details.open = true;
+        details.dispatchEvent(new Event("toggle"));
+      });
+      expect(details.querySelector(".ai-sql")?.textContent).toBe(sql);
+      expect(details.querySelector(".ai-sql .tok-keyword")).toBeTruthy();
+      expect([...details.querySelectorAll("td")].map((c) => c.textContent)).toEqual(["north", "3", "south", "NULL"]);
+      const within = (label: string) => [...details.querySelectorAll("button")].find((b) => b.textContent === label)!;
+      await act(async () => {
+        fireEvent.click(within("ai.action.copy_sql"));
+      });
+      expect(writeText).toHaveBeenLastCalledWith(sql);
+      await act(async () => {
+        fireEvent.click(within("ai.action.copy_result"));
+      });
+      expect(writeText).toHaveBeenLastCalledWith("region\tn\nnorth\t3\nsouth\t");
+      fireEvent.click(within("ai.action.open_tab"));
+      expect(actions.openSql).toHaveBeenCalledWith(sql);
+      fireEvent.click(within("ai.action.edit_sql"));
+      expect(actions.editSql).toHaveBeenCalledWith(sql);
+    });
+
+    it("keeps Edit in SQL editor off when a table has steps", async () => {
+      const actions = { tabs: [tab("sales", 1)], openSql: vi.fn(), editSql: vi.fn() };
+      panel({ chat: answered(), actions });
+      const details = document.querySelector("details.ai-tool") as HTMLDetailsElement;
+      await act(async () => {
+        details.open = true;
+        details.dispatchEvent(new Event("toggle"));
+      });
+      const edit = [...details.querySelectorAll("button")].find((b) => b.textContent === "ai.action.edit_sql")!;
+      expect(edit.disabled).toBe(true);
+      expect(edit.parentElement?.getAttribute("title")).toBe('ai.action.edit_sql_blocked{"table":"sales"}');
+    });
+
+    it("adds buttons to code blocks and copies the whole answer, without live HTML", async () => {
+      const actions = { tabs: [tab("sales", 1), tab("regions", 0)], openSql: vi.fn(), editSql: vi.fn() };
+      panel({ chat: answered(), actions });
+      const blocks = document.querySelectorAll(".ai-code");
+      expect(blocks.length).toBe(2);
+      const buttons = (el: Element) => [...el.querySelectorAll("button")].map((b) => b.textContent);
+      expect(buttons(blocks[0])).toEqual(["ai.action.copy_sql", "ai.action.open_tab", "ai.action.edit_sql"]);
+      expect(buttons(blocks[1])).toEqual(["ai.action.copy"]);
+      expect(blocks[1].querySelector("b")).toBeNull();
+      expect(blocks[1].textContent).toContain("<b>hi</b>");
+      fireEvent.click([...blocks[0].querySelectorAll("button")].find((b) => b.textContent === "ai.action.edit_sql")!);
+      expect(actions.editSql).toHaveBeenCalledWith("SELECT 1 FROM regions");
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("ai.action.copy_answer"));
+      });
+      expect(writeText).toHaveBeenLastCalledWith("Done.\n\n```sql\nSELECT 1 FROM regions\n```\n\n```python\nprint('<b>hi</b>')\n```");
+    });
   });
 });

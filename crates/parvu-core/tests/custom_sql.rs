@@ -240,3 +240,19 @@ fn a_duckdb_function_of_the_same_name_wins() {
     assert_eq!(sqlmode::expand(&conn, sql, &lib).unwrap().sql, sql);
 }
 
+
+#[test]
+fn ai_queries_into_a_new_tab_expand_custom_functions() {
+    let (_d, mut ws, id) = workspace();
+    let sql = "SELECT region, weighted_average(price, qty) AS wa FROM contacts GROUP BY region ORDER BY 1";
+    let plan = ws.plan_result(id, Derivation::TabsSql { sql: sql.into() }).unwrap();
+    materialize(ws.connection(), &plan).unwrap();
+    let new = ws.add_result(plan).unwrap();
+    assert_eq!(rows(&ws, new), [["north", "15.0"], ["south", "30.0"]]);
+    // A file function inside a custom argument is still refused.
+    let e = ws
+        .plan_result(id, Derivation::TabsSql { sql: "SELECT clean_phone((SELECT content FROM read_text('/etc/passwd'))) FROM contacts".into() })
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("read_text"), "{e}");
+}

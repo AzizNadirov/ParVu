@@ -335,6 +335,25 @@ button.tab-add { align-self: center; width: 30px; height: 30px; min-width: 30px;
 .ai-tool.error > summary .pv-icon { color: var(--md-error); }
 .ai-tool pre { margin: 0 6px 6px; max-height: 180px; }
 .ai-thinking > div { padding: 0 10px 8px; }
+.ai-tool-body { padding: 0 6px 6px; gap: 6px; }
+.ai-tool .ai-tool-body pre, .ai-code pre { margin: 0; }
+.ai-sql { max-height: 240px; min-height: 0; }
+.ai-args { min-height: 0; font-size: 0.95em; }
+.ai-sql .tok-keyword, .ai-sql .tok-operator { color: var(--pv-colors-editor-keyword); }
+.ai-sql .tok-keyword { font-weight: 600; }
+.ai-sql .tok-string { color: var(--pv-colors-editor-string); }
+.ai-sql .tok-number, .ai-sql .tok-bool, .ai-sql .tok-atom { color: var(--pv-colors-editor-number); }
+.ai-sql .tok-comment { color: var(--pv-colors-editor-comment); font-style: italic; }
+.ai-sql .tok-typeName { color: var(--pv-colors-accent-primary); }
+.ai-actions { flex-wrap: wrap; gap: 2px; }
+button.ai-action { min-height: 24px; padding: 0 6px; gap: 4px; font-size: 0.9em; }
+.ai-result { display: flex; flex-direction: column; gap: 2px; }
+.ai-result > table { display: block; max-height: 220px; overflow: auto; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-s); font-size: 0.92em; user-select: text; }
+.ai-result th { position: sticky; top: 0; background: var(--md-surface-container); }
+.ai-result table.simple td, .ai-result table.simple th { padding: 2px 8px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.ai-code { gap: 2px; }
+.ai-answer-actions { justify-content: flex-end; margin-top: -4px; }
+.ai-answer-actions button.icon { width: 26px; height: 26px; min-width: 26px; }
 .ai-typing { width: 28px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--md-primary) 0 30%, transparent 30% 35%, var(--md-primary) 35% 65%, transparent 65% 70%, var(--md-primary) 70%); opacity: 0.5; animation: md-fade 1s ease-in-out infinite alternate; }
 .ai-input { padding: 10px 12px 12px; border-top: 1px solid var(--md-outline-variant); gap: 6px; }
 .ai-input textarea { resize: none; width: 100%; }

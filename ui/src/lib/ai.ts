@@ -1,6 +1,9 @@
 // Pure logic of the AI assistant panel: provider presets and turning the
 // backend's streamed events into a transcript.
-import type { AgentEvent, AiStop, AiUsage, ProviderConfig } from "./api";
+// @ts-ignore -- marked 4 ships no type declarations
+import { marked } from "marked";
+import type { AgentEvent, AiStop, AiUsage, Cell, ProviderConfig } from "./api";
+import { formatRows } from "./copy";
 
 export interface ProviderPreset {
   key: string;
@@ -173,4 +176,170 @@ export function toolCallLabel(name: string, input: unknown): string {
 /** Whether text looks like it contains an API key (warn before sending). */
 export function looksLikeKey(text: string): boolean {
   return /\b(sk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9]{8,}|AIza[A-Za-z0-9_-]{8,})/.test(text);
+}
+
+// ---------------------------------------------------------------- actions on results and SQL
+
+/** Rows of a tool result, for a small table and "Copy result". */
+export interface ResultTable {
+  columns: string[];
+  rows: Cell[][];
+  /** The tool returned only the first rows. */
+  truncated: boolean;
+}
+
+const cellText = (v: unknown): Cell => (v === null || v === undefined ? null : typeof v === "string" ? v : JSON.stringify(v));
+
+/**
+ * A tool result as a table, when it is one: rows (`query`, `sample_rows`,
+ * `value_counts`), the columns of `describe_table`, or the numbers of
+ * `column_stats` as name/value pairs. `null` for anything else, including a
+ * result cut short for the model (no longer valid JSON).
+ */
+export function toolResultTable(name: string, text: string | undefined): ResultTable | null {
+  if (!text) return null;
+  let v: unknown;
+  try {
+    v = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (Array.isArray(o.columns) && Array.isArray(o.rows) && o.columns.every((c) => typeof c === "string")) {
+    return {
+      columns: o.columns as string[],
+      rows: (o.rows as unknown[]).map((r) => (Array.isArray(r) ? r.map(cellText) : [cellText(r)])),
+      truncated: o.truncated === true,
+    };
+  }
+  if (name === "describe_table" && Array.isArray(o.columns)) {
+    return {
+      columns: ["column", "type"],
+      rows: (o.columns as Record<string, unknown>[]).map((c) => [cellText(c?.name), cellText(c?.type)]),
+      truncated: false,
+    };
+  }
+  if (name === "column_stats") {
+    return { columns: ["statistic", "value"], rows: Object.entries(o).map(([k, x]) => [k, cellText(x)]), truncated: false };
+  }
+  return null;
+}
+
+/** A result table as tab-separated text with a header (pastes into a spreadsheet). */
+export function tableToTsv(t: ResultTable): string {
+  return formatRows(t.rows, "tsv", t.columns);
+}
+
+/** What "Copy result" copies: the table as TSV, or the text as it is. */
+export function toolResultCopyText(name: string, text: string): string {
+  const t = toolResultTable(name, text);
+  return t ? tableToTsv(t) : text;
+}
+
+/** `name` as a SQL identifier. */
+export function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+/**
+ * SQL that gives a tool call's result again (without the row cap for
+ * `query` and all values for `value_counts`), for "Open result in a new
+ * tab"; `null` for tools without one. Table names mean each tab's current
+ * result, as in the assistant's tools.
+ */
+export function toolResultSql(name: string, input: unknown): string | null {
+  const a = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  switch (name) {
+    case "query":
+      return str(a.sql).trim() || null;
+    case "value_counts": {
+      if (!str(a.table) || !str(a.column)) return null;
+      return `SELECT ${quoteIdent(str(a.column))} AS value, COUNT(*) AS count FROM ${quoteIdent(str(a.table))} GROUP BY ALL ORDER BY count DESC, value`;
+    }
+    case "sample_rows": {
+      if (!str(a.table)) return null;
+      const n = Math.min(100, Math.max(1, Math.floor(typeof a.n === "number" ? a.n : 10)));
+      const t = quoteIdent(str(a.table));
+      switch (a.mode ?? "head") {
+        case "head":
+          return `SELECT * FROM ${t} LIMIT ${n}`;
+        case "tail":
+          return `SELECT * EXCLUDE (__pv_n) FROM (SELECT *, ROW_NUMBER() OVER () AS __pv_n FROM ${t}) QUALIFY __pv_n > COUNT(*) OVER () - ${n} ORDER BY __pv_n`;
+        case "random":
+          return `SELECT * FROM ${t} USING SAMPLE reservoir(${n} ROWS) REPEATABLE (42)`;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Whether a Markdown code block holds SQL: tagged sql (or a SQL dialect), or untagged and starting like a query. */
+export function isSqlBlock(lang: string | undefined, text: string): boolean {
+  const l = (lang ?? "").trim().split(/\s+/)[0].toLowerCase();
+  if (l) return ["sql", "duckdb", "postgresql", "postgres", "pgsql", "psql"].includes(l);
+  return /^\s*(select|with|from)\b/i.test(text);
+}
+
+/** Markdown split into prose and the top-level code blocks, which get their own buttons. */
+export type MdSegment = { kind: "md"; source: string } | { kind: "code"; lang: string; text: string; sql: boolean };
+
+type MdToken = { type: string; raw: string; lang?: string; text?: string };
+
+export function markdownSegments(source: string): MdSegment[] {
+  let tokens: MdToken[];
+  try {
+    tokens = (marked as unknown as { lexer(s: string): MdToken[] }).lexer(source);
+  } catch {
+    return [{ kind: "md", source }];
+  }
+  const out: MdSegment[] = [];
+  for (const tok of tokens) {
+    if (tok.type === "code") {
+      const lang = (tok.lang ?? "").trim();
+      const text = tok.text ?? "";
+      out.push({ kind: "code", lang, text, sql: isSqlBlock(lang, text) });
+      continue;
+    }
+    const last = out[out.length - 1];
+    if (last && last.kind === "md") last.source += tok.raw;
+    else out.push({ kind: "md", source: tok.raw });
+  }
+  return out.filter((s) => s.kind === "code" || s.source.trim() !== "");
+}
+
+/** Identifiers in `sql`, lower-cased (quoted ones unquoted), skipping strings and comments. */
+export function sqlIdentifiers(sql: string): string[] {
+  const out: string[] = [];
+  const re = /'(?:[^']|'')*'?|--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"((?:[^"]|"")*)"?|([A-Za-z_][A-Za-z0-9_$]*)/g;
+  for (let m = re.exec(sql); m; m = re.exec(sql)) {
+    if (m[1] !== undefined) out.push(m[1].replace(/""/g, '"').toLowerCase());
+    else if (m[2] !== undefined) out.push(m[2].toLowerCase());
+  }
+  return out;
+}
+
+/**
+ * Why the assistant's SQL can't go into the SQL editor as it is, or `null`
+ * when it can. The assistant's queries see each table as the tab's current
+ * result (steps applied), while SQL mode reads the original file, so a
+ * query that names a tab with steps would give other numbers there. Names
+ * are matched anywhere in the query (a column of the same name counts too),
+ * which errs on the safe side. Returns the first such tab's name.
+ */
+export function sqlEditBlocker(sql: string, tabs: { name: string; steps: unknown[] }[]): string | null {
+  const used = new Set(sqlIdentifiers(sql));
+  return tabs.find((t) => t.steps.length > 0 && used.has(t.name.toLowerCase()))?.name ?? null;
+}
+
+/** All of an answer's text (its prose and code blocks, not tool calls), for "Copy answer". */
+export function answerText(parts: AssistantPart[]): string {
+  return parts
+    .filter((p): p is Extract<AssistantPart, { type: "text" }> => p.type === "text")
+    .map((p) => p.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
 }

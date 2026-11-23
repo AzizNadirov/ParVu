@@ -58,7 +58,7 @@ import { MenuBar, PopupMenu, type MenuEntry } from "./components/PopupMenu";
 import { DataGrid, isNumericType, type GridHandle } from "./components/DataGrid";
 import { QueryEditor, type EditorMode } from "./components/QueryEditor";
 import { Pagination, StepsPanel, TabBar, Welcome, stepText } from "./components/Panels";
-import { AiPanel } from "./components/AiPanel";
+import { AiPanel, type AiActions } from "./components/AiPanel";
 import { applyEvent, emptyChat, finishRun, startRun, type ChatState } from "./lib/ai";
 import type { FormatRule } from "./lib/format";
 import {
@@ -2334,6 +2334,25 @@ export function App({ boot }: { boot: Bootstrap }) {
 
   // ------------------------------------------------------------ render
   const st = activeTab ? tabUi.current.get(activeTab.id) : undefined;
+  /** The AI panel's buttons on the assistant's SQL and results. */
+  const aiActions: AiActions = {
+    tabs,
+    // The SQL runs again with the assistant's meaning of table names (each
+    // tab's current result), checked by the same read-only guard.
+    openSql: activeTab ? (sql) => void makeTable(activeTab, { kind: "tabs_sql", sql }) : null,
+    editSql: activeTab
+      ? (sql) => {
+          setMode("sql");
+          setEditorText(sql);
+          if (st) {
+            st.mode = "sql";
+            st.query = sql;
+          }
+          if (!editorOpen || editorCollapsed) setView({ show_query_panel: true, query_panel_collapsed: false });
+          status(t("ai.action.sql_in_editor"), 5000);
+        }
+      : null,
+  };
 
   // Colour scales need each column's min and max over the whole result;
   // re-read them when the data or the scaled columns change.
@@ -2676,6 +2695,7 @@ export function App({ boot }: { boot: Bootstrap }) {
             onOpenProviders={() => void manageProviders()}
             onConnectClient={() => void openConnectAi(ui)}
             onClose={toggleAi}
+            actions={aiActions}
           />
         )}
         </div>

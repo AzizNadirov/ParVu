@@ -23,6 +23,21 @@ When you connect an AI client, ParVu doesn't have to be open: the client starts 
 
 The assistant also sees your custom functions and operations (`list_custom_tools`) and can use them. Ask it to "make a custom function that …" and it proposes one with examples: ParVu checks it, and asks whether to open it in the custom tool editor for you to read, validate and save. The assistant never saves a tool itself. See [CUSTOM.md](CUSTOM.md#ai-clients-and-the-assistant).
 
+### Keeping what the assistant ran
+
+Each tool call the assistant makes is a row in its answer; click it to see its full input and result. A query shows its SQL highlighted, and its rows as a small table.
+
+- **Copy SQL** copies the query.
+- **Open in new tab** runs the query again, without the 100–1000 row limit the assistant works with, and opens the result as a new tab named `ai_result` (then `ai_result_2`…). Save it with **Save As** or **Export** like any other result. The tab's ↻ button runs the query again on your tabs as they are then. `value_counts` and `sample_rows` results can be opened the same way (value counts then lists every value, not only the top ones).
+- **Edit in SQL editor** puts the query into the SQL editor of the current tab without running it.
+- **Copy result** copies the rows as tab-separated text, which pastes into a spreadsheet. `describe_table` and `column_stats` results can be copied too.
+
+SQL code blocks in an answer get the same **Copy SQL**, **Open in new tab** and **Edit in SQL editor** buttons; other code blocks get **Copy**. The copy button under an answer copies its whole text.
+
+**Why Edit in SQL editor is sometimes greyed out:** in the assistant's queries a table name means the tab *as you see it*, with its filters and other steps applied. In the SQL editor a table name means the original file. When a query names a tab that has steps, the two would give different numbers, so ParVu offers only **Open in new tab** for it, which keeps the assistant's meaning. The button's tooltip says which table has steps. (A column with the same name as such a tab also counts, to be safe.)
+
+Queries opened in a new tab are checked like the assistant's own: one SELECT over the open tabs, with no file functions such as `read_csv`.
+
 Each tab has its own conversation. The ↺ button starts a new one. The panel shows the tokens used and, for Claude models, the estimated cost.
 
 **What is sent to the provider:**
