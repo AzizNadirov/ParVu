@@ -126,7 +126,7 @@ Then ask, for example: "Open sales.parquet from my data folder and show revenue 
 | `undo` | Revert the last step on a table |
 | `list_custom_tools` | The custom functions and operations the user defined ([CUSTOM.md](CUSTOM.md)): name, kind (row function, summary function, operation), typed signature, description, one example and how to call each one with `apply_operation` (`custom_function` / `custom_operation`) or `set_formula` (a summary function there is a column total, like `SUM`). A columns parameter takes `{"columns": ["a", "b"]}`; a summary function of one column also shows the `group_by` aggregation that uses it (`"func": "custom"`) |
 | `propose_custom_tool` | Suggest a new custom function or operation: a full definition with examples. ParVu validates it with every check (including the safety guard that refuses file functions) and returns the report in English. It never saves anything: connected to the window, the user is asked whether to open the proposal in the editor and saves it there; the standalone server only validates, even with `--allow-write`. `offer: false` validates without asking the user (for corrections) |
-| `export` | Write a table to a file (needs `--allow-write`) |
+| `export` | Write a table to a file (needs `--allow-write`); the extension picks the format: `.csv`, `.parquet`, `.json`, `.jsonl`, `.xlsx` or `.md` (a Markdown table) |
 
 ### Safety
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- **Export to a Markdown table.** File → Export can write a `.md` file: a table as GitHub shows it, with number columns right-aligned. Choose whether to include the header and row numbers. Long tables are better as CSV or Parquet, so above 100,000 rows ParVu asks first. See [docs/QUICK_START.md](docs/QUICK_START.md#edit-and-save).
+- **More ways to copy as Markdown.** Right-click a selection → Copy As → Copy as Markdown now offers a plain Markdown table, one with row numbers (numbered as in the whole table), or one without the header. Line breaks and `|` in cells no longer break the table, and number columns are right-aligned.
+
 ## [1.0.0-alpha.11]
 
 The AI assistant remembers each file's conversation, Excel Material is the default theme, and ParVu feels quicker: switching tabs no longer runs their queries again. Plus readability and layout fixes in Excel Material.

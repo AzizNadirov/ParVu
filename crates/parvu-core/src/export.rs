@@ -5,7 +5,8 @@
 //! Parquet and JSON are written by DuckDB's `COPY`, which streams and is
 //! fast; the caller can watch progress and cancel through the connection's
 //! progress and interrupt handles. Excel is written with `rust_xlsxwriter`
-//! from Arrow batches in constant memory.
+//! from Arrow batches in constant memory, and Markdown tables from streamed
+//! Arrow batches, a line at a time.
 //!
 //! Output always goes to a temporary file next to the target and is renamed
 //! into place at the end, so a failed or cancelled export leaves nothing
@@ -20,7 +21,7 @@ use duckdb::arrow::util::display::ArrayFormatter;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Result};
-use crate::page::format_options;
+use crate::page::{Cell, format_batches, format_options};
 use crate::sql::{is_safe_type_name, quote_ident, quote_literal};
 
 /// Excel's hard row limit, including the header row.
@@ -39,6 +40,7 @@ pub enum ExportFormat {
     Parquet,
     Json,
     Excel,
+    Markdown,
 }
 
 impl ExportFormat {
@@ -49,6 +51,7 @@ impl ExportFormat {
             "parquet" | "pq" => ExportFormat::Parquet,
             "json" | "jsonl" | "ndjson" => ExportFormat::Json,
             "xlsx" => ExportFormat::Excel,
+            "md" | "markdown" => ExportFormat::Markdown,
             _ => ExportFormat::Csv,
         }
     }
@@ -59,6 +62,7 @@ impl ExportFormat {
             ExportFormat::Parquet => "parquet",
             ExportFormat::Json => "json",
             ExportFormat::Excel => "xlsx",
+            ExportFormat::Markdown => "md",
         }
     }
 }
@@ -107,6 +111,8 @@ pub struct ExportOptions {
     pub compression: String,
     /// JSON lines (one object per line) instead of a JSON array.
     pub json_lines: bool,
+    /// Markdown: a first column `#` with the 1-based row number.
+    pub row_numbers: bool,
 }
 
 impl Default for ExportOptions {
@@ -122,6 +128,7 @@ impl Default for ExportOptions {
             quoting: Quoting::Needed,
             compression: "snappy".into(),
             json_lines: false,
+            row_numbers: false,
         }
     }
 }
@@ -218,6 +225,7 @@ pub fn copy_options(o: &ExportOptions) -> Result<String> {
         }
         ExportFormat::Json => format!("FORMAT JSON, ARRAY {}", !o.json_lines),
         ExportFormat::Excel => return Err(CoreError::invalid("Excel is not written with COPY")),
+        ExportFormat::Markdown => return Err(CoreError::invalid("Markdown is not written with COPY")),
     })
 }
 
@@ -242,6 +250,7 @@ pub fn export(conn: &Connection, source: &str, o: &ExportOptions) -> Result<u64>
     };
     let result = match o.format {
         ExportFormat::Excel => write_excel(conn, &query, &tmp),
+        ExportFormat::Markdown => write_markdown(conn, &query, &tmp, o),
         ExportFormat::Parquet => match hugeint_columns(conn, &query)? {
             huge if huge.is_empty() => copy(&query),
             // Parquet has no 128-bit integers: DuckDB would write them as
@@ -305,6 +314,112 @@ fn is_number(dt: &DataType) -> bool {
             | DataType::Decimal128(_, _)
             | DataType::Decimal256(_, _)
     )
+}
+
+// ---------------------------------------------------------------- Markdown
+//
+// A GitHub-flavoured pipe table. The UI's "Copy as → Markdown" builds the
+// same text in `ui/src/lib/copy.ts`; both are tested against
+// `tests/golden/markdown.json`, so keep them in step.
+
+/// Header of the row-number column.
+pub const MARKDOWN_ROW_NUMBER_LABEL: &str = "#";
+
+/// A cell's text made safe inside a pipe table: `|` is escaped as `\|`
+/// (backslashes right before it are doubled, so they stay visible and don't
+/// escape the escape), and line breaks become `<br>`. Nothing else changes.
+pub fn markdown_cell(v: &str) -> String {
+    let mut out = String::with_capacity(v.len() + 4);
+    let mut backslashes = 0usize;
+    let mut chars = v.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                backslashes += 1;
+                out.push('\\');
+                continue;
+            }
+            '|' => {
+                out.extend(std::iter::repeat_n('\\', backslashes));
+                out.push_str("\\|");
+            }
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                out.push_str("<br>");
+            }
+            '\n' => out.push_str("<br>"),
+            _ => out.push(c),
+        }
+        backslashes = 0;
+    }
+    out
+}
+
+/// One table line from already escaped cells: `| a | b |`.
+fn markdown_line<S: AsRef<str>>(cells: &[S]) -> String {
+    let mut line = String::from("|");
+    for c in cells {
+        line.push(' ');
+        line.push_str(c.as_ref());
+        line.push_str(" |");
+    }
+    line
+}
+
+/// The header line and the delimiter line. Number columns (and the row
+/// numbers) are right-aligned.
+///
+/// A pipe table cannot do without its header line, so with
+/// `include_header` off the header line is there but blank (`|  |  |`).
+pub fn markdown_head(names: &[String], numeric: &[bool], include_header: bool, row_numbers: bool) -> [String; 2] {
+    let mut head: Vec<String> = Vec::with_capacity(names.len() + 1);
+    let mut delim: Vec<&str> = Vec::with_capacity(names.len() + 1);
+    if row_numbers {
+        head.push(if include_header { MARKDOWN_ROW_NUMBER_LABEL.to_string() } else { String::new() });
+        delim.push("---:");
+    }
+    for (i, n) in names.iter().enumerate() {
+        head.push(if include_header { markdown_cell(n) } else { String::new() });
+        delim.push(if numeric.get(i).copied().unwrap_or(false) { "---:" } else { "---" });
+    }
+    [markdown_line(&head), markdown_line(&delim)]
+}
+
+/// One data line; NULL is an empty cell. `row_number` is 1-based.
+pub fn markdown_row(cells: &[Cell], row_number: Option<u64>) -> String {
+    let mut out: Vec<String> = Vec::with_capacity(cells.len() + 1);
+    if let Some(n) = row_number {
+        out.push(n.to_string());
+    }
+    out.extend(cells.iter().map(|c| c.as_deref().map(markdown_cell).unwrap_or_default()));
+    markdown_line(&out)
+}
+
+/// Stream `query` into a Markdown table at `path`, batch by batch, with the
+/// cells formatted as the grid shows them.
+fn write_markdown(conn: &Connection, query: &str, path: &Path, o: &ExportOptions) -> Result<u64> {
+    use std::io::Write;
+    let mut out = std::io::BufWriter::new(std::fs::File::create(path)?);
+    let mut stmt = conn.prepare(query)?;
+    let stream = stmt.stream_arrow([])?;
+    let schema = stream.get_schema();
+    let names: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
+    let numeric: Vec<bool> = schema.fields().iter().map(|f| is_number(f.data_type())).collect();
+    for line in markdown_head(&names, &numeric, o.include_header, o.row_numbers) {
+        writeln!(out, "{line}")?;
+    }
+    let mut rows: u64 = 0;
+    for batch in stream {
+        let batch = batch?;
+        for cells in format_batches(std::slice::from_ref(&batch))? {
+            rows += 1;
+            writeln!(out, "{}", markdown_row(&cells, o.row_numbers.then_some(rows)))?;
+        }
+    }
+    out.flush()?;
+    Ok(rows)
 }
 
 pub(crate) fn xlsx_err(e: rust_xlsxwriter::XlsxError) -> CoreError {
@@ -439,6 +554,9 @@ mod tests {
         assert_eq!(ExportFormat::for_path(Path::new("a.ndjson")), ExportFormat::Json);
         assert_eq!(ExportFormat::for_path(Path::new("a.xlsx")), ExportFormat::Excel);
         assert_eq!(ExportFormat::for_path(Path::new("a.weird")), ExportFormat::Csv);
+        assert_eq!(ExportFormat::for_path(Path::new("a.md")), ExportFormat::Markdown);
+        assert_eq!(ExportFormat::for_path(Path::new("a.Markdown")), ExportFormat::Markdown);
+        assert_eq!(ExportFormat::Markdown.default_extension(), "md");
         let o = ExportOptions::for_path("x.tsv");
         assert_eq!(o.delimiter, "\t");
         assert!(ExportOptions::for_path("x.jsonl").json_lines);
@@ -494,5 +612,82 @@ mod tests {
         assert!(is_temporal("TIMESTAMP WITH TIME ZONE"));
         assert!(is_temporal("TIME"));
         assert!(!is_temporal("VARCHAR"));
+    }
+
+    /// The cases shared with the UI's "Copy as → Markdown" tests.
+    fn golden_markdown() -> Vec<serde_json::Value> {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../tests/golden/markdown.json")).unwrap();
+        v["cases"].as_array().unwrap().clone()
+    }
+
+    #[test]
+    fn markdown_golden_cases() {
+        for case in golden_markdown() {
+            let strs = |k: &str| -> Vec<String> {
+                case[k].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect()
+            };
+            let names = strs("columns");
+            let numeric: Vec<bool> = case["numeric"].as_array().unwrap().iter().map(|x| x.as_bool().unwrap()).collect();
+            let header = case["header"].as_bool().unwrap();
+            let row_numbers = case["row_numbers"].as_bool().unwrap();
+            let first = case["first_row"].as_u64().unwrap();
+            let mut lines: Vec<String> = markdown_head(&names, &numeric, header, row_numbers).into();
+            for (i, row) in case["rows"].as_array().unwrap().iter().enumerate() {
+                let cells: Vec<Cell> = row.as_array().unwrap().iter().map(|x| x.as_str().map(String::from)).collect();
+                lines.push(markdown_row(&cells, row_numbers.then_some(first + i as u64)));
+            }
+            assert_eq!(lines.join("\n"), case["expected"].as_str().unwrap(), "{}", case["name"]);
+        }
+    }
+
+    #[test]
+    fn markdown_escaping() {
+        assert_eq!(markdown_cell("a|b"), "a\\|b");
+        assert_eq!(markdown_cell("a\\|b"), "a\\\\\\|b");
+        assert_eq!(markdown_cell("a\\b"), "a\\b");
+        assert_eq!(markdown_cell("1\r\n2\r3\n"), "1<br>2<br>3<br>");
+        assert_eq!(markdown_cell("日本 🎉"), "日本 🎉");
+        assert_eq!(markdown_row(&[None, Some(String::new())], None), "|  |  |");
+    }
+
+    fn markdown_export(conn: &Connection, query: &str, header: bool, row_numbers: bool) -> (u64, String) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("out.md");
+        let o = ExportOptions { include_header: header, row_numbers, ..ExportOptions::for_path(&path) };
+        assert_eq!(o.format, ExportFormat::Markdown);
+        let rows = export(conn, query, &o).unwrap();
+        (rows, std::fs::read_to_string(&path).unwrap())
+    }
+
+    #[test]
+    fn markdown_export_matches_the_copy() {
+        let conn = Connection::open_in_memory().unwrap();
+        let q = "SELECT * FROM (VALUES (1, 'a|b', 2.5::DOUBLE), (2, NULL, 10.0::DOUBLE)) t(id, name, price)";
+        let cases = golden_markdown();
+        let (rows, text) = markdown_export(&conn, q, true, false);
+        assert_eq!(rows, 2);
+        assert_eq!(text, format!("{}\n", cases[0]["expected"].as_str().unwrap()));
+        let (_, text) = markdown_export(&conn, q, false, false);
+        assert_eq!(text, format!("{}\n", cases[2]["expected"].as_str().unwrap()));
+        // Grid formatting: 15 significant digits, ISO dates and timestamps.
+        let q = "SELECT 0.1::DOUBLE + 0.2::DOUBLE AS f, DATE '2024-03-01' AS d, TIMESTAMP '2024-03-01 10:20:30' AS ts, \
+                 12.50::DECIMAL(10,2) AS amount";
+        let (_, text) = markdown_export(&conn, q, true, false);
+        assert_eq!(text, "| f | d | ts | amount |\n| ---: | --- | --- | ---: |\n| 0.3 | 2024-03-01 | 2024-03-01 10:20:30 | 12.50 |\n");
+    }
+
+    #[test]
+    fn markdown_export_streams_many_batches() {
+        let conn = Connection::open_in_memory().unwrap();
+        // Several Arrow batches (2048 rows each); row numbers carry on across them.
+        let (rows, text) = markdown_export(&conn, "SELECT range AS n FROM range(5000)", true, true);
+        assert_eq!(rows, 5000);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 5002);
+        assert_eq!(lines[0], "| # | n |");
+        assert_eq!(lines[1], "| ---: | ---: |");
+        assert_eq!(lines[2], "| 1 | 0 |");
+        assert_eq!(lines[2050], "| 2049 | 2048 |");
+        assert_eq!(lines[5001], "| 5000 | 4999 |");
     }
 }

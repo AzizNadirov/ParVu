@@ -27,6 +27,8 @@ import {
   groupFunctions,
   excelGroups,
   initialExportState,
+  MARKDOWN_LARGE_ROWS,
+  markdownTooLong,
   initialSampleSize,
   insertAt,
   isTemporal,
@@ -212,7 +214,25 @@ describe("export", () => {
       quoting: "needed",
       compression: "snappy",
       json_lines: false,
+      row_numbers: false,
     });
+  });
+
+  it("Markdown: extension, format, row numbers and the long-table check", () => {
+    expect(fileTypeForPath("/a/b.MD")).toBe("md");
+    expect(fileTypeForPath("b.markdown")).toBe("md");
+    expect(withExtension("/a/b.csv", "md")).toBe("/a/b.md");
+    const s = { ...initialExportState("t", cols, undefined, "snappy"), type: "md" as const, rowNumbers: true, includeHeader: false };
+    const o = buildExportOptions(s);
+    expect(o.format).toBe("markdown");
+    expect(o.row_numbers).toBe(true);
+    expect(o.include_header).toBe(false);
+    // Row numbers only mean something for Markdown.
+    expect(buildExportOptions({ ...s, type: "csv" }).row_numbers).toBe(false);
+    expect(markdownTooLong("md", MARKDOWN_LARGE_ROWS)).toBe(false);
+    expect(markdownTooLong("md", MARKDOWN_LARGE_ROWS + 1)).toBe(true);
+    expect(markdownTooLong("csv", 10_000_000)).toBe(false);
+    expect(markdownTooLong("md", null)).toBe(false);
   });
 
   it("drops date formats for parquet and sets tsv / jsonl specifics", () => {

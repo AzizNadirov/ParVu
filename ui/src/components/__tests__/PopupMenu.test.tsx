@@ -26,4 +26,37 @@ describe("popup menu", () => {
     fireEvent.click(container.querySelector(".menu-item")!);
     expect(pick).toHaveBeenCalled();
   });
+
+  it("opens submenus from the keyboard and goes back with ArrowLeft", () => {
+    const pick = vi.fn();
+    const close = vi.fn();
+    const { container } = render(
+      <PopupMenu
+        x={0}
+        y={0}
+        onClose={close}
+        items={[
+          { label: "Copy" },
+          { type: "separator" },
+          { label: "Copy as", submenu: [{ label: "CSV" }, { label: "Markdown", onSelect: pick }] },
+        ]}
+      />,
+    );
+    const root = container.querySelector(".menu-popup")!;
+    fireEvent.keyDown(root, { key: "ArrowDown" });
+    fireEvent.keyDown(root, { key: "ArrowDown" });
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    let menus = container.querySelectorAll(".menu-popup");
+    expect(menus.length).toBe(2);
+    // The submenu starts on its first item.
+    expect(menus[1].querySelector(".menu-item.open")?.textContent).toBe("CSV");
+    fireEvent.keyDown(menus[1], { key: "ArrowLeft" });
+    expect(container.querySelectorAll(".menu-popup").length).toBe(1);
+    fireEvent.keyDown(root, { key: "Enter" });
+    menus = container.querySelectorAll(".menu-popup");
+    fireEvent.keyDown(menus[1], { key: "ArrowDown" });
+    fireEvent.keyDown(menus[1], { key: "Enter" });
+    expect(pick).toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+  });
 });

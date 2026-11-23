@@ -344,7 +344,7 @@ pub struct ExportArgs {
     /// Table to write.
     pub table: String,
     /// Output path inside an allowed folder; the extension picks the format
-    /// (.csv, .parquet, .json, .jsonl, .xlsx).
+    /// (.csv, .parquet, .json, .jsonl, .xlsx, or .md for a Markdown table).
     pub path: String,
     /// Replace the file if it exists.
     #[serde(default)]
@@ -1406,6 +1406,10 @@ mod tool_tests {
         let r = s.export(Parameters(export(dir.path().join("out.parquet")))).await.unwrap();
         assert_ne!(r.is_error, Some(true), "{}", text(&r));
         assert!(dir.path().join("out.parquet").is_file());
+        let r = s.export(Parameters(export(dir.path().join("out.md")))).await.unwrap();
+        assert_ne!(r.is_error, Some(true), "{}", text(&r));
+        let md = std::fs::read_to_string(dir.path().join("out.md")).unwrap();
+        assert!(md.starts_with("| ") && md.lines().nth(1).unwrap().contains("---"), "{md}");
         let r = s.export(Parameters(export(dir.path().join("out.parquet")))).await.unwrap();
         assert_eq!(r.is_error, Some(true), "no silent overwrite");
         let r = s.export(Parameters(export(outside.path().join("out.csv")))).await.unwrap();

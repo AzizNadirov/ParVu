@@ -1,0 +1,146 @@
+{
+  "_comment": "Markdown tables: Rust (parvu-core/src/export.rs) and TS (ui/src/lib/copy.ts) must both produce `expected` for these inputs.",
+  "cases": [
+    {
+      "name": "header, number columns right-aligned, NULL empty",
+      "columns": [
+        "id",
+        "name",
+        "price"
+      ],
+      "numeric": [
+        true,
+        false,
+        true
+      ],
+      "rows": [
+        [
+          "1",
+          "a|b",
+          "2.5"
+        ],
+        [
+          "2",
+          null,
+          "10.0"
+        ]
+      ],
+      "header": true,
+      "row_numbers": false,
+      "first_row": 1,
+      "expected": "| id | name | price |\n| ---: | --- | ---: |\n| 1 | a\\|b | 2.5 |\n| 2 |  | 10.0 |"
+    },
+    {
+      "name": "row numbers are absolute and right-aligned",
+      "columns": [
+        "id",
+        "name",
+        "price"
+      ],
+      "numeric": [
+        true,
+        false,
+        true
+      ],
+      "rows": [
+        [
+          "1",
+          "a|b",
+          "2.5"
+        ],
+        [
+          "2",
+          null,
+          "10.0"
+        ]
+      ],
+      "header": true,
+      "row_numbers": true,
+      "first_row": 101,
+      "expected": "| # | id | name | price |\n| ---: | ---: | --- | ---: |\n| 101 | 1 | a\\|b | 2.5 |\n| 102 | 2 |  | 10.0 |"
+    },
+    {
+      "name": "without header: a blank header line",
+      "columns": [
+        "id",
+        "name",
+        "price"
+      ],
+      "numeric": [
+        true,
+        false,
+        true
+      ],
+      "rows": [
+        [
+          "1",
+          "a|b",
+          "2.5"
+        ],
+        [
+          "2",
+          null,
+          "10.0"
+        ]
+      ],
+      "header": false,
+      "row_numbers": false,
+      "first_row": 1,
+      "expected": "|  |  |  |\n| ---: | --- | ---: |\n| 1 | a\\|b | 2.5 |\n| 2 |  | 10.0 |"
+    },
+    {
+      "name": "without header, with row numbers",
+      "columns": [
+        "v"
+      ],
+      "numeric": [
+        false
+      ],
+      "rows": [
+        [
+          "x"
+        ],
+        [
+          "y"
+        ]
+      ],
+      "header": false,
+      "row_numbers": true,
+      "first_row": 1,
+      "expected": "|  |  |\n| ---: | --- |\n| 1 | x |\n| 2 | y |"
+    },
+    {
+      "name": "escaping: pipes, backslashes, line breaks, unicode, spaces",
+      "columns": [
+        "a|b",
+        "text"
+      ],
+      "numeric": [
+        false,
+        false
+      ],
+      "rows": [
+        [
+          "x\\|y",
+          "C:\\dir\\file"
+        ],
+        [
+          "\\\\|",
+          "one\r\ntwo\nthree\rfour"
+        ],
+        [
+          "Ünïcödé 日本 🎉",
+          "  padded  "
+        ],
+        [
+          "",
+          "|"
+        ]
+      ],
+      "header": true,
+      "row_numbers": false,
+      "first_row": 1,
+      "expected": "| a\\|b | text |\n| --- | --- |\n| x\\\\\\|y | C:\\dir\\file |\n| \\\\\\\\\\| | one<br>two<br>three<br>four |\n| Ünïcödé 日本 🎉 |   padded   |\n|  | \\| |"
+    }
+  ]
+}

@@ -640,7 +640,7 @@ export interface SearchHit {
   value: string;
 }
 
-export type ExportFormat = "csv" | "parquet" | "json" | "excel";
+export type ExportFormat = "csv" | "parquet" | "json" | "excel" | "markdown";
 export type Quoting = "needed" | "all_valid" | "none";
 
 export interface ColumnSpec {
@@ -661,6 +661,8 @@ export interface ExportOptions {
   quoting: Quoting;
   compression: string;
   json_lines: boolean;
+  /** Markdown: a first column with 1-based row numbers. */
+  row_numbers: boolean;
 }
 
 export interface ExportProgress {
