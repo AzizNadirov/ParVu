@@ -32,6 +32,8 @@ pub trait ToolBackend: Send + Sync {
 pub enum AgentEvent {
     Delta { delta: Delta },
     ToolCall { id: String, name: String, input: Value },
+    /// A tool's answer as the model got it (at most [`MAX_RESULT_CHARS`]
+    /// characters), so the UI can show, copy and reuse it.
     ToolResult { id: String, preview: String, is_error: bool },
     /// After each model call: its usage and the running cost (None when the
     /// model has no known price).
@@ -49,7 +51,7 @@ pub struct Agent<'a> {
 }
 
 /// Longest tool result sent to the model, in characters.
-const MAX_RESULT_CHARS: usize = 24_000;
+pub const MAX_RESULT_CHARS: usize = 24_000;
 
 impl Agent<'_> {
     /// Answer `question`, appending everything to `history`. Returns how the
@@ -110,7 +112,7 @@ impl Agent<'_> {
                     self.tools.call(&name, input).await
                 };
                 let text = clip(&out.text, MAX_RESULT_CHARS);
-                on_event(AgentEvent::ToolResult { id: id.clone(), preview: clip(&text, 400), is_error: out.is_error });
+                on_event(AgentEvent::ToolResult { id: id.clone(), preview: text.clone(), is_error: out.is_error });
                 results.push(Block::ToolResult { tool_use_id: id, content: text, is_error: out.is_error });
             }
             // Every result goes back in one message.

@@ -178,8 +178,14 @@ static NEXT_RESULT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 pub enum Derivation {
     /// A table operation (Group By, Pivot, Join…).
     Op { op: Operation },
-    /// A SQL query run "into a new tab".
+    /// A SQL query run "into a new tab". Table names mean the original
+    /// files, as in SQL mode.
     Sql { sql: String },
+    /// A query from the AI assistant run again into a new tab. Table names
+    /// mean each tab's *current* result (its steps applied), as in the
+    /// read-only session the assistant's `query` tool uses, and the SQL goes
+    /// through the same guard: one SELECT over open tabs, no file functions.
+    TabsSql { sql: String },
 }
 
 /// Where a result tab came from.
@@ -232,6 +238,12 @@ pub fn materialize(conn: &Connection, plan: &ResultPlan) -> Result<Materialized>
         return Ok(Materialized::TooBig);
     }
     Ok(Materialized::Rows(rows.max(0) as u64))
+}
+
+/// One line of at most 60 characters of `sql`, for a step label.
+fn short_sql(sql: &str) -> String {
+    let short: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    if short.chars().count() > 60 { format!("{}…", short.chars().take(60).collect::<String>()) } else { short }
 }
 
 /// Drop a result table that will not be used (a cancelled or failed job).
@@ -1121,21 +1133,61 @@ impl Workspace {
                 (built.sql, built.label, op.result_suffix())
             }
             Derivation::Sql { sql } => {
-                let short: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
-                let short = if short.chars().count() > 60 { format!("{}…", short.chars().take(60).collect::<String>()) } else { short };
+                let short = short_sql(sql);
                 // Custom functions are expanded with the current library,
                 // so Refresh follows their current definitions.
                 let x = self.expand_custom(sql.trim().trim_end_matches(';'))?;
                 crate::engine::validate(&self.conn, &x.sql).map_err(|e| x.explain(e))?;
                 (x.sql, StepLabel::new("step.query", &[("sql", &short)]), "query".into())
             }
+            Derivation::TabsSql { sql } => {
+                let full = self.tabs_sql(sql)?;
+                (full, StepLabel::new("step.ai_query", &[("sql", &short_sql(sql))]), String::new())
+            }
         };
+        let name = if suffix.is_empty() { "ai_result".to_string() } else { format!("{}_{suffix}", t.name) };
         Ok(ResultPlan {
             sql,
             table: format!("__pv_res_{}", NEXT_RESULT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
-            name: self.unique_name(&slugify_name(&format!("{}_{suffix}", t.name))),
+            name: self.unique_name(&slugify_name(&name)),
             origin: Origin { source_id: t.id, source: t.name.clone(), label, derivation },
         })
+    }
+
+    /// `sql` (untrusted, e.g. from the AI assistant) checked like a
+    /// read-only query and rewritten so each table name reads that tab's
+    /// current result: custom functions are expanded, then the guard allows
+    /// one SELECT over open tabs only, and every referenced tab becomes a CTE
+    /// over its current query.
+    pub fn tabs_sql(&self, sql: &str) -> Result<String> {
+        let x = self.expand_custom(sql.trim().trim_end_matches(';'))?;
+        let used = std::cell::RefCell::new(Vec::<usize>::new());
+        let resolve = |name: &str| {
+            let i = self.tabs.iter().position(|t| t.name.eq_ignore_ascii_case(name))?;
+            let mut u = used.borrow_mut();
+            if !u.contains(&i) {
+                u.push(i);
+            }
+            Some(format!("__pv_tab_{i}"))
+        };
+        let safe = crate::readonly::guard_select(&self.conn, &x.sql, &resolve).map_err(|e| match e {
+            CoreError::Invalid(msg) if msg.starts_with("Unknown table") => {
+                let open: Vec<&str> = self.tabs.iter().map(|t| t.name.as_str()).collect();
+                CoreError::invalid(format!("{msg} Open tables: {}.", open.join(", ")))
+            }
+            other => other,
+        })?;
+        let ctes: Vec<String> = used
+            .into_inner()
+            .into_iter()
+            .map(|i| format!("{} AS ({})", quote_ident(&format!("__pv_tab_{i}")), self.tabs[i].engine.current_query()))
+            .collect();
+        let full = if ctes.is_empty() { safe } else { format!("WITH {} SELECT * FROM ({safe})", ctes.join(", ")) };
+        crate::engine::validate(&self.conn, &full).map_err(|e| match x.explain(e) {
+            CoreError::Db(e) => CoreError::invalid(crate::readonly::clean_db_error(&e.to_string())),
+            other => other,
+        })?;
+        Ok(full)
     }
 
     /// Open a computed result (see [`materialize`]) as a new tab.

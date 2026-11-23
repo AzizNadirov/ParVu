@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Keep what the AI assistant ran.** Click a step in an assistant's answer to see the full SQL it ran and its result as a table. Buttons there, and on SQL blocks in its answers, copy the SQL, open the full result in a new tab (`ai_result`) that you can save or export, or put the SQL into the SQL editor. **Copy result** copies rows for pasting into a spreadsheet, and each answer has a copy button. See [docs/AI.md](docs/AI.md#keeping-what-the-assistant-ran).
+
 ## [1.0.0-alpha.9]
 
 ParVu and AI clients: Claude Code no longer opens a ParVu window for every session. ParVu starts in the background only when an AI client uses it, keeps running in the tray when its window is closed, and runs as one instance. Several GNOME (Wayland) window problems are fixed. From this version ParVu is free for noncommercial use and needs a commercial license for commercial use.

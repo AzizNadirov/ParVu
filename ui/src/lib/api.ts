@@ -177,7 +177,10 @@ export interface TabSummary {
 }
 
 /** How a result tab was made: a table operation or a SQL query. */
-export type Derivation = { kind: "op"; op: Operation } | { kind: "sql"; sql: string };
+/** How a result tab is made: a table operation, SQL as in SQL mode (table
+ * names = the original files), or SQL as the AI assistant runs it (table
+ * names = each tab's current result; checked like the assistant's queries). */
+export type Derivation = { kind: "op"; op: Operation } | { kind: "sql"; sql: string } | { kind: "tabs_sql"; sql: string };
 
 /** Where a result tab came from. */
 export interface Origin {

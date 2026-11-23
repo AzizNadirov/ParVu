@@ -267,3 +267,71 @@ fn operation_schema_covers_every_variant() {
     .unwrap();
     assert!(matches!(op, Operation::GroupBy { .. }));
 }
+
+// ---------------------------------------------------------------- AI queries into a new tab
+
+use parvu_core::workspace::{Derivation, Materialized, materialize};
+
+/// Plan an AI query into a new tab, compute it on a second connection (as
+/// the app's job does) and open it.
+fn ai_result(ws: &mut Workspace, from: u64, sql: &str) -> u64 {
+    let plan = ws.plan_result(from, Derivation::TabsSql { sql: sql.into() }).unwrap();
+    let conn = ws.clone_connection().unwrap();
+    assert!(matches!(materialize(&conn, &plan).unwrap(), Materialized::Rows(_)));
+    ws.add_result(plan).unwrap()
+}
+
+#[test]
+fn ai_queries_open_in_a_new_tab_with_tab_result_semantics() {
+    let (_d, mut ws, s, r) = setup();
+    ws.apply(s, &filter_north()).unwrap();
+    let sql = "SELECT s.region, m.manager, COUNT(*) AS n FROM sales s JOIN regions m USING (region) GROUP BY ALL ORDER BY 1";
+    // The same rows as the assistant's query tool saw…
+    let seen = ws.read_session().unwrap().query(sql, 1, None).unwrap();
+    let id = ai_result(&mut ws, s, sql);
+    let page = ws.page(id, 1).unwrap();
+    assert_eq!(cells(&page.rows), [["north", "Ann", "3"]]);
+    assert_eq!(cells(&seen.rows), cells(&page.rows));
+    let sum = ws.summary(id).unwrap();
+    assert_eq!(sum.name, "ai_result");
+    assert_eq!(sum.origin.as_ref().unwrap().label.key, "step.ai_query");
+    // …and not the original file, as SQL mode would.
+    let plan = ws.plan_result(s, Derivation::Sql { sql: "SELECT COUNT(*) FROM sales".into() }).unwrap();
+    materialize(ws.connection(), &plan).unwrap();
+    let file = ws.add_result(plan).unwrap();
+    assert_eq!(cells(&ws.page(file, 1).unwrap().rows), [["6"]]);
+
+    // Without a row cap, and a second one gets the next name.
+    let all = ai_result(&mut ws, r, "SELECT * FROM range(2000) t(i)");
+    assert_eq!(ws.summary(all).unwrap().total_rows, 2000);
+    assert_eq!(ws.summary(all).unwrap().name, "ai_result_2");
+
+    // Refresh runs it again on the tabs' current results.
+    ws.undo(s).unwrap();
+    let plan = ws.refresh_plan(id).unwrap();
+    materialize(ws.connection(), &plan).unwrap();
+    ws.replace_result(id, plan).unwrap();
+    assert_eq!(cells(&ws.page(id, 1).unwrap().rows), [["east", "Cy", "1"], ["north", "Ann", "3"], ["south", "Bob", "2"]]);
+}
+
+#[test]
+fn ai_queries_into_a_new_tab_go_through_the_guard() {
+    let (dir, ws, s, _r) = setup();
+    let refused = |sql: &str| ws.plan_result(s, Derivation::TabsSql { sql: sql.into() }).unwrap_err().to_string();
+    let csv = dir.path().join("regions.csv");
+    let e = refused(&format!("SELECT * FROM read_csv('{}')", csv.display()));
+    assert!(e.contains("read_csv"), "{e}");
+    let e = refused(&format!("SELECT * FROM '{}'", csv.display()));
+    assert!(e.contains("Unknown table"), "{e}");
+    let e = refused(&format!("COPY sales TO '{}'", dir.path().join("x.csv").display()));
+    assert!(e.contains("SELECT"), "{e}");
+    assert!(!dir.path().join("x.csv").exists());
+    let e = refused("CREATE TABLE t AS SELECT 1");
+    assert!(e.contains("SELECT"), "{e}");
+    let e = refused("SELECT 1; SELECT 2");
+    assert!(e.contains("one SELECT"), "{e}");
+    let e = refused("SELECT getenv('HOME')");
+    assert!(e.contains("getenv"), "{e}");
+    let e = refused("SELECT * FROM nope");
+    assert!(e.contains("Open tables: sales, regions"), "{e}");
+}

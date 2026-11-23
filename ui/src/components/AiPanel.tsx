@@ -1,14 +1,29 @@
 // The built-in AI assistant panel (right side of the window). The chat state
 // lives in App (one per tab); this renders it and sends questions.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 // @ts-ignore -- marked 4 ships no type declarations
 import { marked } from "marked";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Ui } from "../lib/ui";
 import { api, errorMessage } from "../lib/api";
-import type { ProvidersInfo } from "../lib/api";
-import { looksLikeKey, toolCallLabel, usageLabel, type AssistantPart, type ChatState } from "../lib/ai";
-import { Icon } from "./Icon";
+import type { ProvidersInfo, TabSummary } from "../lib/api";
+import {
+  answerText,
+  looksLikeKey,
+  markdownSegments,
+  sqlEditBlocker,
+  toolCallLabel,
+  toolResultCopyText,
+  toolResultSql,
+  toolResultTable,
+  usageLabel,
+  type AssistantPart,
+  type ChatState,
+  type ResultTable,
+} from "../lib/ai";
+import { sqlSpans } from "../lib/sqlHighlight";
+import { copyText } from "../dialogs/common";
+import { Icon, type IconName } from "./Icon";
 
 type MarkedApi = {
   parse(src: string, opts?: Record<string, unknown>): string;
@@ -43,11 +58,185 @@ export function SafeMarkdown({ source }: { source: string }) {
   );
 }
 
-function Part({ ui, p }: { ui: Ui; p: AssistantPart }) {
+/** What the panel's SQL and result buttons do (wired up in App). */
+export interface AiActions {
+  /** Open tabs, to tell whether SQL can go into the SQL editor as it is. */
+  tabs: TabSummary[];
+  /** Run the SQL again (tables = the tabs' current results) into a new tab; `null`: no table open. */
+  openSql: ((sql: string) => void) | null;
+  /** Put the SQL into the current tab's SQL editor without running it. */
+  editSql: ((sql: string) => void) | null;
+}
+
+function ActionButton(props: { icon: IconName; label: string; title?: string; disabled?: boolean; onClick: () => void }) {
+  const button = (
+    <button className="text ai-action" disabled={props.disabled} title={props.title ?? props.label} onClick={props.onClick}>
+      <Icon name={props.icon} size={14} />
+      {props.label}
+    </button>
+  );
+  // A disabled button gets no hover, so its reason goes on a wrapper.
+  return props.disabled ? <span title={props.title ?? props.label}>{button}</span> : button;
+}
+
+/** SQL, read-only, highlighted like the SQL editor (spans of text, never HTML). */
+export function SqlView({ sql }: { sql: string }) {
+  const spans = useMemo(() => sqlSpans(sql), [sql]);
+  return (
+    <pre className="pv-sql-preview ai-sql">
+      {spans.map((s, i) => (s.cls ? <span key={i} className={s.cls}>{s.text}</span> : s.text))}
+    </pre>
+  );
+}
+
+/** Copy, Open result in a new tab, Edit in SQL editor. */
+function SqlActions({ ui, sql, actions, extra }: { ui: Ui; sql: string; actions: AiActions; extra?: ReactNode }) {
+  const t = ui.t;
+  const blocker = useMemo(() => sqlEditBlocker(sql, actions.tabs), [sql, actions.tabs]);
+  return (
+    <div className="ai-actions row">
+      <ActionButton icon="copy" label={t("ai.action.copy_sql")} onClick={() => void copyText(ui, sql, t("dialog.common.copied"))} />
+      <ActionButton
+        icon="newTable"
+        label={t("ai.action.open_tab")}
+        title={t("ai.action.open_tab_hint")}
+        disabled={!actions.openSql}
+        onClick={() => actions.openSql?.(sql)}
+      />
+      <ActionButton
+        icon="edit"
+        label={t("ai.action.edit_sql")}
+        title={blocker ? t("ai.action.edit_sql_blocked", { table: blocker }) : t("ai.action.edit_sql_hint")}
+        disabled={!actions.editSql || blocker !== null}
+        onClick={() => actions.editSql?.(sql)}
+      />
+      {extra}
+    </div>
+  );
+}
+
+function ResultView({ t, table }: { t: Ui["t"]; table: ResultTable }) {
+  return (
+    <div className="ai-result">
+      <table className="simple">
+        <thead>
+          <tr>
+            {table.columns.map((c, i) => (
+              <th key={i}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((r, i) => (
+            <tr key={i}>
+              {r.map((c, j) => (
+                <td key={j} className={c === null ? "muted" : undefined}>
+                  {c ?? "NULL"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="muted small">
+        {table.truncated ? t("ai.result.truncated", { rows: table.rows.length }) : t("ai.result.rows", { rows: table.rows.length })}
+      </div>
+    </div>
+  );
+}
+
+function ToolPart({ ui, p, actions }: { ui: Ui; p: Extract<AssistantPart, { type: "tool" }>; actions: AiActions }) {
+  const t = ui.t;
+  const [open, setOpen] = useState(false);
+  const input = (p.input && typeof p.input === "object" ? p.input : {}) as Record<string, unknown>;
+  const sql = p.name === "query" && typeof input.sql === "string" ? input.sql : null;
+  const table = useMemo(() => (open && !p.isError ? toolResultTable(p.name, p.result) : null), [open, p.isError, p.name, p.result]);
+  const done = p.result !== undefined && !p.isError;
+  const copyResult = done && p.result ? (
+    <ActionButton
+      icon="copy"
+      label={t("ai.action.copy_result")}
+      title={t("ai.action.copy_result_hint")}
+      onClick={() => void copyText(ui, toolResultCopyText(p.name, p.result ?? ""), t("dialog.common.copied"))}
+    />
+  ) : null;
+  const resultSql = done && p.name !== "query" ? toolResultSql(p.name, p.input) : null;
+  const args = Object.entries(input).filter(([k]) => !(sql !== null && k === "sql"));
+  return (
+    <details className={`ai-tool${p.isError ? " error" : ""}`} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary>
+        <Icon name={p.result === undefined ? "run" : p.isError ? "close" : "check"} size={14} />
+        <span className="mono ellipsis">{toolCallLabel(p.name, p.input)}</span>
+      </summary>
+      {open && (
+        <div className="ai-tool-body col">
+          {sql !== null && <SqlView sql={sql} />}
+          {args.length > 0 && (
+            <pre className="pv-sql-preview ai-args">{args.map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join("\n")}</pre>
+          )}
+          {sql !== null ? (
+            <SqlActions ui={ui} sql={sql} actions={actions} extra={copyResult} />
+          ) : (
+            (copyResult || resultSql) && (
+              <div className="ai-actions row">
+                {resultSql && (
+                  <ActionButton
+                    icon="newTable"
+                    label={t("ai.action.open_tab")}
+                    title={t("ai.action.open_tab_hint")}
+                    disabled={!actions.openSql}
+                    onClick={() => actions.openSql?.(resultSql)}
+                  />
+                )}
+                {copyResult}
+              </div>
+            )
+          )}
+          {p.result !== undefined && (table ? <ResultView t={t} table={table} /> : <pre className="pv-sql-preview">{p.result}</pre>)}
+        </div>
+      )}
+    </details>
+  );
+}
+
+/** A code block of an answer: SQL gets the SQL actions, anything else Copy. */
+function CodeBlock({ ui, lang, text, sql, actions }: { ui: Ui; lang: string; text: string; sql: boolean; actions: AiActions }) {
+  const t = ui.t;
+  return (
+    <div className="ai-code col">
+      {sql ? <SqlView sql={text} /> : <pre className="pv-sql-preview" data-lang={lang || undefined}>{text}</pre>}
+      {sql ? (
+        <SqlActions ui={ui} sql={text} actions={actions} />
+      ) : (
+        <div className="ai-actions row">
+          <ActionButton icon="copy" label={t("ai.action.copy")} onClick={() => void copyText(ui, text, t("dialog.common.copied"))} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** An answer's Markdown, with its top-level code blocks as React blocks with buttons. */
+function AnswerText({ ui, text, actions }: { ui: Ui; text: string; actions: AiActions }) {
+  const segments = useMemo(() => markdownSegments(text), [text]);
+  return (
+    <>
+      {segments.map((s, i) =>
+        s.kind === "md" ? (
+          <SafeMarkdown key={i} source={s.source} />
+        ) : (
+          <CodeBlock key={i} ui={ui} lang={s.lang} text={s.text} sql={s.sql} actions={actions} />
+        ),
+      )}
+    </>
+  );
+}
+
+function Part({ ui, p, actions }: { ui: Ui; p: AssistantPart; actions: AiActions }) {
   const t = ui.t;
   switch (p.type) {
     case "text":
-      return <SafeMarkdown source={p.text} />;
+      return <AnswerText ui={ui} text={p.text} actions={actions} />;
     case "thinking":
       return (
         <details className="ai-thinking">
@@ -58,17 +247,11 @@ function Part({ ui, p }: { ui: Ui; p: AssistantPart }) {
     case "fallback":
       return <div className="pv-hint">{t("ai.panel.fallback", { from: p.from, to: p.to })}</div>;
     case "tool":
-      return (
-        <details className={`ai-tool${p.isError ? " error" : ""}`}>
-          <summary>
-            <Icon name={p.result === undefined ? "run" : p.isError ? "close" : "check"} size={14} />
-            <span className="mono ellipsis">{toolCallLabel(p.name, p.input)}</span>
-          </summary>
-          {p.result !== undefined && <pre className="pv-sql-preview">{p.result}</pre>}
-        </details>
-      );
+      return <ToolPart ui={ui} p={p} actions={actions} />;
   }
 }
+
+const NO_ACTIONS: AiActions = { tabs: [], openSql: null, editSql: null };
 
 export function AiPanel(props: {
   ui: Ui;
@@ -83,8 +266,11 @@ export function AiPanel(props: {
   onOpenProviders: () => void;
   onConnectClient: () => void;
   onClose: () => void;
+  /** The SQL and result buttons; without them, only Copy works. */
+  actions?: AiActions;
 }) {
   const { ui, chat, providers } = props;
+  const actions = props.actions ?? NO_ACTIONS;
   const t = ui.t;
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -172,7 +358,7 @@ export function AiPanel(props: {
           ) : (
             <div key={i} className="ai-msg ai-assistant">
               {item.parts.map((p, j) => (
-                <Part key={j} ui={ui} p={p} />
+                <Part key={j} ui={ui} p={p} actions={actions} />
               ))}
               {!item.done && <div className="ai-typing" aria-label={t("ai.panel.working")} />}
               {item.stop?.type === "refusal" && <div className="warn-text">{t("ai.panel.refused")}</div>}
@@ -182,6 +368,18 @@ export function AiPanel(props: {
               )}
               {item.error && <div className="error-text">{item.error}</div>}
               {item.cancelled && <div className="muted small">{t("ai.panel.stopped")}</div>}
+              {item.done && answerText(item.parts) && (
+                <div className="ai-answer-actions row">
+                  <button
+                    className="icon ai-copy-answer"
+                    title={t("ai.action.copy_answer")}
+                    aria-label={t("ai.action.copy_answer")}
+                    onClick={() => void copyText(ui, answerText(item.parts), t("dialog.common.copied"))}
+                  >
+                    <Icon name="copy" size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           ),
         )}
