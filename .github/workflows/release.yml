@@ -68,6 +68,15 @@ jobs:
       tag: ${{ needs.check-version.outputs.tag }}
     secrets: inherit
 
+  # The WinGet package (winget.yml): a PR at microsoft/winget-pkgs for each
+  # stable release.
+  winget:
+    needs: [check-version, publish]
+    uses: ./.github/workflows/winget.yml
+    with:
+      tag: ${{ needs.check-version.outputs.tag }}
+    secrets: inherit
+
   publish:
     needs: package
     runs-on: ubuntu-24.04

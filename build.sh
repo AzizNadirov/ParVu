@@ -67,7 +67,7 @@ echo "==> Building the app (${BUNDLES:-no installer})"
 (cd crates/parvu-app && npx --prefix ../../ui tauri "${ARGS[@]}")
 
 if [[ "$BUNDLES" == "deb" ]]; then
-  echo "==> Writing pre-release versions the Debian way (1.0.0~alpha.1)"
+  echo "==> Repacking the deb: xz, and pre-release versions the Debian way (1.0.0~alpha.1)"
   crates/parvu-app/packaging/fix-deb-version.sh target/release/bundle/deb/*.deb
 fi
 
