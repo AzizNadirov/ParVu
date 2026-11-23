@@ -59,6 +59,8 @@
   "ai.action.edit_sql_hint": "Bu SQL-i icra etmədən SQL redaktoruna qoy",
   "ai.action.open_tab": "Yeni tabda aç",
   "ai.action.open_tab_hint": "Sətir limiti olmadan yenidən icra et və nəticəni yeni tabda aç; onu saxlamaq və ya ixrac etmək olar",
+  "ai.action.opening": "Açılır…",
+  "ai.action.opening_hint": "Sorğu yeni tab üçün yenidən icra olunur; böyük cədvəldə bu vaxt ala bilər. Gedişat status sətrində də görünür, orada onu dayandırmaq olar.",
   "ai.action.sql_in_editor": "SQL redaktordadır; icra üçün Ctrl+Enter",
   "ai.result.rows": "{rows} sətir",
   "ai.result.truncated": "Köməkçinin gördüyü ilk {rows} sətir",

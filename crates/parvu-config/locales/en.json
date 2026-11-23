@@ -59,6 +59,8 @@
   "ai.action.edit_sql_hint": "Put this SQL into the SQL editor without running it",
   "ai.action.open_tab": "Open in new tab",
   "ai.action.open_tab_hint": "Run it again without the row limit and open the result in a new tab, which you can save or export",
+  "ai.action.opening": "Opening…",
+  "ai.action.opening_hint": "Running the query again for the new tab; it can take a while on a big table. Progress is also in the status bar, where you can stop it.",
   "ai.action.sql_in_editor": "The SQL is in the editor; Ctrl+Enter runs it",
   "ai.result.rows": "{rows} rows",
   "ai.result.truncated": "First {rows} rows, as the assistant saw them",

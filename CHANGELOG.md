@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **"Open in new tab" in the AI assistant shows that it's working.** The query runs again for the new tab, which can take a while on a big table; the button now shows a spinner and "Opening…" until the tab opens, and can't start the same run twice.
+
 ## [1.0.0-alpha.10]
 
 Keep what the AI assistant runs: copy its SQL, open its full result in a new tab to save or export, or edit the query in the SQL editor. Also fixes a blank window at startup on desktops without a keyring.

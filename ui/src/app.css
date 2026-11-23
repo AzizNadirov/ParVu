@@ -430,3 +430,12 @@ button.ai-action { min-height: 24px; padding: 0 6px; gap: 4px; font-size: 0.9em;
 .origin-chip > button.small-btn > .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .origin-chip > button.icon { width: 24px; height: 24px; min-height: 24px; padding: 0; }
 .editor-actions label.check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* "Open in new tab" while the query runs again. */
+.ai-spinner {
+  display: inline-block; width: 12px; height: 12px; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: ai-spin 0.8s linear infinite;
+}
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ai-spinner { animation-duration: 2.4s; } }

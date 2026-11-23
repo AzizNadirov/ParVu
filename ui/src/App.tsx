@@ -2339,7 +2339,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     tabs,
     // The SQL runs again with the assistant's meaning of table names (each
     // tab's current result), checked by the same read-only guard.
-    openSql: activeTab ? (sql) => void makeTable(activeTab, { kind: "tabs_sql", sql }) : null,
+    openSql: activeTab ? (sql) => makeTable(activeTab, { kind: "tabs_sql", sql }) : null,
     editSql: activeTab
       ? (sql) => {
           setMode("sql");
