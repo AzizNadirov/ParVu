@@ -76,7 +76,7 @@ impl Agent<'_> {
                 .content
                 .iter()
                 .filter_map(|b| match b {
-                    Block::ToolUse { id, name, input, invalid } => Some((id.clone(), name.clone(), input.clone(), invalid.clone())),
+                    Block::ToolUse { id, name, input, invalid, .. } => Some((id.clone(), name.clone(), input.clone(), invalid.clone())),
                     _ => None,
                 })
                 .collect();
