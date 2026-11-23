@@ -142,6 +142,13 @@ interface TabUi {
   formats: FormatRule[];
   /** Min and max of the columns that have a colour scale. */
   ranges: Record<string, { min: number; max: number }>;
+  /** What `ranges` were computed for (data and scaled columns), so
+   * switching back to the tab doesn't scan the table again. */
+  rangesKey?: string;
+  /** The page last shown, reused when switching back to the tab so its
+   * query doesn't run again. Cleared whenever the tab changes
+   * (`upsertTab`) or custom tools change (formula values may differ). */
+  shown?: Page;
 }
 
 const newTabUi = (name: string): TabUi => ({
@@ -447,7 +454,10 @@ export function App({ boot }: { boot: Bootstrap }) {
         if (req !== pageRequest.current) return;
         setPage(data);
         const st = tabUi.current.get(id);
-        if (st) st.page = data.page;
+        if (st) {
+          st.page = data.page;
+          st.shown = data;
+        }
         status(t("status.page_info", { page: data.page, total_pages: data.total_pages }));
         const sel = pendingSelect.current;
         if (sel) {
@@ -472,6 +482,9 @@ export function App({ boot }: { boot: Bootstrap }) {
   );
 
   const upsertTab = useCallback((s: TabSummary) => {
+    // The tab changed (or was just read again): its kept page is stale.
+    const st = tabUi.current.get(s.id);
+    if (st) st.shown = undefined;
     setTabs((list) => (list.some((x) => x.id === s.id) ? list.map((x) => (x.id === s.id ? s : x)) : [...list, s]));
   }, []);
 
@@ -511,9 +524,20 @@ export function App({ boot }: { boot: Bootstrap }) {
       setEditorText(st?.query ?? "");
       setMode(st?.mode ?? "sql");
       setPreview("");
+      // Switching back to a tab that hasn't changed shows its page again
+      // without running its query: on a big table with steps that query
+      // can take seconds. A search jump still loads, to select the cell.
+      const kept = st?.shown;
+      if (kept && !pendingSelect.current) {
+        pageRequest.current++; // drop a load still running for another tab
+        setPage(kept);
+        setBusy(false);
+        status(t("status.page_info", { page: kept.page, total_pages: kept.total_pages }));
+        return;
+      }
       void loadPage(id, st?.page ?? 1);
     },
-    [active, editorText, mode, loadPage],
+    [active, editorText, mode, loadPage, status, t],
   );
 
   const openPath = useCallback(
@@ -2219,6 +2243,8 @@ export function App({ boot }: { boot: Bootstrap }) {
       listen<number>("mcp-clients", (e) => setAiClients(e.payload)),
       // Custom tools changed (any window), or some need attention after an update.
       listen("custom-changed", () => {
+        // Formula values may change with the tools: show pages fresh.
+        for (const st of tabUi.current.values()) st.shown = undefined;
         reloadCustom();
         void handlers.current.refreshFormulasAfterCustom();
       }),
@@ -2339,7 +2365,7 @@ export function App({ boot }: { boot: Bootstrap }) {
     tabs,
     // The SQL runs again with the assistant's meaning of table names (each
     // tab's current result), checked by the same read-only guard.
-    openSql: activeTab ? (sql) => void makeTable(activeTab, { kind: "tabs_sql", sql }) : null,
+    openSql: activeTab ? (sql) => makeTable(activeTab, { kind: "tabs_sql", sql }) : null,
     editSql: activeTab
       ? (sql) => {
           setMode("sql");
@@ -2360,7 +2386,10 @@ export function App({ boot }: { boot: Bootstrap }) {
   const rangeKey = activeTab ? `${activeTab.id}|${activeTab.current_query}|${activeTab.pending_edits}|${scaleColumns.join("\u0000")}` : "";
   useEffect(() => {
     if (!activeTab || !scaleColumns.length) return;
+    // Already computed for this data (e.g. switching back to the tab).
+    if (tabUi.current.get(activeTab.id)?.rangesKey === rangeKey) return;
     const id = activeTab.id;
+    const key = rangeKey;
     let cancelled = false;
     // One scan for every scaled column, stopped when the data changes again.
     const columns = scaleColumns;
@@ -2373,7 +2402,7 @@ export function App({ boot }: { boot: Bootstrap }) {
           const r = found[i];
           if (r) ranges[c] = { min: r[0], max: r[1] };
         });
-        updateView(id, { ranges });
+        updateView(id, { ranges, rangesKey: key });
       },
       () => undefined,
     );

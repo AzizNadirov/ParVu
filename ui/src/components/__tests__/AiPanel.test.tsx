@@ -151,6 +151,31 @@ describe("AiPanel", () => {
       expect(actions.editSql).toHaveBeenCalledWith(sql);
     });
 
+    it("shows that Open in new tab is running, and can't be clicked twice", async () => {
+      let done: () => void = () => undefined;
+      const openSql = vi.fn(() => new Promise<void>((r) => (done = r)));
+      panel({ chat: answered(), actions: { tabs: [tab("sales", 0)], openSql, editSql: vi.fn() } });
+      const details = document.querySelector("details.ai-tool") as HTMLDetailsElement;
+      await act(async () => {
+        details.open = true;
+        details.dispatchEvent(new Event("toggle"));
+      });
+      const button = () => [...details.querySelectorAll("button")].find((b) => b.textContent?.startsWith("ai.action.open") || b.textContent === "ai.action.opening")!;
+      await act(async () => {
+        fireEvent.click(button());
+      });
+      expect(button().textContent).toBe("ai.action.opening");
+      expect(button().disabled).toBe(true);
+      expect(button().querySelector(".ai-spinner")).toBeTruthy();
+      fireEvent.click(button());
+      expect(openSql).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        done();
+      });
+      expect(button().textContent).toBe("ai.action.open_tab");
+      expect(button().disabled).toBe(false);
+    });
+
     it("keeps Edit in SQL editor off when a table has steps", async () => {
       const actions = { tabs: [tab("sales", 1)], openSql: vi.fn(), editSql: vi.fn() };
       panel({ chat: answered(), actions });

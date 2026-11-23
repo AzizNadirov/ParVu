@@ -62,8 +62,9 @@ export function SafeMarkdown({ source }: { source: string }) {
 export interface AiActions {
   /** Open tabs, to tell whether SQL can go into the SQL editor as it is. */
   tabs: TabSummary[];
-  /** Run the SQL again (tables = the tabs' current results) into a new tab; `null`: no table open. */
-  openSql: ((sql: string) => void) | null;
+  /** Run the SQL again (tables = the tabs' current results) into a new tab;
+   * settles when the tab is open (or the run failed). `null`: no table open. */
+  openSql: ((sql: string) => Promise<unknown> | void) | null;
   /** Put the SQL into the current tab's SQL editor without running it. */
   editSql: ((sql: string) => void) | null;
 }
@@ -77,6 +78,36 @@ function ActionButton(props: { icon: IconName; label: string; title?: string; di
   );
   // A disabled button gets no hover, so its reason goes on a wrapper.
   return props.disabled ? <span title={props.title ?? props.label}>{button}</span> : button;
+}
+
+/** "Open in new tab": the query runs again as a job, which can take a while
+ * on a big table, so the button shows a spinner and "Opening…" until the
+ * tab is open, and can't be clicked twice. */
+function OpenTabButton({ t, sql, openSql }: { t: Ui["t"]; sql: string; openSql: AiActions["openSql"] }) {
+  const [busy, setBusy] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => () => void (mounted.current = false), []);
+  const open = async () => {
+    if (!openSql || busy) return;
+    setBusy(true);
+    try {
+      await openSql(sql);
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  };
+  return (
+    <button
+      className="text ai-action"
+      disabled={!openSql || busy}
+      aria-busy={busy}
+      title={busy ? t("ai.action.opening_hint") : t("ai.action.open_tab_hint")}
+      onClick={() => void open()}
+    >
+      {busy ? <span className="ai-spinner" aria-hidden="true" /> : <Icon name="newTable" size={14} />}
+      {busy ? t("ai.action.opening") : t("ai.action.open_tab")}
+    </button>
+  );
 }
 
 /** SQL, read-only, highlighted like the SQL editor (spans of text, never HTML). */
@@ -96,13 +127,7 @@ function SqlActions({ ui, sql, actions, extra }: { ui: Ui; sql: string; actions:
   return (
     <div className="ai-actions row">
       <ActionButton icon="copy" label={t("ai.action.copy_sql")} onClick={() => void copyText(ui, sql, t("dialog.common.copied"))} />
-      <ActionButton
-        icon="newTable"
-        label={t("ai.action.open_tab")}
-        title={t("ai.action.open_tab_hint")}
-        disabled={!actions.openSql}
-        onClick={() => actions.openSql?.(sql)}
-      />
+      <OpenTabButton t={t} sql={sql} openSql={actions.openSql} />
       <ActionButton
         icon="edit"
         label={t("ai.action.edit_sql")}
@@ -180,13 +205,7 @@ function ToolPart({ ui, p, actions }: { ui: Ui; p: Extract<AssistantPart, { type
             (copyResult || resultSql) && (
               <div className="ai-actions row">
                 {resultSql && (
-                  <ActionButton
-                    icon="newTable"
-                    label={t("ai.action.open_tab")}
-                    title={t("ai.action.open_tab_hint")}
-                    disabled={!actions.openSql}
-                    onClick={() => actions.openSql?.(resultSql)}
-                  />
+                  <OpenTabButton t={t} sql={resultSql} openSql={actions.openSql} />
                 )}
                 {copyResult}
               </div>
