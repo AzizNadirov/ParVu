@@ -16,7 +16,7 @@ use crate::paths::AppPaths;
 use crate::settings::Settings;
 
 /// Name of the default theme, used when the configured one is missing.
-pub const DEFAULT_THEME_NAME: &str = "Material Light";
+pub const DEFAULT_THEME_NAME: &str = "Excel Material";
 
 /// Colour scheme. Every field defaults to the Python model default.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -392,7 +392,11 @@ impl ThemeManager {
                 }
             }
         }
-        let current = builtin[0].clone();
+        let current = builtin
+            .iter()
+            .find(|t| t.name == DEFAULT_THEME_NAME)
+            .cloned()
+            .unwrap_or_else(|| builtin[0].clone());
         tracing::info!("ThemeManager initialized with {} built-in themes", builtin.len());
         Self { themes_dir, builtin, current }
     }
