@@ -96,7 +96,8 @@ install_deb() {
 }
 
 # ---------------------------------------------------------------------------
-# --prebuilt: download the latest release (pre-releases included)
+# --prebuilt: download the latest stable release (releases marked as
+# pre-releases, such as a 1.1.0-beta.1 after 1.0.0, are skipped)
 # ---------------------------------------------------------------------------
 if [[ $PREBUILT -eq 1 ]]; then
   [[ $BETA -eq 0 ]] || die "--beta builds from source; releases contain only the \"parvu\" package"
@@ -108,7 +109,7 @@ if [[ $PREBUILT -eq 1 ]]; then
 import json, sys
 arch = sys.argv[1]
 for rel in json.load(sys.stdin):
-    if rel.get("draft"):
+    if rel.get("draft") or rel.get("prerelease"):
         continue
     assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
     debs = [n for n in assets if n.startswith("parvu_") and n.endswith("_" + arch + ".deb")]

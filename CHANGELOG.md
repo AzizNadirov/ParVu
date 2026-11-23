@@ -2,11 +2,28 @@
 
 ## [Unreleased]
 
-## [1.0.0-alpha.12]
+## [1.0.0]
 
-Markdown tables: export a table to a `.md` file, and copy a selection as a Markdown table with or without row numbers and header.
+The first stable version of ParVu: a fast desktop viewer and editor for Parquet, CSV, JSON and Excel files, built on DuckDB. It replaces the 0.x Python app; your settings, recent files and themes in `~/.ParVu` carry over.
 
-### Added
+### Highlights
+- **Opens Parquet, CSV, JSON and Excel**, including workbooks with several sheets. Big files are read in place and only the page on screen is loaded, so files with hundreds of millions of rows open in seconds.
+- **Works without SQL.** The **Rows**, **Column** and **Table** menus filter, sort, clean, convert types, transform and reshape. Group By, Pivot, Join, Append and the other table operations open their result in a new tab. Every change is a step you can undo.
+- **Conditions follow the column's type**, and Replace, Fill and Set Value can change only the rows that match.
+- **Live formula columns** with about 100 Excel functions (`XLOOKUP`, `COUNTIF`, `TEXT`…), and full DuckDB SQL alongside.
+- **Custom functions and operations:** define your own tools once, with typed parameters and examples that must pass, and use them from the menus, in formulas, in SQL and in Group By. Save a tab's steps as an operation, and share tools as `.json` files. Nine samples are included.
+- **Cells can be edited, filled and saved back**, to the same file or as Parquet, CSV, JSON, Excel or a Markdown table.
+- **Charts and conditional formatting.**
+- **AI:**
+  - a built-in assistant using your own key (Anthropic, OpenAI, Gemini, OpenRouter, Groq) or a local model; it remembers each file's conversation, and you can copy, re-run or edit the SQL it ran;
+  - an MCP server, so Claude and other AI clients can work on your open tables. ParVu starts in the background when they need it and waits in the tray;
+  - every change an AI makes is approved in ParVu first.
+- **Safe on big data:** long work runs in the background with progress and Stop, queries respect a memory limit, and a memory guard stops a runaway query before it takes the machine down.
+- **Six themes** (Excel Material by default) or your own, in **English, Russian and Azerbaijani**.
+- **Licence:** free for personal and other noncommercial use under the PolyForm Noncommercial License 1.0.0; commercial use needs a commercial licence (see `COMMERCIAL.md`).
+
+### Since 1.0.0-alpha.11
+#### Added
 - **Export to a Markdown table.** File → Export can write a `.md` file: a table as GitHub shows it, with number columns right-aligned. Choose whether to include the header and row numbers. Long tables are better as CSV or Parquet, so above 100,000 rows ParVu asks first. See [docs/QUICK_START.md](docs/QUICK_START.md#edit-and-save).
 - **More ways to copy as Markdown.** Right-click a selection → Copy As → Copy as Markdown now offers a plain Markdown table, one with row numbers (numbered as in the whole table), or one without the header. Line breaks and `|` in cells no longer break the table, and number columns are right-aligned.
 
