@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **ParVu no longer hangs at startup on desktops without a keyring.** Checking whether API keys can be stored in the system keychain could wait forever when no keyring service was running, leaving the window blank. The check now gives up after 3 seconds (keys then come from environment variables) and never runs on the window's main thread.
+
 ### Added
 - **Keep what the AI assistant ran.** Click a step in an assistant's answer to see the full SQL it ran and its result as a table. Buttons there, and on SQL blocks in its answers, copy the SQL, open the full result in a new tab (`ai_result`) that you can save or export, or put the SQL into the SQL editor. **Copy result** copies rows for pasting into a spreadsheet, and each answer has a copy button. See [docs/AI.md](docs/AI.md#keeping-what-the-assistant-ran).
 
