@@ -5,8 +5,12 @@
 #   ./install.sh                  build "parvu" from this checkout and install it
 #   ./install.sh --beta           build "parvu-next", which installs next to "parvu"
 #   ./install.sh --prebuilt       download the latest released .deb instead of building
+#   ./install.sh --apt            add ParVu's APT repository and install "parvu" from it,
+#                                 so "apt upgrade" keeps it up to date
+#   ./install.sh --apt --beta     the same with the beta suite (pre-releases too)
 #
 # Without a checkout:
+#   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --apt
 #   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --beta
 #
@@ -27,19 +31,26 @@ MIN_RUST="1.89"
 MIN_NODE="22.12"
 NODE_SERIES="22"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/parvu"
+APT_URL="https://aziznadirov.github.io/ParVu/apt"
+# The APT repository's signing key. Also in RELEASES.md and .github/workflows/apt.yml.
+APT_KEY_FINGERPRINT="FINGERPRINT_TBD"
+APT_KEYRING="/etc/apt/keyrings/parvu-archive-keyring.gpg"
+APT_SOURCES="/etc/apt/sources.list.d/parvu.sources"
 
 BETA=0
 PREBUILT=0
+APT=0
 DRY_RUN=0
 REF=""
 SRC=""
 
-usage() { sed -n '2,23p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,25p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --beta) BETA=1 ;;
     --prebuilt) PREBUILT=1 ;;
+    --apt) APT=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --ref) REF="${2:?--ref needs a branch or tag}"; shift ;;
     --src) SRC="${2:?--src needs a directory}"; shift ;;
@@ -94,6 +105,49 @@ install_deb() {
   # "already the newest version", leaving the old program installed.
   run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades --reinstall "$deb"
 }
+
+# ---------------------------------------------------------------------------
+# --apt: add the signed APT repository and install "parvu" from it
+# ---------------------------------------------------------------------------
+if [[ $APT -eq 1 ]]; then
+  [[ $PREBUILT -eq 0 ]] || die "use either --apt or --prebuilt"
+  [[ "$DEB_ARCH" == amd64 ]] \
+    || die "the APT repository has packages for amd64 only, not $DEB_ARCH; run without --apt to build from source"
+  [[ "$APT_KEY_FINGERPRINT" =~ ^[0-9A-F]{40}$ ]] || die "the APT repository is not available yet; use --prebuilt"
+  suite=stable
+  [[ $BETA -eq 1 ]] && suite=beta
+  apt_install curl ca-certificates gpg
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  say "Signing key"
+  curl -fsSL -o "$work/key.gpg" "$APT_URL/parvu-archive-keyring.gpg" || die "could not download the signing key"
+  # The keyring must hold exactly the key this script names.
+  install -d -m 0700 "$work/gnupg"
+  fprs=$(gpg --homedir "$work/gnupg" --batch --with-colons --show-keys "$work/key.gpg" 2>/dev/null \
+         | awk -F: '$1=="pub"{p=1;next} $1=="fpr"&&p{print $10;p=0}' || true)
+  [[ "$fprs" == "$APT_KEY_FINGERPRINT" ]] \
+    || die "the downloaded signing key (${fprs:-unreadable}) is not $APT_KEY_FINGERPRINT"
+  echo "    $APT_KEY_FINGERPRINT"
+  if cmp -s "$work/key.gpg" "$APT_KEYRING"; then
+    echo "    already in $APT_KEYRING"
+  else
+    run $SUDO install -d -m 0755 "$(dirname "$APT_KEYRING")"
+    run $SUDO install -m 0644 "$work/key.gpg" "$APT_KEYRING"
+  fi
+  say "APT source ($suite suite)"
+  printf '%s\n' "Types: deb" "URIs: $APT_URL" "Suites: $suite" "Components: main" \
+    "Architectures: amd64" "Signed-By: $APT_KEYRING" > "$work/parvu.sources"
+  if cmp -s "$work/parvu.sources" "$APT_SOURCES"; then
+    echo "    already in $APT_SOURCES"
+  else
+    run $SUDO install -m 0644 "$work/parvu.sources" "$APT_SOURCES"
+  fi
+  say "Installing parvu with apt"
+  run $SUDO apt-get update
+  run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y parvu
+  say "Done. Start it with: parvu (\"sudo apt upgrade\" keeps it up to date)"
+  exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # --prebuilt: download the latest stable release (releases marked as

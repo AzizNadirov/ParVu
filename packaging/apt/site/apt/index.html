@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ParVu APT repository</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --bg: #ffffff; --muted: #5c5c60; --code-bg: #f2f2f4; --link: #0b62c4; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e6e6e6; --bg: #17181a; --muted: #a0a0a6; --code-bg: #24262a; --link: #6aaef5; } }
+  body { margin: 0 auto; max-width: 48rem; padding: 2rem 16px; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+  a { color: var(--link); }
+  pre { background: var(--code-bg); padding: 0.75rem 1rem; border-radius: 6px; overflow-x: auto; font-size: 14px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>ParVu APT repository</h1>
+<p>Install <a href="@REPO_URL@">ParVu</a> on Ubuntu 22.04 or newer, Debian 12 or newer and their derivatives (64-bit),
+and get updates with <code>sudo apt upgrade</code>.</p>
+
+<h2>Install</h2>
+<pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL @SITE_URL@/apt/parvu-archive-keyring.gpg | sudo tee /etc/apt/keyrings/parvu-archive-keyring.gpg &gt;/dev/null
+echo "Types: deb
+URIs: @SITE_URL@/apt
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/parvu-archive-keyring.gpg" | sudo tee /etc/apt/sources.list.d/parvu.sources &gt;/dev/null
+sudo apt update &amp;&amp; sudo apt install parvu</code></pre>
+<p>Or let the installer script do the same:</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --apt</code></pre>
+
+<h2>Pre-releases</h2>
+<p>Write <code>Suites: beta</code> instead of <code>Suites: stable</code> to also get alpha, beta and release-candidate
+versions. The beta suite always includes the newest stable release too.</p>
+
+<h2>Signing key</h2>
+<p>The repository is signed with this key (<a href="parvu-archive-keyring.asc">armoured</a>,
+<a href="parvu-archive-keyring.gpg">binary</a>). Check its fingerprint:</p>
+<pre><code>gpg --show-keys /etc/apt/keyrings/parvu-archive-keyring.gpg</code></pre>
+<p><code>@FINGERPRINT@</code></p>
+
+<h2>Uninstall</h2>
+<pre><code>sudo apt remove parvu
+sudo rm /etc/apt/sources.list.d/parvu.sources /etc/apt/keyrings/parvu-archive-keyring.gpg</code></pre>
+<p class="muted">Settings, recent files and themes in <code>~/.ParVu</code> are kept.</p>
+</body>
+</html>

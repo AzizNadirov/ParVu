@@ -31,6 +31,8 @@ On Linux the deb depends on `libayatana-appindicator3-1` for the tray icon. Taur
 
 On Linux the pre-release version is written into the deb as `1.0.0~alpha.1`. With a tilde dpkg ranks it below `1.0.0`, so the stable release upgrades it; Tauri's own `1.0.0-alpha.1` would rank above it.
 
+Released debs are also published in ParVu's APT repository on GitHub Pages, built by `.github/workflows/apt.yml` with `packaging/apt/build_repo.py`; its tests run with `python3 -m unittest discover -s packaging/apt`. See [RELEASES.md](../RELEASES.md#the-apt-repository).
+
 ## Development
 
 Run the app with live UI reloading:

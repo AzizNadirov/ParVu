@@ -115,13 +115,26 @@ Version 1.0 is a rewrite of the earlier Python/PyQt6 app. It reads the same `~/.
 
 ### For End Users
 
-- **Linux (Ubuntu/Debian)**: download the `.deb` package from [Releases](https://github.com/AzizNadirov/ParVu/releases) and install it
+- **Linux (Ubuntu/Debian, 64-bit)**: install from ParVu's APT repository, so `sudo apt upgrade` keeps it up to date
+  ```bash
+  sudo install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://aziznadirov.github.io/ParVu/apt/parvu-archive-keyring.gpg | sudo tee /etc/apt/keyrings/parvu-archive-keyring.gpg >/dev/null
+  echo "Types: deb
+  URIs: https://aziznadirov.github.io/ParVu/apt
+  Suites: stable
+  Components: main
+  Architectures: amd64
+  Signed-By: /etc/apt/keyrings/parvu-archive-keyring.gpg" | sudo tee /etc/apt/sources.list.d/parvu.sources >/dev/null
+  sudo apt update && sudo apt install parvu
+  ```
+  (`Suites: beta` for pre-releases). Or download the `.deb` from [Releases](https://github.com/AzizNadirov/ParVu/releases) and install it
   ```bash
   sudo apt install ./parvu_<version>_amd64.deb
   parvu
   ```
-  or let the installer script download it, or build it from source with every dependency:
+  or let the installer script set up the repository, download the `.deb`, or build it from source with every dependency:
   ```bash
+  curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --apt        # APT repository
   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash -s -- --prebuilt   # latest release
   curl -fsSL https://raw.githubusercontent.com/AzizNadirov/ParVu/main/install.sh | bash                    # build from source
   ```

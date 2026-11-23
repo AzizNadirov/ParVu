@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **APT repository for Ubuntu and Debian.** Add it once and `sudo apt upgrade` installs new ParVu versions with your other updates. Pre-releases have their own `beta` suite. The repository is signed; setup steps are in [RELEASES.md](RELEASES.md#apt-repository-recommended) and at https://aziznadirov.github.io/ParVu/apt/. `install.sh --apt` sets it up for you.
+
 ## [1.0.0]
 
 The first stable version of ParVu: a fast desktop viewer and editor for Parquet, CSV, JSON and Excel files, built on DuckDB. It replaces the 0.x Python app; your settings, recent files and themes in `~/.ParVu` carry over.
